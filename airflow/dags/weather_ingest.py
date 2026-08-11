@@ -73,6 +73,9 @@ def _run(dataset_id: str) -> str:
     environment = dict(os.environ)
     environment["PYTHONPATH"] = source
     environment["UPTO_DATABASE_URL"] = _database_url()
+    # Ticket 09: lineage over a scheduled run and over a hand-triggered one are different
+    # answers to "why does this row exist", so the runner records which it was.
+    environment["UPTO_INVOKED_BY"] = "airflow"
     environment["UPTO_CWA_API_KEY"] = _api_key()
 
     finished = subprocess.run(

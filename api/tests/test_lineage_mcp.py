@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""Item 14's lineage tool: the protocol, and the boundary H20 names.
+
+Run: python3 app/api/tests/test_lineage_mcp.py
+
+No network and no database. The protocol half is exercised by handing the server a list of
+lines, which is the reason `serve()` takes a reader rather than reading `sys.stdin` directly.
+The boundary half needs no database at all, which is the point: **the refusal is structural, so
+it can be asserted without any data existing.**
+
+**The test H20 asks for is `RefusesTheForbiddenQuestion`.** The hazard is that the tool is built
+to be useful and the most useful answer is the complete one, so what has to be proven is that
+the direct question is refused — not that nobody has asked it yet.
+"""
+
+import asyncio
+import io
+import json
+import os
+import re
+import sys
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+
+from upto.lineage import mcp_server as server  # noqa: E402
+from upto.lineage import queries  # noqa: E402
+
+
+def exchange(*messages):
+    """Feed the server some lines and collect what it wrote back."""
+    lines = [json.dumps(m) + "\n" for m in messages]
+    lines.append("")
+    out = io.StringIO()
+    asyncio.run(server.serve(reader=lambda: lines.pop(0), writer=out))
+    return [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+
+
+class Handshake(unittest.TestCase):
+    def test_initialize_answers_with_a_protocol_version(self):
+        replies = exchange({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        self.assertEqual(len(replies), 1)
+        result = replies[0]["result"]
+        self.assertEqual(result["protocolVersion"], server.PROTOCOL_VERSION)
+        self.assertEqual(result["serverInfo"]["name"], "upto-lineage")
+        self.assertIn("tools", result["capabilities"])
+
+    def test_a_notification_gets_no_reply(self):
+        """`notifications/initialized` has no id, and answering it is a protocol error."""
+        replies = exchange({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        self.assertEqual(replies, [])
+
+    def test_unknown_method_is_method_not_found(self):
+        replies = exchange({"jsonrpc": "2.0", "id": 9, "method": "resources/list"})
+        self.assertEqual(replies[0]["error"]["code"], server.METHOD_NOT_FOUND)
+
+    def test_bad_json_does_not_kill_the_transport(self):
+        lines = ["not json\n", json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}) + "\n", ""]
+        out = io.StringIO()
+        asyncio.run(server.serve(reader=lambda: lines.pop(0), writer=out))
+        replies = [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+        self.assertEqual(replies[0]["error"]["code"], server.PARSE_ERROR)
+        self.assertIn("tools", replies[1]["result"], "the second message must still be served")
+
+    def test_missing_jsonrpc_version_is_an_invalid_request(self):
+        replies = exchange({"id": 1, "method": "initialize"})
+        self.assertEqual(replies[0]["error"]["code"], server.INVALID_REQUEST)
+
+
+class ToolList(unittest.TestCase):
+    def test_every_tool_declares_a_schema_and_a_description(self):
+        replies = exchange({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        tools = replies[0]["result"]["tools"]
+        self.assertTrue(tools)
+        for tool in tools:
+            self.assertTrue(tool["description"].strip(), tool["name"])
+            self.assertEqual(tool["inputSchema"]["type"], "object", tool["name"])
+
+    def test_a_run_that_wrote_nothing_is_advertised_as_answerable(self):
+        """Ticket 09: a no-change run is lineage worth pointing at, not an absence — so the
+        tool has to say it answers about one, or a model will not ask."""
+        description = server.TOOLS["run_detail"]["description"]
+        self.assertIn("wrote nothing", description)
+        self.assertIn("no-change", description)
+
+    def test_the_refusing_tool_is_listed_rather_than_omitted(self):
+        """H20: a tool that merely lacks the feature gains it the day somebody wants it. Listed,
+        the refusal is discoverable and the reason travels with it."""
+        replies = exchange({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        names = [tool["name"] for tool in replies[0]["result"]["tools"]]
+        self.assertIn("explain_place_loss", names)
+
+    def test_calling_an_unknown_tool_is_invalid_params(self):
+        replies = exchange(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "nope"}}
+        )
+        self.assertEqual(replies[0]["error"]["code"], server.INVALID_PARAMS)
+
+
+class RefusesTheForbiddenQuestion(unittest.TestCase):
+    """H20's own test: ask the most direct question available and assert what is not in the answer."""
+
+    def setUp(self):
+        replies = exchange(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "explain_place_loss",
+                    "arguments": {"place": "某某餐廳", "round_id": 1},
+                },
+            }
+        )
+        self.result = replies[0]["result"]
+        self.text = self.result["content"][0]["text"]
+
+    def test_it_is_marked_as_an_error_not_as_data(self):
+        self.assertTrue(self.result.get("isError"), "a model must not read the refusal as an answer")
+
+    def test_no_member_and_no_reason_appear_in_the_answer(self):
+        """The assertion H20 words: nothing about the people at the table.
+
+        Naming the *category* it will not answer is not a leak — it is the refusal being
+        specific, and an earlier version of this test failed on the word `preference` appearing
+        in the sentence "whose preference affected it". What must be absent is an identifier or
+        a stored reason, so the assertions are about those.
+        """
+        for leak in ("member_id", "principal_id", "nickname", "weight_contribution", "effect="):
+            self.assertNotIn(leak, self.text)
+        self.assertEqual(self.result["content"][0]["type"], "text")
+        self.assertNotIn("rows", self.result, "a refusal carries no data payload")
+
+    def test_the_refusal_names_what_it_will_not_answer(self):
+        """The opposite property, and it is the one that makes the refusal useful: a model told
+        only "not permitted" asks again a different way."""
+        self.assertIn("private", self.text)
+        self.assertIn("whose", self.text)
+
+    def test_the_refusal_says_why_rather_than_not_permitted(self):
+        self.assertIn("aggregate", self.text)
+        self.assertIn("H20", self.text)
+
+    def test_the_refusal_is_reachable_without_a_database(self):
+        """Structural, not a filter over query results: no session was opened to produce it."""
+        with self.assertRaises(queries.LineageRefused):
+            queries.refuse("whose preference affected it")
+
+
+class BoundaryIsStructural(unittest.TestCase):
+    def test_no_query_mentions_a_member_a_channel_or_a_weight(self):
+        """The narrowness is the mitigation. If a query ever names one of these, the reviewer
+        who added it has stepped over H20 without noticing, and this fails."""
+        for statement in self.statements():
+            lowered = statement.lower()
+            for forbidden in ("member", "principal", "weight_contribution", "channel", "preference"):
+                self.assertNotIn(forbidden, lowered, statement[:80])
+
+    def test_only_the_declared_tables_are_read(self):
+        """Scanned over the SQL statements alone. Scanning the whole file caught `from sqlalchemy
+        import text` as a table named sqlalchemy, which is a test failing for its own reasons."""
+        statements = self.statements()
+        referenced = set()
+        for statement in statements:
+            referenced |= set(re.findall(r"(?:from|join)\s+([a-z_]+)", statement, re.IGNORECASE))
+        unexpected = referenced - queries.READABLE_TABLES
+        self.assertEqual(unexpected, set(), "a table outside the declared set is being read")
+
+    def statements(self):
+        source = open(queries.__file__, encoding="utf-8").read()
+        found = re.findall(r'"""\s*\n(select[^"]+)"""', source, re.IGNORECASE)
+        self.assertTrue(found, "no SQL found — this test would silently pass")
+        return found
+
+
+class HourMustCarryAZone(unittest.TestCase):
+    def test_a_naive_hour_is_refused(self):
+        """H17: guessing the offset is the hazard, not the inconvenience."""
+        with self.assertRaises(ValueError):
+            server._hour("2026-08-11T19:00:00")
+
+    def test_an_hour_with_an_offset_parses(self):
+        self.assertIsNotNone(server._hour("2026-08-11T19:00:00+08:00").tzinfo)
+
+    def test_the_naive_hour_reaches_the_client_as_invalid_params(self):
+        replies = exchange(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "observation_reading_source",
+                    "arguments": {
+                        "station_id": "C0AH70",
+                        "hour": "2026-08-11T19:00:00",
+                        "element": "AirTemperature",
+                    },
+                },
+            }
+        )
+        self.assertEqual(replies[0]["error"]["code"], server.INVALID_PARAMS)
+        self.assertIn("offset", replies[0]["error"]["message"])
+
+
+class TimeLabels(unittest.TestCase):
+    def test_a_forecast_stamp_is_a_detection_time(self):
+        """D42: CWA never says when a forecast was published, so the label is part of the answer."""
+        self.assertEqual(queries._time_label(queries.FORECAST_DATASET), "detected_at")
+
+    def test_an_observation_stamp_is_a_retrieval_time(self):
+        self.assertEqual(queries._time_label(queries.OBSERVATION_DATASET), "retrieved_at")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
