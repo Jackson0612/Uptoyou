@@ -18,6 +18,9 @@ COPY src /srv/src
 COPY alembic.ini /srv/alembic.ini
 COPY migrations /srv/migrations
 COPY entrypoint.sh /srv/entrypoint.sh
+# Tests travel with the image: the container is the canonical environment, so the place
+# they must be runnable is inside it rather than only on a host that happens to work.
+COPY tests /srv/tests
 
 # Not root inside the container. The daemon itself is rootful (D10) because the success
 # criterion is literally `docker compose up`, but that is no reason for the application
