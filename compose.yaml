@@ -148,8 +148,13 @@ services:
       test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\" || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 45s
+      retries: 20
+      # Sized for a cold start, not a warm one. On a machine with no images and an empty
+      # database — which is the only machine §6 actually grades — Airflow migrates its
+      # metadata before the first component answers, and a 45s allowance marked every
+      # service unhealthy while all three were merely still starting. The split-boot check
+      # found it; the warm stack never would.
+      start_period: 180s
     restart: unless-stopped
 
   # Airflow 3 splits DAG parsing out of the scheduler into its own component, and it is not
@@ -169,8 +174,13 @@ services:
       test: ["CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --hostname \"$${HOSTNAME}\" || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 45s
+      retries: 20
+      # Sized for a cold start, not a warm one. On a machine with no images and an empty
+      # database — which is the only machine §6 actually grades — Airflow migrates its
+      # metadata before the first component answers, and a 45s allowance marked every
+      # service unhealthy while all three were merely still starting. The split-boot check
+      # found it; the warm stack never would.
+      start_period: 180s
     restart: unless-stopped
 
   airflow-api:
@@ -195,8 +205,13 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v2/monitor/health || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 45s
+      retries: 20
+      # Sized for a cold start, not a warm one. On a machine with no images and an empty
+      # database — which is the only machine §6 actually grades — Airflow migrates its
+      # metadata before the first component answers, and a 45s allowance marked every
+      # service unhealthy while all three were merely still starting. The split-boot check
+      # found it; the warm stack never would.
+      start_period: 180s
     restart: unless-stopped
 
 volumes:
