@@ -21,5 +21,11 @@ ENV UPTO_PYTHON=/opt/upto/venv/bin/python \
     UPTO_SRC=/opt/upto/src \
     PYTHONDONTWRITEBYTECODE=1
 
+# The mount point for the airflow-auth volume, created here rather than left to Docker. A
+# named volume mounted on a path the image does not have is created root-owned, and every
+# Airflow process runs as `airflow` — the failure is a PermissionError on the password file
+# at api-server start. Made by the image, the empty volume inherits this ownership instead.
+RUN mkdir -p /opt/airflow/auth
+
 COPY --chown=airflow:root api/src /opt/upto/src
 COPY --chown=airflow:root airflow/dags /opt/airflow/dags
