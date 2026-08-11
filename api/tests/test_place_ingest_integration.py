@@ -70,12 +70,24 @@ CHANGED_ROWS = ROWS[:2] + [
 PLACES = len(ROWS)
 
 
-def archive(rows, stamp, detected_at):
+def archive_bytes(rows, stamp):
     body = "\r\n".join([HEADER] + rows) + "\r\n"
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipped:
         zipped.writestr(zipfile.ZipInfo("97_2.csv", date_time=stamp), b"\xef\xbb\xbf" + body.encode("utf-8"))
-    return fda.read_archive(buffer.getvalue(), detected_at)
+    return buffer.getvalue()
+
+
+def archive(rows, stamp, detected_at, raw=None):
+    """Read the bytes into an Archive.
+
+    **Each call reads them again on purpose.** This helper used to be called once per file and
+    the resulting object reused for every run, which meant the identity of a publication was
+    only ever computed once — so a key that varies per *read* was invisible, and the mutant
+    that models D18's run-interval fallback survived. Re-reading is what makes the second run
+    a second run.
+    """
+    return fda.read_archive(archive_bytes(rows, stamp) if raw is None else raw, detected_at)
 
 
 def urls():
@@ -95,7 +107,9 @@ async def scenario(test_url: str) -> None:
     engine = create_async_engine(test_url, poolclass=None)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
-    july = archive(ROWS, (2026, 7, 3, 9, 16, 50), datetime(2026, 8, 10, 3, 0, tzinfo=TAIPEI))
+    JULY_STAMP = (2026, 7, 3, 9, 16, 50)
+    july_raw = archive_bytes(ROWS, JULY_STAMP)
+    july = archive(ROWS, JULY_STAMP, datetime(2026, 8, 10, 3, 0, tzinfo=TAIPEI), raw=july_raw)
     august = archive(CHANGED_ROWS, (2026, 8, 3, 10, 41, 40), datetime(2026, 8, 11, 3, 0, tzinfo=TAIPEI))
 
     # 1 — the first run stores a publication and its places.
@@ -109,8 +123,11 @@ async def scenario(test_url: str) -> None:
     assert await counts(Session) == (1, PLACES)
 
     # 2 — the same file again. Nothing is written, nothing is parsed, and the run succeeds.
+    # Re-read, with a later detected_at: the bytes are identical and only the clock moved,
+    # which is exactly what an unchanged day looks like to the scheduler.
+    july_again = archive(ROWS, JULY_STAMP, datetime(2026, 8, 10, 4, 0, tzinfo=TAIPEI), raw=july_raw)
     async with Session() as session:
-        again = await ingest_archive(PlaceStore(session), july)
+        again = await ingest_archive(PlaceStore(session), july_again)
     assert not again.stored, "an unchanged file must not store a second publication"
     assert not again.parsed, "an unchanged file must not be parsed at all (D34)"
     assert again.exit_code() == 0, "a no-op is a success, not a warning"
@@ -118,8 +135,9 @@ async def scenario(test_url: str) -> None:
 
     # 3 — H14's own scenario: run it again with the short-circuit **disabled**, so the
     # constraint is what stops the duplicate rather than this module's good behaviour.
+    july_third = archive(ROWS, JULY_STAMP, datetime(2026, 8, 10, 5, 0, tzinfo=TAIPEI), raw=july_raw)
     async with Session() as session:
-        forced = await ingest_archive(PlaceStore(session), july, force_parse=True)
+        forced = await ingest_archive(PlaceStore(session), july_third, force_parse=True)
     assert forced.parsed, "force-parse must actually parse"
     assert not forced.stored, "no second publication may be created for the same content"
     assert forced.rows_held == PLACES, "the places must not have doubled: {}".format(forced.rows_held)
