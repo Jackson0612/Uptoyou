@@ -99,6 +99,7 @@ services:
     entrypoint: ["/bin/bash", "/opt/airflow/init.sh"]
     volumes:
       - ./airflow/init.sh:/opt/airflow/init.sh:ro,z
+      - airflow-auth:/opt/airflow/auth
     environment: &airflow-env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -117,6 +118,11 @@ services:
       # dies with "Invalid auth token: Signature verification failed" — which reads like a
       # credential problem in the DAG and is a configuration problem in the stack.
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
+      # Where the simple auth manager keeps the admin password. Left at its default this is a
+      # file inside the api-server's own container filesystem, which means a password nobody
+      # chose and a different one after every `down`. Pointing it at a named volume lets
+      # airflow-init write the password from .env once and the api-server read it thereafter.
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/auth/passwords.json
       # The bootstrap layer, and D33 says this is the whole of it. Everything a *task* uses
       # arrives as a Connection instead; these three exist only to stand Airflow up.
       AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
@@ -173,6 +179,12 @@ services:
       dockerfile: airflow/Dockerfile
     command: ["api-server"]
     environment: *airflow-env
+    volumes:
+      # Writable, and it has to be: the api-server opens this file "a+" on every start and
+      # only catches BlockingIOError, so a read-only mount is a PermissionError that stops
+      # the container. It leaves an existing admin entry alone, which is what makes
+      # airflow-init's write the one that decides the password.
+      - airflow-auth:/opt/airflow/auth
     ports:
       # Second published port, and it is the orchestrator's own UI rather than the product.
       - "${AIRFLOW_HTTP_PORT:-8081}:8080"
@@ -189,3 +201,6 @@ services:
 
 volumes:
   db-data:
+  # Only ever holds the admin password file. A named volume rather than a bind mount for the
+  # reason db-data gives, and because the password does not belong in the repository.
+  airflow-auth:

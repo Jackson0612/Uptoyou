@@ -56,8 +56,8 @@ on conflict (publication_id, township, element, measure, slot_start) do nothing
 
 INSERT_OBSERVATION_READING = """
 insert into observation_reading
-    (publication_id, station_id, station_name, county, town, observed_at, element, value)
-values (:publication_id, :station_id, :station_name, :county, :town, :observed_at, :element, :value)
+    (publication_id, station_id, station_name, county, town, town_code, observed_at, element, value)
+values (:publication_id, :station_id, :station_name, :county, :town, :town_code, :observed_at, :element, :value)
 on conflict (publication_id, station_id, element, observed_at) do nothing
 """
 
@@ -104,6 +104,7 @@ async def store_publication(session: AsyncSession, publication: Publication) -> 
                 "station_name": row.station_name,
                 "county": row.county,
                 "town": row.town,
+                "town_code": row.town_code,
                 "observed_at": row.observed_at,
                 "element": row.element,
                 "value": row.value,

@@ -11,5 +11,11 @@
 set -e
 echo "entrypoint: applying migrations"
 alembic upgrade head
+echo "entrypoint: seeding the township-station map"
+# Ticket 06's one command, and it is idempotent: an upsert keyed on the township code, with
+# a self-check that refuses rather than writing a mapping that disagrees with the ingested
+# observations. Running it on every start is what makes `docker compose up` sufficient.
+python -m upto.seed.township_station
+
 echo "entrypoint: migrations current, starting $*"
 exec "$@"

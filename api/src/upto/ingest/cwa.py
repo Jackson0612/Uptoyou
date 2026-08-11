@@ -73,6 +73,9 @@ class ObservationRow:
     station_name: str
     county: str | None
     town: str | None
+    # D26 matches a township to its station by *code*, never by name — a code cannot be
+    # spelled 台 on one side and 臺 on the other, which is H24's shape.
+    town_code: str | None
     observed_at: datetime
     element: str
     value: str | None
@@ -263,6 +266,7 @@ def parse_observation(payload: dict) -> list[ObservationRow]:
                     station_name=station.get("StationName") or "",
                     county=geo.get("CountyName"),
                     town=geo.get("TownName"),
+                    town_code=geo.get("TownCode"),
                     observed_at=observed_at,
                     element=str(element),
                     value=text,
