@@ -4,10 +4,13 @@ Nothing about the product is here yet. The build order puts the pipeline first, 
 first real endpoints arrive after the ingest tables exist.
 """
 
-from fastapi import FastAPI, Response, status
+from datetime import datetime
+
+from fastapi import FastAPI, HTTPException, Query, Response, status
 from sqlalchemy import text
 
 from .db import dispose_all, session_factory
+from .read.weather import ForecastJoinBroken, TownshipUnknown, reading_for
 
 app = FastAPI(
     title="Up to you",
@@ -32,6 +35,57 @@ async def health(response: Response) -> dict:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "unhealthy", "database": "unreachable", "detail": str(failure)[:200]}
     return {"status": "ok", "database": "reachable"}
+
+
+@app.get("/weather")
+async def weather(
+    township: str = Query(..., description="內政部 township code, e.g. 63000040 for 中山區"),
+    hour: datetime = Query(..., description="the hour described, with an offset — 2026-08-11T19:00:00+08:00"),
+) -> dict:
+    """Ticket 07's one call: the observation for that hour, else the forecast for that hour.
+
+    The response always says which of the two answered and which stored row it came from,
+    because D15's snapshot must be able to pin exactly what a round read.
+
+    This is not a product endpoint. D20 rules where weather may appear on a screen — the home
+    screen, as information, never as a reason, and never on a decision screen — and none of
+    those screens exist yet. This exists so the read path can be exercised end to end.
+    """
+    if hour.tzinfo is None:
+        # H17: a timestamp without a zone cannot be compared with anything here. Refusing is
+        # the only honest answer, since guessing the offset is what the hazard is about.
+        raise HTTPException(status_code=422, detail="hour must carry a UTC offset")
+    async with session_factory()() as session:
+        try:
+            reading = await reading_for(session, township, hour)
+        except TownshipUnknown as unknown:
+            raise HTTPException(status_code=404, detail=str(unknown)) from None
+        except ForecastJoinBroken as broken:
+            # Not a 404: the data is there and the join is wrong, which is an operator problem
+            # rather than a client one.
+            raise HTTPException(status_code=500, detail=str(broken)) from None
+    body = {
+        "kind": reading.kind,
+        "township_code": reading.township_code,
+        "township_name": reading.township_name,
+        "hour": reading.hour.isoformat(),
+        "measures": reading.measures,
+    }
+    if reading.station_id:
+        body["station"] = {"id": reading.station_id, "name": reading.station_name}
+    if reading.provenance:
+        body["source"] = {
+            "publication_id": reading.provenance.publication_id,
+            "dataset_id": reading.provenance.dataset_id,
+            "content_sha256": reading.provenance.content_sha256,
+            # The label is part of the answer, not decoration: a forecast's stamp is when we
+            # detected it, because CWA never says when it was published (D42).
+            reading.provenance.time_label + "_at": reading.provenance.detected_at.isoformat(),
+            "time_label": reading.provenance.time_label,
+        }
+    if not reading.present:
+        body["absence_reason"] = reading.absence_reason
+    return body
 
 
 @app.on_event("shutdown")
