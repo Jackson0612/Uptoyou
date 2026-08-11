@@ -1,0 +1,8 @@
+# Pinned, because "it worked on my machine last week" is the failure this file prevents.
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+# Async end to end (H1): SQLAlchemy's async mode with asyncpg, never the sync driver.
+sqlalchemy[asyncio]==2.0.43
+asyncpg==0.30.0
+# Migrations, because a hand-rolled migration path fails silently (D4).
+alembic==1.16.4

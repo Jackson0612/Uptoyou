@@ -1,0 +1,8 @@
+# The proxy builds with app/ as its context, so keep that context to what an image needs.
+**/__pycache__
+**/*.py[cod]
+.env
+.env.*
+!.env.example
+api/
+db/

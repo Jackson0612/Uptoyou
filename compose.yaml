@@ -1,0 +1,85 @@
+# Up to you — the whole stack, brought up by `docker compose up` from this directory.
+#
+# This file sits at the top of app/ because app/ is extracted into a public repository of
+# its own after every merge (D47), and that repository's root is this directory. Nothing
+# here may reference a path above app/ — tools/app_boundary_check.py refuses a commit that
+# does, and tools/split_boot_check.sh extracts and boots it to prove the rest.
+#
+# Airflow is deliberately absent. It arrives with the first pipeline DAG rather than with
+# the skeleton, because an orchestrator with nothing to orchestrate is 3 GB of idle
+# service on a 7.5 GB machine.
+
+name: upto
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Deterministic collation, so ordering does not depend on the host's locale.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # A named volume rather than a bind mount, on purpose: SELinux is Enforcing on the
+      # development machine and a bind mount would need a :z label to be readable at all,
+      # which fails as a bare permission error naming neither SELinux nor the mount.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # The API must not start before the database is ready (H6). pg_isready with the
+      # real user and database, not a bare port check — the port opens before initdb has
+      # finished, which is exactly the window that produces a flaky first boot.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -q"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+    environment:
+      # Async driver end to end (H1): a synchronous driver blocks the event loop, and
+      # while it is blocked nobody is served — not the other four people in the room,
+      # not the open SSE streams, not the health check.
+      UPTO_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    # Exactly one worker, and the reason lives here rather than in a comment somewhere
+    # else (H2): live room state is per-process, and a second worker means two people in
+    # the same room can be served different rooms. The no-cache rule forbids the usual
+    # escape hatch of an external pub/sub layer, so the limit is argued, not solved.
+    command: ["uvicorn", "upto.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  proxy:
+    build:
+      # app/ rather than ./proxy: the image carries the nginx config and the static front
+      # end, and those are siblings. Both paths stay inside app/, which is what H18 asks.
+      context: ./
+      dockerfile: proxy/Dockerfile
+    ports:
+      # The only published port. Everything else talks over the compose network, so the
+      # database is not reachable from the host at all.
+      - "${UPTO_HTTP_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  db-data:

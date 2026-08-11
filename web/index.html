@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Up to you</title>
+<!--
+  Vue is a global build loaded directly, with no build step (D3), and it is vendored
+  rather than fetched from a CDN: §6 requires the demo to survive a dead venue wifi, and
+  a CDN script tag is precisely that dependency. Version is pinned by the file itself.
+
+  No `v-html` anywhere, ever — it is the one hole left in Vue's escaping (H7), and keeping
+  it absent means the audit is one greppable word.
+-->
+<script src="/vendor/vue.global.prod.js"></script>
+<style>
+  :root { color-scheme: light dark; --ink: #1a1a1a; --paper: #fbfaf8; --muted: #6b6560; --line: #e4e0da; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #ece9e4; --paper: #17161a; --muted: #9b948c; --line: #2e2c31; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.65 system-ui, -apple-system, "Noto Sans TC", sans-serif;
+    display: grid; place-items: center; min-height: 100vh; padding: 1.5rem;
+  }
+  main { width: 100%; max-width: 30rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
+  .promise { color: var(--muted); margin: 0 0 1.75rem; }
+  .card { border: 1px solid var(--line); border-radius: .75rem; padding: 1rem 1.15rem; }
+  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .row + .row { margin-top: .6rem; padding-top: .6rem; border-top: 1px solid var(--line); }
+  .label { color: var(--muted); font-size: .9rem; }
+  .value { font-variant-numeric: tabular-nums; }
+  .ok { color: #1f7a4d; } .bad { color: #a3341f; } .wait { color: var(--muted); }
+  @media (prefers-color-scheme: dark) { .ok { color: #58c68d; } .bad { color: #f08a6c; } }
+  footer { margin-top: 1.25rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main id="app">
+  <h1>Up to you</h1>
+  <p class="promise">決定一頓飯，不用有人先犧牲。</p>
+
+  <div class="card">
+    <div class="row">
+      <span class="label">API</span>
+      <span class="value" :class="apiClass">{{ apiText }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Database</span>
+      <span class="value" :class="dbClass">{{ dbText }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Checked</span>
+      <span class="value wait">{{ checkedAt || '—' }}</span>
+    </div>
+  </div>
+
+  <footer>Skeleton only. No product surface yet — the pipeline is built first.</footer>
+</main>
+
+<script>
+const { createApp, ref, computed, onMounted } = Vue;
+
+createApp({
+  setup() {
+    const state = ref('waiting');
+    const database = ref('waiting');
+    const checkedAt = ref('');
+
+    async function check() {
+      try {
+        const response = await fetch('/health', { cache: 'no-store' });
+        const body = await response.json();
+        state.value = response.ok ? 'ok' : 'unhealthy';
+        database.value = body.database || 'unknown';
+      } catch (failure) {
+        state.value = 'unreachable';
+        database.value = 'unknown';
+      }
+      checkedAt.value = new Date().toLocaleTimeString();
+    }
+
+    onMounted(() => {
+      check();
+      setInterval(check, 5000);
+    });
+
+    const apiText = computed(() => state.value);
+    const dbText = computed(() => database.value);
+    const apiClass = computed(() => (state.value === 'ok' ? 'ok' : state.value === 'waiting' ? 'wait' : 'bad'));
+    const dbClass = computed(() => (database.value === 'reachable' ? 'ok' : database.value === 'waiting' ? 'wait' : 'bad'));
+
+    return { apiText, dbText, apiClass, dbClass, checkedAt };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
