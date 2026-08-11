@@ -15,6 +15,9 @@ COPY requirements.txt /srv/requirements.txt
 RUN pip install --no-cache-dir -r /srv/requirements.txt
 
 COPY src /srv/src
+COPY alembic.ini /srv/alembic.ini
+COPY migrations /srv/migrations
+COPY entrypoint.sh /srv/entrypoint.sh
 
 # Not root inside the container. The daemon itself is rootful (D10) because the success
 # criterion is literally `docker compose up`, but that is no reason for the application
@@ -24,4 +27,5 @@ USER 10001
 
 EXPOSE 8000
 
+ENTRYPOINT ["/srv/entrypoint.sh"]
 CMD ["uvicorn", "upto.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
