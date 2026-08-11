@@ -19,15 +19,17 @@ decompress the CSV. The claim is what tells them so, and it costs one insert.
 
     0  stored, or nothing to store — both are success
     1  the run failed: the source did not answer, or answered in a shape we do not know
-    2  **stored, and the archive stamp disagrees with the content hash about whether anything
-       changed** — the alarm D34 asked for
+    2  **the archive stamp and the content hash disagree about whether anything changed** —
+       the alarm D34 asked for. The line on stdout says which of the two happened, because
+       both are possible: content moved with a still stamp (stored), or the stamp moved with
+       still content (nothing stored).
 
-Why a disagreement is non-zero rather than a printed warning: the data is not in doubt, the
-*label* is, and a warning on stdout of a green task is a fact filed where nobody looks. A red
-task here means "come and read this", never "the rows are missing" — they are written before
-the code is returned. The cost is a red task for a data-quality event, which has to be
-narrated in the demo rather than shown, exactly as D34 already admits for the twenty-nine
-no-ops.
+Why a disagreement is non-zero rather than a printed warning: whatever the run decided to
+write it has already written before this code is returned, so nothing is in doubt except the
+*label* — and a warning on the stdout of a green task is a fact filed where nobody looks. A
+red task here means "come and read this", never "the rows are missing". The cost is a red task
+for a data-quality event, which has to be narrated in the demo rather than shown, exactly as
+D34 already admits for the twenty-nine no-ops.
 """
 
 from __future__ import annotations

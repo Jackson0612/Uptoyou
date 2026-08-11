@@ -21,11 +21,13 @@ it is handed to the subprocess as environment for the reason the weather DAG sta
 argument lands in XCom and a templated env lands in the UI's rendered fields, and both of those
 are the metadata database.
 
-**Exit code 2 means the run stored its rows and the two version signals disagree** — the archive
-stamp says one thing about whether anything changed and the content hash says another (D34, D35).
-The task is failed deliberately in that case. The rows are already written, so red here means
-"come and read the log", not "the data is missing"; a printed warning on a green task is a fact
-filed where nobody looks.
+**Exit code 2 means the two version signals disagree** — the archive stamp says one thing about
+whether anything changed and the content hash says another (D34, D35). The task is failed
+deliberately in that case, and the verdict printed above the failure says whether anything was
+stored: content can move while the stamp stands still, and the stamp can move while the content
+stands still. Whatever the run decided to write is already written when the task turns red, so red
+here means "come and read the log", not "the data is missing"; a printed warning on a green task is
+a fact filed where nobody looks.
 
 **What this DAG cannot honestly do: backfill.** The endpoint serves the current file and has no
 history, so triggering a past interval fetches today's bytes and stores them under today's hash —
@@ -102,8 +104,8 @@ def upto_place_reference_ingest():
             print(finished.stdout.strip())
         if finished.returncode == DISAGREEMENT:
             raise RuntimeError(
-                "{} stored its rows and the archive stamp disagrees with the content hash: "
-                "{}".format(SOURCE, (finished.stderr or "").strip()[:500])
+                "{}: the archive stamp and the content hash disagree — the verdict above says "
+                "what was written: {}".format(SOURCE, (finished.stderr or "").strip()[:500])
             )
         if finished.returncode != 0:
             raise RuntimeError(
