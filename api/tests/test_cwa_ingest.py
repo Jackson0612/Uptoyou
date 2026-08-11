@@ -35,6 +35,11 @@ def forecast_payload(temperature="32", noise="anything"):
                     "Location": [
                         {
                             "LocationName": "中山區",
+                            "Geocode": "63000040",
+                            # Present in the real payload and deliberately never read: no datum
+                            # is stated for them anywhere (H23), so D26 declines to store them.
+                            "Latitude": "25.069850",
+                            "Longitude": "121.538347",
                             "WeatherElement": [
                                 {
                                     "ElementName": "溫度",
@@ -88,6 +93,25 @@ def observation_payload(temperature="30.5", weather="陰"):
 
 
 class ForecastParsing(unittest.TestCase):
+    def test_geocode_is_the_key(self):
+        """D26: by identifier wherever an identifier exists. The payload carries one."""
+        for row in cwa.parse_forecast(forecast_payload()):
+            self.assertEqual(row.township_code, "63000040")
+            self.assertEqual(row.township, "中山區")
+
+    def test_a_location_without_a_geocode_is_skipped(self):
+        payload = forecast_payload()
+        del payload["records"]["Locations"][0]["Location"][0]["Geocode"]
+        with self.assertRaises(cwa.CwaUnavailable):
+            cwa.parse_forecast(payload)
+
+    def test_coordinates_are_never_carried(self):
+        """The payload states no datum for them, so storing one is H23. A row has no field
+        for a coordinate at all, which is stronger than choosing not to fill one."""
+        fields = cwa.ForecastRow.__dataclass_fields__
+        for forbidden in ("latitude", "longitude", "lat", "lon"):
+            self.assertNotIn(forbidden, fields)
+
     def test_element_and_measure_are_separate(self):
         rows = {(r.element, r.measure): r.value for r in cwa.parse_forecast(forecast_payload())}
         self.assertEqual(rows[("溫度", "Temperature")], "32")

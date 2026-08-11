@@ -25,11 +25,13 @@ hour**. It is reversible: every version is stored, the answer names the publicat
 and a round that pinned an earlier one still reads as it did. The ruling is owed; the data is
 not at risk either way.
 
-**The forecast is still reached by township name, and that is ticket 05's open gap.** D26
-rules the match on the code, and `forecast_reading` carries CWA's `LocationName`. The seed
-translates code to name, all twelve currently agree, and a broken join **raises** rather than
-reporting an absence — an absence would be indistinguishable from "no forecast this hour",
-which is precisely how H24 hides.
+**Both tables are now reached by identifier, which closes ticket 05's gap.** The forecast used
+to be found by township *name*, and the guard below existed because a misspelling and an
+absence are indistinguishable — 台 against 臺 is H24 exactly. CWA's payload carries `Geocode`
+beside the name in the same code space the seed uses, so revision 0003 keys the forecast on
+the code and the name is only quoted back. The guard survives in a narrower form: no forecast
+row for this code *at all* means the ingest has not run or the code space moved, and neither
+is an absence.
 """
 
 from __future__ import annotations
@@ -65,11 +67,12 @@ class TownshipUnknown(LookupError):
 
 
 class ForecastJoinBroken(RuntimeError):
-    """The seed's township name matched no forecast row at all, for any hour.
+    """No forecast row carries this township code, for any hour.
 
     Raised rather than reported as an absence, because an absence here would be
-    indistinguishable from "no forecast published for that hour" — which is exactly how a
-    name mismatch (H24) stays invisible. Reaching the forecast by name is ticket 05's gap.
+    indistinguishable from "no forecast published for that hour". Since revision 0003 the join
+    is on the geocode, so this can no longer mean a misspelling (H24) — it means the ingest has
+    not run, or CWA changed the code space.
     """
 
 
@@ -141,16 +144,16 @@ select r.element, r.measure, r.value, p.id as publication_id, p.dataset_id,
        p.content_sha256, p.detected_at
 from forecast_reading r
 join forecast_publication p on p.id = r.publication_id
-where r.township = :township and r.slot_start = :hour
+where r.township_code = :code and r.slot_start = :hour
   and p.id = (
       select p2.id from forecast_reading r2
       join forecast_publication p2 on p2.id = r2.publication_id
-      where r2.township = :township and r2.slot_start = :hour
+      where r2.township_code = :code and r2.slot_start = :hour
       order by p2.detected_at desc, p2.id desc limit 1
   )
 """
 
-FORECAST_NAME_EXISTS = "select 1 from forecast_reading where township = :township limit 1"
+FORECAST_CODE_EXISTS = "select 1 from forecast_reading where township_code = :code limit 1"
 
 
 async def reading_for(session, township_code: str, hour: datetime) -> WeatherReading:
@@ -196,15 +199,15 @@ async def reading_for(session, township_code: str, hour: datetime) -> WeatherRea
 
     name = township["township_name"]
     rows = (
-        await session.execute(text(FORECAST), {"township": name, "hour": hour})
+        await session.execute(text(FORECAST), {"code": township_code, "hour": hour})
     ).mappings().all()
     if not rows:
-        any_row = await session.execute(text(FORECAST_NAME_EXISTS), {"township": name})
+        any_row = await session.execute(text(FORECAST_CODE_EXISTS), {"code": township_code})
         if any_row.first() is None:
             raise ForecastJoinBroken(
-                "the seed calls this township {!r} and no forecast row carries that name. "
-                "The forecast is still reached by name (ticket 05's gap), so this is a join "
-                "failure and not an absence.".format(name)
+                "no forecast row carries township code {} for any hour. A code cannot be "
+                "misspelled, so this is the ingest not having run or the code space having "
+                "moved — neither of which is an absence.".format(township_code)
             )
         return WeatherReading(
             kind="absent",

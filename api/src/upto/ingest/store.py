@@ -49,9 +49,9 @@ returning id
 
 INSERT_FORECAST_READING = """
 insert into forecast_reading
-    (publication_id, township, element, measure, slot_start, slot_end, value)
-values (:publication_id, :township, :element, :measure, :slot_start, :slot_end, :value)
-on conflict (publication_id, township, element, measure, slot_start) do nothing
+    (publication_id, township_code, township, element, measure, slot_start, slot_end, value)
+values (:publication_id, :township_code, :township, :element, :measure, :slot_start, :slot_end, :value)
+on conflict (publication_id, township_code, element, measure, slot_start) do nothing
 """
 
 INSERT_OBSERVATION_READING = """
@@ -86,6 +86,7 @@ async def store_publication(session: AsyncSession, publication: Publication) -> 
         rows = [
             {
                 "publication_id": publication_id,
+                "township_code": row.township_code,
                 "township": row.township,
                 "element": row.element,
                 "measure": row.measure,

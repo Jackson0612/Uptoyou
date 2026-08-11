@@ -82,12 +82,12 @@ async def plant_forecast(session, hour, temperature, detected_at, sha, weather=N
     for element, measure, value in rows:
         await session.execute(
             text(
-                "insert into forecast_reading (publication_id, township, element, measure, "
-                "slot_start, slot_end, value) values (:p, '士林區', :element, :measure, :hour, "
-                ":end, :value)"
+                "insert into forecast_reading (publication_id, township_code, township, "
+                "element, measure, slot_start, slot_end, value) values (:p, :code, '士林區', "
+                ":element, :measure, :hour, :end, :value)"
             ),
-            {"p": publication, "element": element, "measure": measure, "hour": hour,
-             "end": hour + timedelta(hours=1), "value": value},
+            {"p": publication, "code": SHILIN, "element": element, "measure": measure,
+             "hour": hour, "end": hour + timedelta(hours=1), "value": value},
         )
     await session.commit()
     return publication
@@ -171,15 +171,11 @@ async def scenario(test_url):
     print("  unknown township: refused")
 
     # ---- a broken name join is an error, not an absence -----------------------------------
-    # H24's shape: the seed says 士林區 and the forecast says something else. Reported as an
-    # absence it would be indistinguishable from "no forecast this hour", which is how a
-    # mismatch stays invisible for weeks.
+    # Since revision 0003 the join is on the geocode, so this can no longer be a misspelling.
+    # It now means the ingest never ran for this code — still an error rather than an absence,
+    # because reported as an absence it is indistinguishable from "no forecast this hour".
     async with Session() as session:
         await session.execute(text("delete from forecast_reading"))
-        await session.execute(
-            text("update township_station set township_name = '士林区' where township_code = :c"),
-            {"c": SHILIN},
-        )
         await session.execute(
             text("delete from observation_reading where observed_at = :hour"), {"hour": SEVEN}
         )
@@ -190,7 +186,7 @@ async def scenario(test_url):
             raise AssertionError("a name that matches no forecast row must not read as an absence")
         except ForecastJoinBroken:
             pass
-    print("  broken name join: refused rather than reported as an absence")
+    print("  no forecast for the code at all: refused rather than reported as an absence")
 
     await engine.dispose()
     print("read path: observation, fallback, revision, absence and both refusals all hold")

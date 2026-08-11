@@ -59,6 +59,11 @@ class Reading:
 
 @dataclass(frozen=True)
 class ForecastRow:
+    # D26 keys the forecast by geocode: the payload carries `Geocode` beside `LocationName`,
+    # in the same 內政部 code space the seeded township_station uses. The name is kept because
+    # it is what CWA calls the township and what a lineage answer quotes, not because it is
+    # the key.
+    township_code: str
     township: str
     element: str
     measure: str
@@ -202,16 +207,21 @@ def parse_forecast(payload: dict) -> list[ForecastRow]:
     rows: list[ForecastRow] = []
     for location in locations_wrapper[0].get("Location") or []:
         township = location.get("LocationName")
+        geocode = location.get("Geocode")
+        # `Latitude` and `Longitude` sit here too and are deliberately never read. The payload
+        # states no datum for them — no CoordinateName, no EPSG — and an unlabelled coordinate
+        # that nothing needs is what H23 is about. D26 declines to store them.
         for element in location.get("WeatherElement") or []:
             name = element.get("ElementName")
             for slot in element.get("Time") or []:
                 start = _parse_stamp(slot.get("StartTime") or slot.get("DataTime"))
-                if start is None or not township or not name:
+                if start is None or not township or not name or not geocode:
                     continue
                 end = _parse_stamp(slot.get("EndTime"))
                 for value, measure in _element_values(slot.get("ElementValue")):
                     rows.append(
                         ForecastRow(
+                            township_code=str(geocode),
                             township=township,
                             element=name,
                             measure=measure or name,

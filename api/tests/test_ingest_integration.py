@@ -60,6 +60,8 @@ def publication(hash_value: str, temperature: str, detected_at: datetime) -> Pub
         payload_bytes=1024,
         forecast_rows=[
             ForecastRow(
+                # D26 keys the forecast by geocode since revision 0003; 中山區 is 63000040.
+                township_code="63000040",
                 township="中山區",
                 element="溫度",
                 measure="Temperature",
