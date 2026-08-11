@@ -1,8 +1,8 @@
-# The proxy builds with app/ as its context, so keep that context to what an image needs.
+# Shared by every build whose context is app/ (the proxy and Airflow). Each Dockerfile COPYs
+# only what it names, so this list is about noise and secrets rather than about scoping —
+# `api/` was excluded here once and it silently starved Airflow's build of the ingest code.
 **/__pycache__
 **/*.py[cod]
 .env
 .env.*
 !.env.example
-api/
-db/

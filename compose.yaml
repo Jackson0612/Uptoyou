@@ -20,6 +20,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       # Deterministic collation, so ordering does not depend on the host's locale.
       POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+      # Read only by db/init/02-airflow.sh, once, on an empty volume.
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD}
     volumes:
       - db-data:/var/lib/postgresql/data
       # A named volume rather than a bind mount, on purpose: SELinux is Enforcing on the
@@ -79,6 +81,110 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+
+  # ---- Airflow, MVP item 12: self-hosted, in this same stack -------------------------
+  #
+  # LocalExecutor and nothing distributed. The machine has 7.5 GB and also runs the
+  # development work; a Celery or Kubernetes executor would buy parallelism this pipeline
+  # has no use for — two hourly tasks — at the price of a broker and more services.
+  #
+  # Airflow's metadata lives in the same PostgreSQL instance, in its own database owned by
+  # its own role. A second Postgres container would isolate nothing that matters here.
+
+  airflow-init:
+    build:
+      context: ./
+      dockerfile: airflow/Dockerfile
+    entrypoint: ["/bin/bash", "/opt/airflow/init.sh"]
+    volumes:
+      - ./airflow/init.sh:/opt/airflow/init.sh:ro,z
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@db:5432/airflow
+      AIRFLOW__API__BASE_URL: http://localhost:${AIRFLOW_HTTP_PORT:-8081}
+      # Airflow 3 runs tasks through the Execution API rather than in-process, so a worker
+      # has to reach the api-server *over the compose network*. Left at the default it
+      # derives from API__BASE_URL above, which says localhost — correct for a browser on
+      # the host and refused inside every container. The symptom is a task that queues,
+      # fails with no log at all, and a scheduler saying "not found in serialized_dag
+      # table", none of which names the URL.
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api:8080/execution/
+      # Shared across every Airflow container. Unset, each one generates its own and a task
+      # dies with "Invalid auth token: Signature verification failed" — which reads like a
+      # credential problem in the DAG and is a configuration problem in the stack.
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
+      # The bootstrap layer, and D33 says this is the whole of it. Everything a *task* uses
+      # arrives as a Connection instead; these three exist only to stand Airflow up.
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      UPTO_CWA_API_KEY: ${UPTO_CWA_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  airflow-scheduler:
+    build:
+      context: ./
+      dockerfile: airflow/Dockerfile
+    command: ["scheduler"]
+    environment: *airflow-env
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\" || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+    restart: unless-stopped
+
+  # Airflow 3 splits DAG parsing out of the scheduler into its own component, and it is not
+  # optional: without it the scheduler runs, reports healthy, and finds no DAGs at all —
+  # `dags list` is empty and `list-import-errors` is empty too, which reads like a parsing
+  # bug rather than a missing process.
+  airflow-dag-processor:
+    build:
+      context: ./
+      dockerfile: airflow/Dockerfile
+    command: ["dag-processor"]
+    environment: *airflow-env
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --hostname \"$${HOSTNAME}\" || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+    restart: unless-stopped
+
+  airflow-api:
+    build:
+      context: ./
+      dockerfile: airflow/Dockerfile
+    command: ["api-server"]
+    environment: *airflow-env
+    ports:
+      # Second published port, and it is the orchestrator's own UI rather than the product.
+      - "${AIRFLOW_HTTP_PORT:-8081}:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v2/monitor/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
     restart: unless-stopped
 
 volumes:
