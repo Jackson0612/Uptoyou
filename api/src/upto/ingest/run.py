@@ -16,7 +16,7 @@ import asyncio
 import os
 import sys
 
-from ..db import Session
+from ..db import session_factory
 from .cwa import FORECAST_DATASET, OBSERVATION_DATASET, CwaUnavailable, fetch_publication
 from .store import store_publication
 
@@ -46,14 +46,25 @@ async def ingest_once(datasets=(FORECAST_DATASET, OBSERVATION_DATASET)) -> int:
             print("{}: FAILED — {}".format(dataset_id, failure), file=sys.stderr)
             failures += 1
             continue
-        async with Session() as session:
+        async with session_factory()() as session:
             result = await store_publication(session, publication)
         print(result.line())
     return 1 if failures else 0
 
 
-def main() -> int:
-    return asyncio.run(ingest_once())
+def main(argv=None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run item 10's ingest once.")
+    parser.add_argument(
+        "--dataset",
+        action="append",
+        choices=[FORECAST_DATASET, OBSERVATION_DATASET],
+        help="fetch only this dataset; repeatable. Defaults to both.",
+    )
+    args = parser.parse_args(argv)
+    datasets = tuple(args.dataset) if args.dataset else (FORECAST_DATASET, OBSERVATION_DATASET)
+    return asyncio.run(ingest_once(datasets))
 
 
 if __name__ == "__main__":

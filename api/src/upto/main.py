@@ -7,7 +7,7 @@ first real endpoints arrive after the ingest tables exist.
 from fastapi import FastAPI, Response, status
 from sqlalchemy import text
 
-from .db import Session, engine
+from .db import dispose_all, session_factory
 
 app = FastAPI(
     title="Up to you",
@@ -26,7 +26,7 @@ async def health(response: Response) -> dict:
     serve a request*, which includes reaching the database.
     """
     try:
-        async with Session() as session:
+        async with session_factory()() as session:
             await session.execute(text("select 1"))
     except Exception as failure:  # noqa: BLE001 — the reason belongs in the body
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -35,5 +35,5 @@ async def health(response: Response) -> dict:
 
 
 @app.on_event("shutdown")
-async def dispose_engine() -> None:
-    await engine.dispose()
+async def dispose_engines() -> None:
+    await dispose_all()
