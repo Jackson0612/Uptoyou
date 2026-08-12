@@ -34,14 +34,35 @@
 -->
 <script src="/vendor/vue.global.prod.js"></script>
 <style>
+  /* **`--line` and `--edge` are two tokens on purpose, and the split is the fix for a measured
+     failure.** `--line` is decoration — the card's outline and the divider inside it — and WCAG
+     says nothing about either. `--edge` is the boundary of something you can press, which 1.4.11
+     requires to reach 3:1 against what surrounds it.
+
+     One token used to do both jobs, at **1.26:1 in light and 1.30:1 in dark** against the page.
+     The unselected township pills have no fill and no label chrome, so that border is the only
+     thing saying they are buttons — and at 1.3 it is not saying it to anyone with reduced vision
+     or a phone in sunlight. **This was never a dark-mode regression:** the two modes measured
+     within 0.04 of each other, both far under. Nobody had measured it.
+
+     Measured against `--paper`, which is what the picker actually sits on: `--edge` is 3.12:1 in
+     light and 3.24:1 in dark (3.01:1 on `--raised`, so it still holds if the pills ever move onto
+     a card). Values sit above 3.0 with margin rather than on it, because a token pinned to exactly
+     3.00 fails the next time either colour is nudged.
+
+     **Why not simply darken `--line`:** it would drag the card outline and the divider with it, and
+     the card would stop reading as a sheet of paper lifted slightly off the page and start reading
+     as a box with a frame. That is a whole-surface change bought for one control. */
   :root {
     color-scheme: light dark;
-    --ink: #1a1a1a; --paper: #fbfaf8; --muted: #6b6560; --line: #e4e0da;
+    --ink: #1a1a1a; --paper: #fbfaf8; --muted: #6b6560;
+    --line: #e4e0da; --edge: #928e88;
     --raised: #ffffff; --accent: #1f7a4d;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --ink: #ece9e4; --paper: #17161a; --muted: #9b948c; --line: #2e2c31;
+      --ink: #ece9e4; --paper: #17161a; --muted: #9b948c;
+      --line: #2e2c31; --edge: #6a676e;
       --raised: #1e1d22; --accent: #58c68d;
     }
   }
@@ -74,7 +95,8 @@
   .picker { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
   .picker button {
     font: inherit; font-size: .85rem; padding: .3rem .7rem; border-radius: 999px;
-    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    /* `--edge`, not `--line`: this is the only boundary an unselected pill has. */
+    border: 1px solid var(--edge); background: transparent; color: var(--muted);
     cursor: pointer; transition: color .12s, border-color .12s;
   }
   .picker button:hover { color: var(--ink); border-color: var(--muted); }
@@ -112,12 +134,49 @@
 </style>
 </head>
 <body>
+<!--
+  ================================================================================
+  SCREEN BLOCKS — the convention D20's test needs, and H29 is why it exists.
+
+  D20's rule is about **screens**: the home screen may show the weather, and the
+  round-opening, proposing and rolling screens must say nothing about it. The test
+  enforcing that used to work **per file**, allowlisting `index.html`. That agreed
+  with the rule only while the home screen was the only screen — and D3 rules Vue
+  with no build step, so the next screen arrives as markup inside *this* file, lands
+  inside the allowlist, and the check passes without examining it. It would not go
+  red. It would go quiet, which is worse.
+
+  So screens are delimited here and the test reads the delimiters. Written without their
+  closing marks, because **an HTML comment ends at its first close and does not nest** —
+  spelling the delimiters out in full inside this block terminated it early and dumped this
+  paragraph onto the page as text. `ScreensAreFindable` caught that on its first run, which
+  is a better introduction than it sounds:
+
+      a comment reading `screen: NAME` … a comment reading `/screen`
+      a comment reading `chrome`       … a comment reading `/chrome`
+
+  **Chrome is held to the strictest rule, not exempted from it** — it renders on every
+  screen, so anything forbidden on any screen is forbidden in chrome.
+
+  **Markup inside `<main>` that is in neither block fails the test.** That assertion is
+  the whole point: it is what makes a new screen impossible to add without the check
+  seeing it. A check that cannot find its subject must go red, never green.
+
+  Ruled 2026-08-12. The rejected fix was one screen per file, which restores the old
+  correspondence for free but forces a full page reload between proposing and rolling —
+  dropping the SSE stream and forcing a snapshot refetch in the middle of the moment
+  MVP item 1 promises happens together.
+  ================================================================================
+-->
 <main id="app">
+  <!-- chrome -->
   <header>
     <h1>Up to you</h1>
     <p class="promise">決定一頓飯，不用有人先犧牲。</p>
   </header>
+  <!-- /chrome -->
 
+  <!-- screen: home -->
   <div class="picker">
     <button
       v-for="place in townships"
@@ -157,10 +216,15 @@
     </template>
   </div>
 
+  <!-- The footer sits **inside the home screen, not in chrome**, and that is deliberate.
+       Both of its sentences are about this screen and this stage of the build — what the
+       picker is doing here, and which screens do not exist yet. Chrome renders everywhere,
+       so a sentence naming 天氣 would be a sentence naming it on the propose screen too. -->
   <footer>
     只有天氣。提案、投票與擲骰的畫面還不存在——它們需要的資料表尚未建立。<br>
     行政區在這裡是手選的；之後由圈子決定。
   </footer>
+  <!-- /screen -->
 </main>
 
 <script>
