@@ -31,11 +31,40 @@ HOME = os.path.join(WEB, "index.html")
 # on where somebody should eat, which D20 rules is a reason wearing a hat.
 ADVISORY = ["建議", "推薦", "最好", "不如", "適合", "應該去", "別去", "考慮", "值得"]
 
-# D20's other half: weather belongs to the home screen and no other. Vacuous today because
-# the home screen is the only screen — and that is exactly when this must be written, since
-# the propose screen is the one it exists to stop.
+# D20's other half: weather belongs to the home screen and no other.
 WEATHER_WORDS = ["降雨", "體感", "濕度", "風速", "氣溫", "weather", "temperature", "forecast"]
-WEATHER_MAY_APPEAR_IN = {"index.html"}
+
+# **Named screens, not files** — H29, ruled 2026-08-12. This used to be `{"index.html"}` and the
+# unit of enforcement was therefore a file. D3 rules Vue with no build step, so the second screen
+# arrives as markup inside `index.html`; under the old rule it landed inside the allowlist and the
+# check passed without examining it. Not red — quiet, which is worse, because the passing count
+# goes up as screens are added.
+WEATHER_MAY_APPEAR_IN = {"home"}
+
+# The block delimiters, as declared in the comment at the top of `index.html`'s body: comments
+# reading `screen: NAME` / `/screen` / `chrome` / `/chrome`.
+#
+# **Delimiters are resolved before anything else looks at the file, and that is not tidiness.**
+# Writing this the obvious way — one regex per block, run straight over the source — broke twice
+# in ten minutes, both times on the explanatory comment that documents the convention:
+#
+#   1. it spelled a delimiter out in full, and an HTML comment **ends at its first close and does
+#      not nest**, so the outer comment terminated early and the rest of the paragraph became page
+#      content. That was a real rendering defect, not a test artefact.
+#   2. it mentioned the `main` element by name in prose, and the search for the real element
+#      matched inside the comment instead.
+#
+# So: one pass turns every comment into either a sentinel or whitespace, and every pattern below
+# runs on the result. A comment can then say anything at all without moving the boundaries.
+SCREEN_OPEN = re.compile(r"<!--\s*screen:\s*([a-z0-9-]+)\s*-->\Z", re.S)
+SCREEN_CLOSE = re.compile(r"<!--\s*/screen\s*-->\Z", re.S)
+CHROME_OPEN = re.compile(r"<!--\s*chrome\s*-->\Z", re.S)
+CHROME_CLOSE = re.compile(r"<!--\s*/chrome\s*-->\Z", re.S)
+COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+SCREEN_BLOCK = re.compile(r"\x00screen:([a-z0-9-]+)\x00(.*?)\x00/screen\x00", re.S)
+CHROME_BLOCK = re.compile(r"\x00chrome\x00(.*?)\x00/chrome\x00", re.S)
+MAIN = re.compile(r"<main\b[^>]*>(.*?)</main>", re.S | re.I)
 
 
 def read(path):
@@ -47,12 +76,85 @@ def read(path):
 
 def visible_text(path):
     """The file with anything a user cannot read removed: HTML comments, JS line comments,
-    and the stylesheet. What is left is the surface D20 governs."""
+    and the stylesheet. What is left is the surface D20 governs.
+
+    **The `<script>` block is deliberately still in here**, so the advisory scan reaches string
+    literals — `error.value = '建議…'` would reach a screen, and stripping the script to tidy the
+    scan would open exactly that hole.
+    """
     source = read(path)
     source = re.sub(r"<!--.*?-->", " ", source, flags=re.S)
     source = re.sub(r"<style\b.*?</style>", " ", source, flags=re.S | re.I)
     source = re.sub(r"^\s*//.*$", " ", source, flags=re.M)
     return source
+
+
+def strip_non_markup(fragment):
+    """Comments, stylesheet and script removed. Used for the per-screen work, where the script
+    has to go: it is not inside any screen block, and it legitimately contains `weather_text`
+    and `/api/weather`.
+
+    **The cost of that, stated rather than hidden:** the per-screen weather scan therefore does
+    not see JS strings. A screen whose weather text is assembled in JavaScript rather than written
+    in markup would pass. `visible_text` above still covers the script for the advisory scan, so
+    the hole is specific to the weather half, and closing it needs the rendered DOM rather than a
+    file — which is the browser check `CLAUDE.md` documents, not this file's job.
+    """
+    fragment = re.sub(r"<!--.*?-->", " ", fragment, flags=re.S)
+    fragment = re.sub(r"<style\b.*?</style>", " ", fragment, flags=re.S | re.I)
+    fragment = re.sub(r"<script\b.*?</script>", " ", fragment, flags=re.S | re.I)
+    return fragment
+
+
+def resolved(path):
+    """The file with every comment replaced by a sentinel (if it is a delimiter) or by whitespace
+    (if it is prose). See the note above the patterns for the two defects this exists to stop."""
+
+    def swap(match):
+        comment = match.group(0)
+        opening = SCREEN_OPEN.match(comment)
+        if opening:
+            return "\x00screen:{}\x00".format(opening.group(1))
+        if SCREEN_CLOSE.match(comment):
+            return "\x00/screen\x00"
+        if CHROME_OPEN.match(comment):
+            return "\x00chrome\x00"
+        if CHROME_CLOSE.match(comment):
+            return "\x00/chrome\x00"
+        return " "
+
+    return COMMENT.sub(swap, read(path))
+
+
+def body_of(path):
+    """The markup inside the `main` element, or `None`. Comments are already resolved, so a
+    comment naming the element cannot be mistaken for it."""
+    found = MAIN.search(resolved(path))
+    return None if found is None else found.group(1)
+
+
+def regions(path):
+    """Every delimited region of a page, as `(label, fragment)`.
+
+    `chrome` is returned under its own label rather than merged into a screen, because it renders
+    on all of them and is therefore held to the strictest rule of any screen.
+    """
+    body = body_of(path)
+    if body is None:
+        return []
+    found = [("chrome", m.group(1)) for m in CHROME_BLOCK.finditer(body)]
+    return found + [(m.group(1), m.group(2)) for m in SCREEN_BLOCK.finditer(body)]
+
+
+def undeclared_markup(path):
+    """What is inside the `main` element but in neither a screen nor a chrome block, with the
+    blocks and the non-markup removed. **This returning anything is the failure H29 describes**:
+    markup the per-screen check cannot see, which the old per-file rule allowed silently."""
+    body = body_of(path)
+    if body is None:
+        return None
+    remainder = CHROME_BLOCK.sub(" ", SCREEN_BLOCK.sub(" ", body))
+    return strip_non_markup(remainder).replace("\x00", " ")
 
 
 class TheSurfaceStatesAndDoesNotAdvise(unittest.TestCase):
@@ -78,23 +180,79 @@ class TheSurfaceStatesAndDoesNotAdvise(unittest.TestCase):
         self.assertIn("建議", source, "the comment naming the forbidden copy has been removed")
 
 
-class WeatherStaysOnTheHomeScreen(unittest.TestCase):
-    def test_no_other_page_mentions_weather(self):
-        """D20 names the screens that must say nothing: round-opening, proposing, rolling —
-        including D16's hour confirmation, which shows the hour and not the forecast."""
+class ScreensAreFindable(unittest.TestCase):
+    """H29's mitigation, and the part that has to come first: **the check must fail when it
+    cannot identify its subject.** Everything in the next class scans per screen, and a scanner
+    that silently matches nothing reports success in the same words as one that held."""
+
+    def test_every_page_declares_at_least_one_screen(self):
         for name in sorted(os.listdir(WEB)):
-            if not name.endswith(".html") or name in WEATHER_MAY_APPEAR_IN:
+            if not name.endswith(".html"):
                 continue
-            text = visible_text(os.path.join(WEB, name))
-            for word in WEATHER_WORDS:
-                self.assertNotIn(
-                    word, text, "D20: {} may not mention weather ({!r})".format(name, word)
-                )
+            found = regions(os.path.join(WEB, name))
+            screens = [label for label, _ in found if label != "chrome"]
+            self.assertTrue(
+                screens,
+                "H29: {} declares no `<!-- screen: NAME -->` block. Either the delimiters were "
+                "removed or a page was added without them, and in both cases the D20 scan below "
+                "now examines nothing while still passing.".format(name),
+            )
+
+    def test_no_markup_sits_outside_a_declared_block(self):
+        """The assertion that makes a new screen impossible to add unseen. Without it the
+        delimiters are decoration: someone appends a propose screen after `<!-- /screen -->`,
+        every scan below skips it, and nothing complains."""
+        for name in sorted(os.listdir(WEB)):
+            if not name.endswith(".html"):
+                continue
+            leftover = undeclared_markup(os.path.join(WEB, name))
+            self.assertIsNotNone(leftover, "{} has no <main> element to scan".format(name))
+            self.assertEqual(
+                leftover.strip(),
+                "",
+                "H29: {} has markup inside <main> that is in neither a screen nor a chrome "
+                "block, so the D20 scan cannot see it: {!r}".format(name, leftover.strip()[:200]),
+            )
+
+    def test_the_home_screen_is_one_of_them(self):
+        """Names, not positions. `WEATHER_MAY_APPEAR_IN` allowlists `home` by name, so a rename
+        would otherwise turn the allowlist into a no-op and the home screen would start failing
+        the weather rule instead — a confusing way to learn about a typo."""
+        labels = {label for label, _ in regions(HOME)}
+        self.assertIn("home", labels, "the home screen block is named something else: {}".format(labels))
+
+
+class WeatherStaysOnTheHomeScreen(unittest.TestCase):
+    def test_no_other_screen_mentions_weather(self):
+        """D20 names the screens that must say nothing: round-opening, proposing, rolling —
+        including D16's hour confirmation, which shows the hour and not the forecast.
+
+        **`chrome` is scanned rather than exempted.** It renders on every screen, so a weather
+        word there is a weather word on the propose screen.
+        """
+        for name in sorted(os.listdir(WEB)):
+            if not name.endswith(".html"):
+                continue
+            for label, fragment in regions(os.path.join(WEB, name)):
+                if label in WEATHER_MAY_APPEAR_IN:
+                    continue
+                text = strip_non_markup(fragment)
+                for word in WEATHER_WORDS:
+                    self.assertNotIn(
+                        word,
+                        text,
+                        "D20: {} in {} may not mention weather ({!r})".format(label, name, word),
+                    )
 
     def test_the_home_screen_does_show_it(self):
         """Without this, the rule above is satisfied by a product with no weather anywhere,
-        and the test suite would report success for the wrong reason."""
-        text = visible_text(HOME)
+        and the test suite would report success for the wrong reason.
+
+        Scanned inside the home screen's own block rather than over the file, so it also proves
+        the delimiters bracket the thing they claim to.
+        """
+        home = dict(regions(HOME)).get("home", "")
+        text = strip_non_markup(home)
         self.assertIn("降雨機率", text)
         self.assertIn("體感", text)
 
