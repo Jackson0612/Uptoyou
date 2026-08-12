@@ -118,22 +118,39 @@ services:
       # dies with "Invalid auth token: Signature verification failed" — which reads like a
       # credential problem in the DAG and is a configuration problem in the stack.
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
-      # Two api-server workers rather than the default four, and this is a measured fix, not
-      # a tidy-up. uvicorn's supervisor pings each worker and kills it if the ping is not
-      # answered in five seconds — a constant inside uvicorn, with no Airflow setting for it.
-      # A worker that is still importing Airflow's FastAPI app does not answer, so it is
-      # killed and replaced by another cold import. Measured on this machine: workers 36, 37
-      # and 38 were killed at exactly 5.0s intervals and the first worker to survive appeared
-      # 32s after the parent, on the sixth attempt. On the CI runner it never converged — 11
-      # minutes of restarts, PIDs 398 through 600, and not one "Started server process". Four
-      # simultaneous cold imports on four cores is the pressure; two is the same fix the
-      # product api already makes for its own reason above.
-      # Cost admitted: half the concurrency for the orchestrator UI. It serves one operator
-      # and, over the Execution API, two hourly tasks — so the capacity was never the
-      # constraint, and the failure mode was.
-      # Rejected: one worker. It removes the contention entirely and also removes the second
-      # worker that answers the UI while the first is blocked serving a task heartbeat.
-      AIRFLOW__API__WORKERS: "2"
+      # One api-server worker rather than Airflow's default four, and **the number is not a
+      # capacity choice — it is which uvicorn code path runs.** `uvicorn/main.py` reads
+      # `elif config.workers > 1: Multiprocess(...).run()` / `else: server.run()`. Above one,
+      # a supervisor appears; at one, the server runs in-process and there is no supervisor
+      # to go wrong. Airflow reaches it through plain `uvicorn.run(workers=...)`, so this env
+      # var is the whole lever.
+      #
+      # **What goes wrong above one, read out of the installed source rather than guessed.**
+      # `Process.is_alive(timeout=5)` pings each child and `keep_subprocess_alive` kills any
+      # child that does not answer within five seconds — a default in uvicorn 0.34.3's own
+      # signature, which Airflow never overrides and no Airflow setting reaches. Children are
+      # `spawn`ed (`_subprocess.py`: `get_context("spawn")`), so a child must re-import
+      # Airflow from scratch, and `subprocess_started` starts the thread that answers the
+      # ping only *after* that import. **A worker therefore cannot answer during the one
+      # phase that takes longer than the timeout.** An Airflow import costs 8s warm and idle
+      # here and 31-45s cold and contended — always more than 5s once the machine is busy —
+      # so the child is killed mid-import and replaced by another cold import, which is
+      # slower again.
+      # Measured, and the spacing is the signature: kills exactly 5.0s apart, continuously.
+      # On the CI runner, PIDs 398 through 600 and not one "Started server process" in 11
+      # minutes. A local run under 2x CPU oversubscription reproduced it at 60 kills in 7
+      # minutes. Warm and idle it converges on the sixth attempt after 32s, which is why
+      # this has never been seen on a warm laptop.
+      #
+      # **Rejected: two workers, and it was rejected by measurement rather than by argument.**
+      # Halving the herd was tried first, on the theory that four cold imports on four cores
+      # was the pressure. It failed the same local run in the same way: two is still above
+      # one, so the supervisor still exists, and a worker that cannot answer in 5s is killed
+      # whether it has one sibling or three.
+      # Cost admitted: the orchestrator UI and the Execution API are served by one process,
+      # so a slow request delays the next. That is the same trade the product api makes above
+      # for a different reason, and the load is one operator plus two hourly tasks.
+      AIRFLOW__API__WORKERS: "1"
       # Where the simple auth manager keeps the admin password. Left at its default this is a
       # file inside the api-server's own container filesystem, which means a password nobody
       # chose and a different one after every `down`. Pointing it at a named volume lets
@@ -171,15 +188,18 @@ services:
       # "Starting the scheduler", gunicorn listening, the orphaned-task loop ticking every
       # five minutes. What failed was this healthcheck's clock, twice over.
       #
-      # **`airflow jobs check` is a full Airflow CLI cold start, and it costs 8 seconds.**
-      # Measured off Docker's own health log on this 4-core machine, warm and idle:
-      # 7.98 / 7.99 / 8.17 / 8.68 / 8.73s, against a 10s timeout. With the host merely
+      # **`airflow jobs check` is a full Airflow CLI cold start, and it costs 8 seconds warm
+      # and 31 cold.** Measured off Docker's own health log on this 4-core machine, warm and
+      # idle: 7.98 / 7.99 / 8.17 / 8.68 / 8.73s, against a 10s timeout. With the host merely
       # 2x oversubscribed it goes 9.26 / 11.43 / 9.00s, and at 4x 12.24 / 9.74 / 11.41s —
-      # over the timeout at the first step of load. **Exit code 0 every time.** The command
-      # answers "Found one alive job" and is killed for being slow, so the neighbouring
-      # theory — that the check honestly returned non-zero for a while — is not what
-      # happened. On a CI runner, four Airflow containers cold-import Python at once on the
-      # same four cores, and 8 seconds becomes more than 10.
+      # over the timeout at the first step of load. **Then measured where it actually matters,
+      # on a container this check had just built, cold, with the host 2x oversubscribed: the
+      # first probe ran 45.26s and was killed, and the first probe that *succeeded* took
+      # 30.87s.** Three times the old allowance, and the reason 45s is not the number either:
+      # the ceiling was reached on the first try.
+      # **Exit code 0 every time it was allowed to finish.** The command answers "Found one
+      # alive job" and is killed for being slow, so the neighbouring theory — that the check
+      # honestly returned non-zero for a while — is not what happened.
       # Confirmed by arithmetic against the runner's own timestamps: 687s from container
       # start to "is unhealthy" equals 180 + 20 x (10 timeout + 15 interval). A probe that
       # failed fast would have taken 480s. Every one of the 20 probes burned its full
@@ -191,27 +211,33 @@ services:
       # guaranteed rather than informative. 360s covers the measured cold start with margin.
       #
       # **`start_interval` is the one that stops this check from causing what it reports.**
-      # Docker's default is 5s, so during the start period two containers each ran an
-      # 8-second CLI probe every 13s — about 1.2 of 4 cores spent proving that a starting
-      # service had not started, exactly while it was trying to. 30s makes it 0.2.
+      # Docker's default is 5s, so during the start period two containers each ran a probe
+      # this expensive every 13s — most of a core spent proving that a starting service had
+      # not started, exactly while it was trying to start. At 45s it is under half that.
       #
       # Cost admitted: a scheduler that dies is now called unhealthy after up to
-      # 360 + 6 x (45 + 20) = 750s instead of 480s. That buys nothing back, because nothing
+      # 360 + 3 x (90 + 20) = 690s instead of 480s. That buys nothing back, because nothing
       # acts on this status — `restart: unless-stopped` does not restart on unhealthy, no
       # service depends on it, and the only readers are `up --wait` and a human at
-      # `compose ps`. 750s is deliberately under split_boot_check.sh's `--wait-timeout 900`,
-      # so a real failure is still reported as "container X is unhealthy" rather than as a
-      # bare compose timeout that names nobody.
+      # `compose ps`.
+      # **Which is why retries came down from 20 to 3 while everything else went up.** All 20
+      # were ever worth was 300 more seconds of the same failure; one probe allowed to finish
+      # is the whole requirement. And 690s has to stay under split_boot_check.sh's
+      # `--wait-timeout 900`, measured from `up` rather than from these containers — the
+      # failed run spent 73s pulling and migrating before Airflow started, so the real
+      # comparison is 73 + 690 against 900. At retries 20 that sum was 823s and the margin
+      # was 77s; a slower pull would have turned a named unhealthy container into a bare
+      # compose timeout that names nobody.
       # Rejected: keeping 10s and asserting something cheaper instead — reading the
       # scheduler's heartbeat out of the metadata database, or trusting airflow-api's
       # /monitor/health, which reports every component centrally. Both are faster and both
       # change what is asserted: this container would stop vouching for itself. Not a
       # timeout's decision to make.
       interval: 20s
-      timeout: 45s
-      retries: 6
+      timeout: 90s
+      retries: 3
       start_period: 360s
-      start_interval: 30s
+      start_interval: 45s
     restart: unless-stopped
 
   # Airflow 3 splits DAG parsing out of the scheduler into its own component, and it is not
@@ -233,10 +259,10 @@ services:
       # and for the identical reason: this is the same 8-second CLI cold start. Measured on
       # this container, warm and idle: 7.97 / 8.15 / 8.22 / 8.44 / 8.61s.
       interval: 20s
-      timeout: 45s
-      retries: 6
+      timeout: 90s
+      retries: 3
       start_period: 360s
-      start_interval: 30s
+      start_interval: 45s
     restart: unless-stopped
 
   airflow-api:
@@ -270,12 +296,12 @@ services:
       # first on the failed run; it was hanging to timeout on every probe for 11 minutes
       # while its workers were killed and respawned. AIRFLOW__API__WORKERS above is that
       # half of the fix.
-      # Worst case here: 360 + 6 x (15 + 20) = 570s.
+      # Worst case here: 360 + 3 x (15 + 20) = 465s.
       interval: 20s
       timeout: 15s
-      retries: 6
+      retries: 3
       start_period: 360s
-      start_interval: 30s
+      start_interval: 45s
     restart: unless-stopped
 
 volumes:
