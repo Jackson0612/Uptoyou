@@ -10,89 +10,247 @@
   a CDN script tag is precisely that dependency. Version is pinned by the file itself.
 
   No `v-html` anywhere, ever — it is the one hole left in Vue's escaping (H7), and keeping
-  it absent means the audit is one greppable word.
+  it absent means the audit is one greppable word. `test_web_surface.py` asserts it.
+
+  ================================================================================
+  THE HOME SCREEN, AND D20 IS THE RULE THAT GOVERNS EVERY WORD OF IT.
+
+  D20: the weather is shown as information, never as a reason. The home screen is the
+  **only** screen it may appear on. The round-opening, proposing and rolling screens say
+  nothing about weather at all — including the hour-confirmation D16 asks for, which shows
+  the hour and not the forecast.
+
+  **The surface may state, never advise.** "降雨機率 20%" is a fact. "建議選近一點的店" is a
+  recommendation, and a recommendation is a reason wearing a hat: it announces the product
+  has a position on where you should eat, which is one step from announcing that it acts on
+  one — which it does, silently, by D21.
+
+  D20 predicts exactly how this breaks: *"The failure will not happen at design time; it
+  will happen months later when someone improves the UI copy."* So the rule is not left as
+  a comment. `app/api/tests/test_web_surface.py` reads this file and fails on advisory
+  vocabulary. If you are here to add a helpful sentence, that test is the answer to whether
+  you may.
+  ================================================================================
 -->
 <script src="/vendor/vue.global.prod.js"></script>
 <style>
-  :root { color-scheme: light dark; --ink: #1a1a1a; --paper: #fbfaf8; --muted: #6b6560; --line: #e4e0da; }
+  :root {
+    color-scheme: light dark;
+    --ink: #1a1a1a; --paper: #fbfaf8; --muted: #6b6560; --line: #e4e0da;
+    --raised: #ffffff; --accent: #1f7a4d;
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --ink: #ece9e4; --paper: #17161a; --muted: #9b948c; --line: #2e2c31; }
+    :root {
+      --ink: #ece9e4; --paper: #17161a; --muted: #9b948c; --line: #2e2c31;
+      --raised: #1e1d22; --accent: #58c68d;
+    }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--paper); color: var(--ink);
-    font: 16px/1.65 system-ui, -apple-system, "Noto Sans TC", sans-serif;
-    display: grid; place-items: center; min-height: 100vh; padding: 1.5rem;
+    font: 16px/1.65 system-ui, -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    display: grid; place-items: start center; min-height: 100vh; padding: 2rem 1.25rem 3rem;
   }
-  main { width: 100%; max-width: 30rem; }
-  h1 { font-size: 1.5rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
-  .promise { color: var(--muted); margin: 0 0 1.75rem; }
-  .card { border: 1px solid var(--line); border-radius: .75rem; padding: 1rem 1.15rem; }
-  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
-  .row + .row { margin-top: .6rem; padding-top: .6rem; border-top: 1px solid var(--line); }
-  .label { color: var(--muted); font-size: .9rem; }
-  .value { font-variant-numeric: tabular-nums; }
-  .ok { color: #1f7a4d; } .bad { color: #a3341f; } .wait { color: var(--muted); }
-  @media (prefers-color-scheme: dark) { .ok { color: #58c68d; } .bad { color: #f08a6c; } }
-  footer { margin-top: 1.25rem; color: var(--muted); font-size: .85rem; }
+  main { width: 100%; max-width: 26rem; }
+
+  header { margin-bottom: 1.75rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .2rem; letter-spacing: -0.01em; font-weight: 650; }
+  .promise { color: var(--muted); margin: 0; font-size: .95rem; }
+
+  /* The township picker. A circle would supply this; there are no circles yet, so it is
+     chosen here and that is stated in the footer rather than hidden. */
+  .picker { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
+  .picker button {
+    font: inherit; font-size: .85rem; padding: .3rem .7rem; border-radius: 999px;
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    cursor: pointer; transition: color .12s, border-color .12s;
+  }
+  .picker button:hover { color: var(--ink); border-color: var(--muted); }
+  .picker button[aria-pressed="true"] {
+    color: var(--paper); background: var(--ink); border-color: var(--ink);
+  }
+
+  .card {
+    border: 1px solid var(--line); border-radius: .9rem; background: var(--raised);
+    padding: 1.35rem 1.4rem 1.15rem;
+  }
+  .now { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .temp { font-size: 3.4rem; line-height: 1; font-weight: 300; letter-spacing: -0.03em;
+          font-variant-numeric: tabular-nums; }
+  .temp span { font-size: 1.4rem; font-weight: 400; color: var(--muted); }
+  .sky { text-align: right; }
+  .sky .text { font-size: 1.05rem; }
+  .sky .hour { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+
+  .grid {
+    margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem 1rem;
+  }
+  .metric { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+  .metric .label { color: var(--muted); font-size: .87rem; }
+  .metric .value { font-variant-numeric: tabular-nums; }
+
+  .source { margin-top: 1rem; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+  .state { color: var(--muted); padding: 1.5rem 0; text-align: center; }
+  .state.bad { color: #a3341f; }
+  @media (prefers-color-scheme: dark) { .state.bad { color: #f08a6c; } }
+
+  footer { margin-top: 1.5rem; color: var(--muted); font-size: .82rem; line-height: 1.6; }
+  footer code { font-size: .95em; }
 </style>
 </head>
 <body>
 <main id="app">
-  <h1>Up to you</h1>
-  <p class="promise">決定一頓飯，不用有人先犧牲。</p>
+  <header>
+    <h1>Up to you</h1>
+    <p class="promise">決定一頓飯，不用有人先犧牲。</p>
+  </header>
 
-  <div class="card">
-    <div class="row">
-      <span class="label">API</span>
-      <span class="value" :class="apiClass">{{ apiText }}</span>
-    </div>
-    <div class="row">
-      <span class="label">Database</span>
-      <span class="value" :class="dbClass">{{ dbText }}</span>
-    </div>
-    <div class="row">
-      <span class="label">Checked</span>
-      <span class="value wait">{{ checkedAt || '—' }}</span>
-    </div>
+  <div class="picker">
+    <button
+      v-for="place in townships"
+      :key="place.code"
+      :aria-pressed="place.code === selected ? 'true' : 'false'"
+      @click="choose(place.code)"
+    >{{ place.name }}</button>
   </div>
 
-  <footer>Skeleton only. No product surface yet — the pipeline is built first.</footer>
+  <div class="card">
+    <div v-if="loading" class="state">讀取中…</div>
+    <div v-else-if="error" class="state bad">{{ error }}</div>
+
+    <template v-else>
+      <div class="now">
+        <div class="temp">{{ measure('temperature_c') }}<span>°C</span></div>
+        <div class="sky">
+          <div class="text">{{ measure('weather_text') }}</div>
+          <div class="hour">{{ hourLabel }}</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="metric"><span class="label">體感</span><span class="value">{{ measure('apparent_temperature_c') }}°C</span></div>
+        <div class="metric"><span class="label">降雨機率</span><span class="value">{{ measure('rain_probability_pct') }}%</span></div>
+        <div class="metric"><span class="label">相對濕度</span><span class="value">{{ measure('humidity_pct') }}%</span></div>
+        <div class="metric"><span class="label">風速</span><span class="value">{{ measure('wind_speed_ms') }} m/s</span></div>
+      </div>
+
+      <!-- Attribution and lineage, and both are facts rather than advice. `kind` says which
+           of the two datasets answered, which is the read path's own promise (item 07): an
+           observation for the hour, else the forecast for it. -->
+      <p class="source">
+        {{ kindLabel }} · 中央氣象署開放資料<br>
+        {{ sourceLabel }}
+      </p>
+    </template>
+  </div>
+
+  <footer>
+    只有天氣。提案、投票與擲骰的畫面還不存在——它們需要的資料表尚未建立。<br>
+    行政區在這裡是手選的；之後由圈子決定。
+  </footer>
 </main>
 
 <script>
-const { createApp, ref, computed, onMounted } = Vue;
+const { createApp, ref, computed, onMounted, watch } = Vue;
+
+// The twelve 臺北市 townships, matching the `township_station` seed exactly (ticket 06).
+// D31's ruling scopes the ingest to 臺北市, so this list is the whole product surface.
+const TOWNSHIPS = [
+  { code: '63000010', name: '松山區' }, { code: '63000020', name: '信義區' },
+  { code: '63000030', name: '大安區' }, { code: '63000040', name: '中山區' },
+  { code: '63000050', name: '中正區' }, { code: '63000060', name: '大同區' },
+  { code: '63000070', name: '萬華區' }, { code: '63000080', name: '文山區' },
+  { code: '63000090', name: '南港區' }, { code: '63000100', name: '內湖區' },
+  { code: '63000110', name: '士林區' }, { code: '63000120', name: '北投區' },
+];
+
+// The hour, in Taipei, truncated to the hour and carrying its offset. H17: the API refuses a
+// stamp without one, and it is right to — a naive hour cannot be compared with a stored
+// reading. The offset is fixed at +08:00 because Taiwan has no daylight saving.
+function currentTaipeiHour() {
+  const now = new Date();
+  const taipei = new Date(now.getTime() + (8 * 60 + now.getTimezoneOffset()) * 60000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${taipei.getFullYear()}-${pad(taipei.getMonth() + 1)}-${pad(taipei.getDate())}`
+       + `T${pad(taipei.getHours())}:00:00+08:00`;
+}
 
 createApp({
   setup() {
-    const state = ref('waiting');
-    const database = ref('waiting');
-    const checkedAt = ref('');
+    const townships = TOWNSHIPS;
+    const selected = ref('63000040');   // 中山區, the demo circle's district
+    const reading = ref(null);
+    const loading = ref(true);
+    const error = ref('');
 
-    async function check() {
+    async function load() {
+      loading.value = true;
+      error.value = '';
+      const hour = currentTaipeiHour();
       try {
-        const response = await fetch('/health', { cache: 'no-store' });
-        const body = await response.json();
-        state.value = response.ok ? 'ok' : 'unhealthy';
-        database.value = body.database || 'unknown';
+        const response = await fetch(
+          `/api/weather?township=${encodeURIComponent(selected.value)}&hour=${encodeURIComponent(hour)}`,
+          { cache: 'no-store' }
+        );
+        if (!response.ok) {
+          // The API's own detail, not a sentence invented here. A wrong reason on screen is
+          // worse than a blunt one.
+          const body = await response.json().catch(() => ({}));
+          error.value = body.detail || `讀取失敗（${response.status}）`;
+          reading.value = null;
+        } else {
+          reading.value = await response.json();
+        }
       } catch (failure) {
-        state.value = 'unreachable';
-        database.value = 'unknown';
+        error.value = '連不上 API';
+        reading.value = null;
       }
-      checkedAt.value = new Date().toLocaleTimeString();
+      loading.value = false;
     }
 
+    function choose(code) { selected.value = code; }
+    watch(selected, load);
     onMounted(() => {
-      check();
-      setInterval(check, 5000);
+      load();
+      // The forecast republishes about every six hours and the observation hourly (D42), so
+      // a five-minute poll is already far more often than the data can change. It exists so
+      // the hour rolls over without a reload, not to chase updates.
+      setInterval(load, 5 * 60 * 1000);
     });
 
-    const apiText = computed(() => state.value);
-    const dbText = computed(() => database.value);
-    const apiClass = computed(() => (state.value === 'ok' ? 'ok' : state.value === 'waiting' ? 'wait' : 'bad'));
-    const dbClass = computed(() => (database.value === 'reachable' ? 'ok' : database.value === 'waiting' ? 'wait' : 'bad'));
+    const measure = (name) => (reading.value && reading.value.measures[name]) || '—';
 
-    return { apiText, dbText, apiClass, dbClass, checkedAt };
+    const hourLabel = computed(() => {
+      if (!reading.value) return '';
+      const stamp = reading.value.hour.slice(11, 16);
+      return `${reading.value.township_name} · ${stamp}`;
+    });
+
+    // "觀測" and "預報" are what the read path actually returned, not a guess. D36 picks the
+    // observation for the hour and falls back to the forecast for that same hour, and which
+    // one answered is part of the answer.
+    const kindLabel = computed(() => {
+      if (!reading.value) return '';
+      if (reading.value.kind === 'observation') {
+        const station = reading.value.station;
+        return station ? `觀測 · ${station.name}測站` : '觀測';
+      }
+      return '預報';
+    });
+
+    // D42: the forecast carries no publication time, so what we hold is when the ingest first
+    // saw the content. The label says "偵測" for that and "取得" for an observation, because
+    // calling a detection time a publication time would be a small, permanent lie.
+    const sourceLabel = computed(() => {
+      const source = reading.value && reading.value.source;
+      if (!source) return '';
+      const when = new Date(source[source.time_label + '_at']);
+      const word = source.time_label === 'detected' ? '偵測' : '取得';
+      return `${word}於 ${when.toLocaleString('zh-TW', { hour12: false })} · publication ${source.publication_id}`;
+    });
+
+    return { townships, selected, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel };
   }
 }).mount('#app');
 </script>
