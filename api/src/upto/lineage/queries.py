@@ -47,8 +47,7 @@ READABLE_TABLES = frozenset(
         "observation_reading",
         "place_publication",
         "reference_place",
-        "ingest_run",
-        "township_station",
+            "township_station",
     }
 )
 
