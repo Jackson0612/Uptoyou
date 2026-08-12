@@ -32,7 +32,28 @@ HOME = os.path.join(WEB, "index.html")
 ADVISORY = ["建議", "推薦", "最好", "不如", "適合", "應該去", "別去", "考慮", "值得"]
 
 # D20's other half: weather belongs to the home screen and no other.
-WEATHER_WORDS = ["降雨", "體感", "濕度", "風速", "氣溫", "weather", "temperature", "forecast"]
+#
+# **Widened 2026-08-12, because the list only knew the labels already on the home screen.** It held
+# 降雨 · 體感 · 濕度 · 風速 · 氣溫 — which is what this page happens to print, not what a person
+# writes. Five ordinary sentences were tried against it and **all five got through**: 今天天氣不錯,
+# 外面下雨, 氣象預報說, 溫度很高, 很悶熱. H29 fixed *where* the scan looks; this fixes what it knows,
+# and the two together are what the rule needed. `test_the_vocabulary_catches_ordinary_sentences`
+# below keeps it from narrowing again quietly.
+#
+# **Single characters are deliberately absent.** 熱, 冷 and 涼 would each be a weather word and a
+# food word at once — 熱炒, 冷麵, 涼麵 are all restaurants, and a scan that fails on the name of a
+# noodle shop teaches people to route around the gate.
+WEATHER_WORDS = [
+    "降雨", "體感", "濕度", "風速", "氣溫", "天氣", "下雨", "氣象", "溫度", "悶熱",
+    "預報", "觀測", "紫外線", "weather", "temperature", "forecast", "rain", "humid",
+]
+
+# Sentences a well-meaning later edit would plausibly write onto the propose screen. Not a wishlist:
+# each one got past the old vocabulary, so this list is the record of what was missed.
+ORDINARY_WEATHER_SENTENCES = [
+    "今天天氣不錯", "外面下雨", "氣象預報說", "溫度很高", "很悶熱",
+    "紫外線很強", "根據觀測資料",
+]
 
 # **Named screens, not files** — H29, ruled 2026-08-12. This used to be `{"index.html"}` and the
 # unit of enforcement was therefore a file. D3 rules Vue with no build step, so the second screen
@@ -255,6 +276,34 @@ class WeatherStaysOnTheHomeScreen(unittest.TestCase):
         text = strip_non_markup(home)
         self.assertIn("降雨機率", text)
         self.assertIn("體感", text)
+
+    def test_the_vocabulary_catches_ordinary_sentences(self):
+        """**The list has to know the words a person writes, not the labels this page prints.**
+
+        H29 fixed where the scan looks. It said nothing about what the scan knows, and the answer
+        was: not much. The five sentences that opened `ORDINARY_WEATHER_SENTENCES` all got past the
+        original vocabulary, which held only the metric labels already on the home screen — so the
+        per-screen machinery was guarding a door with the lock on the wrong side.
+
+        This is the assertion that stops the list narrowing again. Deleting a word from
+        `WEATHER_WORDS` to quieten a false positive now fails here rather than silently shrinking
+        what D20 covers.
+        """
+        for sentence in ORDINARY_WEATHER_SENTENCES:
+            self.assertTrue(
+                any(word in sentence for word in WEATHER_WORDS),
+                "D20's vocabulary does not catch {!r}, so that sentence could be written onto the "
+                "propose screen and the suite would stay green".format(sentence),
+            )
+
+    def test_the_vocabulary_does_not_catch_restaurant_names(self):
+        """The other side, and the reason single characters are excluded. A gate that fails on 涼麵
+        is a gate people learn to bypass, and a bypassed gate protects nothing."""
+        for name in ["涼麵", "熱炒一百", "冷藏櫃", "風味小館", "溫州大餛飩"]:
+            hits = [word for word in WEATHER_WORDS if word in name]
+            self.assertEqual(
+                hits, [], "{!r} is a place name and would be read as weather: {}".format(name, hits)
+            )
 
 
 class NoVHtml(unittest.TestCase):
