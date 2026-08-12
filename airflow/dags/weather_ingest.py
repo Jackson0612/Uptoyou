@@ -90,8 +90,16 @@ def _run(dataset_id: str) -> str:
     if finished.stdout:
         print(finished.stdout.strip())
     if finished.returncode != 0:
+        # The whole of stderr reaches the task log before anything is truncated, and the
+        # exception keeps the *tail*. Written as `[:500]` this reported a real schema mismatch
+        # as "F-D0047-061 ingest failed:" followed by five frames of SQLAlchemy internals and
+        # nothing else: a Python traceback puts the line that names the failure last, so
+        # truncating from the front discards the only part that is a diagnosis.
+        stderr = (finished.stderr or "").strip()
+        if stderr:
+            print(stderr)
         raise RuntimeError(
-            "{} ingest failed: {}".format(dataset_id, (finished.stderr or "").strip()[:500])
+            "{} ingest failed: {}".format(dataset_id, stderr[-500:] or "no stderr at all")
         )
     return finished.stdout.strip()
 

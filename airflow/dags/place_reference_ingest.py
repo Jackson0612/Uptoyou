@@ -102,14 +102,20 @@ def upto_place_reference_ingest():
         # half that says what was written.
         if finished.stdout:
             print(finished.stdout.strip())
+        # stderr reaches the log whole, and the exceptions keep its *tail*. A traceback names
+        # the failure on its last line, so `[:500]` kept the frames and discarded the diagnosis
+        # — it cost an hour on the weather DAG before it was noticed there.
+        stderr = (finished.stderr or "").strip()
+        if stderr and finished.returncode != 0:
+            print(stderr)
         if finished.returncode == DISAGREEMENT:
             raise RuntimeError(
                 "{}: the archive stamp and the content hash disagree — the verdict above says "
-                "what was written: {}".format(SOURCE, (finished.stderr or "").strip()[:500])
+                "what was written: {}".format(SOURCE, stderr[-500:])
             )
         if finished.returncode != 0:
             raise RuntimeError(
-                "{} ingest failed: {}".format(SOURCE, (finished.stderr or "").strip()[:500])
+                "{} ingest failed: {}".format(SOURCE, stderr[-500:] or "no stderr at all")
             )
         return finished.stdout.strip()
 
