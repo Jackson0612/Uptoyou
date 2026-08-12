@@ -95,6 +95,13 @@ class WeatherReading:
     township_name: str
     hour: datetime                 # the hour described, always the one asked for
     measures: dict = field(default_factory=dict)
+    # Which slot each measure was taken from, as `label -> (start, end)`, `end` being None for
+    # the last slot in a series. **This exists because of the 2026-08-12 ruling** that a value
+    # is read from the slot containing the hour: once 10:00's 天氣 can come from the 09:00–12:00
+    # block, "the forecast for 10:00" is no longer self-describing, and D15's snapshot has to
+    # be able to pin what a round actually read. Empty for an observation, whose ObsTime is
+    # the hour itself.
+    slots: dict = field(default_factory=dict)
     station_id: str | None = None
     station_name: str | None = None
     provenance: Provenance | None = None
@@ -139,18 +146,57 @@ where r.station_id = :station_id and r.observed_at = :hour
   )
 """
 
+# **The slot that CONTAINS the hour, ruled 2026-08-12 — not the slot that starts on it.**
+#
+# This read `slot_start = :hour` until then, and one hour in three looked complete while the
+# other two showed nothing for half the card. Measured, on publication 27 for 中山區:
+#
+#   Temperature, ApparentTemperature, RelativeHumidity …  56 slots, `slot_end` always NULL,
+#       spaced 1 hour for the first 36 gaps and **3 hours for the remaining 19**
+#   Weather, ProbabilityOfPrecipitation, WindSpeed …       32 slots, `slot_end` always set,
+#       every gap 3 hours — 09:00–12:00 and so on
+#
+# So CWA publishes a value covering 10:00; it just does not start one there. Returning nothing
+# for that hour told the caller the source was silent when it was not, and it is H23's
+# *degrades quietly* shape: no error, no absence_reason, just half a screen of dashes.
+#
+# **`coalesce(slot_end, slot_start + interval '1 hour')` is the obvious fix and it is wrong.**
+# Those 19 far-out Temperature slots span three hours and still carry a NULL `slot_end`, so a
+# one-hour assumption drops two hours in three at the far end of the horizon — the same bug
+# moved rather than fixed. The extent has to come from **the next slot in the same series**,
+# which is what the window function below is for.
+#
+# A slot with no successor and no `slot_end` is the last one in its series; it covers its own
+# start and nothing after, because extending it would invent a horizon the source never gave.
 FORECAST = """
-select r.element, r.measure, r.value, p.id as publication_id, p.dataset_id,
-       p.content_sha256, p.detected_at
-from forecast_reading r
-join forecast_publication p on p.id = r.publication_id
-where r.township_code = :code and r.slot_start = :hour
-  and p.id = (
-      select p2.id from forecast_reading r2
-      join forecast_publication p2 on p2.id = r2.publication_id
-      where r2.township_code = :code and r2.slot_start = :hour
-      order by p2.detected_at desc, p2.id desc limit 1
-  )
+with slot as (
+    select r.publication_id, r.element, r.measure, r.value, r.slot_start,
+           coalesce(
+               r.slot_end,
+               lead(r.slot_start) over (
+                   partition by r.publication_id, r.element, r.measure
+                   order by r.slot_start
+               )
+           ) as slot_end
+    from forecast_reading r
+    where r.township_code = :code
+),
+covering as (
+    select * from slot
+    where slot_start <= :hour
+      and case when slot_end is null then slot_start = :hour else :hour < slot_end end
+)
+select c.element, c.measure, c.value, c.slot_start, c.slot_end,
+       p.id as publication_id, p.dataset_id, p.content_sha256, p.detected_at
+from covering c
+join forecast_publication p on p.id = c.publication_id
+where p.id = (
+    -- The newest publication that covers this hour, not simply the newest publication: a
+    -- past hour is carried only by the older publications whose horizon still reached it.
+    select p2.id from covering c2
+    join forecast_publication p2 on p2.id = c2.publication_id
+    order by p2.detected_at desc, p2.id desc limit 1
+)
 """
 
 FORECAST_CODE_EXISTS = "select 1 from forecast_reading where township_code = :code limit 1"
@@ -222,12 +268,14 @@ async def reading_for(session, township_code: str, hour: datetime) -> WeatherRea
         )
 
     values = {}
+    spans = {}
     for label, (element, measure) in FORECAST_MEASURES.items():
         match = next(
             (r for r in rows if r["element"] == element and r["measure"] == measure), None
         )
         if match is not None:
             values[label] = match["value"]
+            spans[label] = (match["slot_start"], match["slot_end"])
     first = rows[0]
     return WeatherReading(
         kind="forecast",
@@ -235,6 +283,7 @@ async def reading_for(session, township_code: str, hour: datetime) -> WeatherRea
         township_name=name,
         hour=hour,
         measures=values,
+        slots=spans,
         provenance=Provenance(
             publication_id=first["publication_id"],
             dataset_id=first["dataset_id"],

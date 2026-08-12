@@ -71,6 +71,19 @@ async def weather(
         "hour": reading.hour.isoformat(),
         "measures": reading.measures,
     }
+    if reading.slots:
+        # Which slot each measure came from. Since the 2026-08-12 ruling a value may be read
+        # from the block containing the hour — 10:00's 天氣 from the 09:00–12:00 block — so the
+        # hour alone no longer says what was read, and D15's snapshot needs this to pin it.
+        body["slots"] = {
+            label: {
+                "start": start.isoformat(),
+                # None on the last slot of a series: the source gave no end and inventing one
+                # would extend a horizon it never published.
+                "end": end.isoformat() if end is not None else None,
+            }
+            for label, (start, end) in reading.slots.items()
+        }
     if reading.station_id:
         body["station"] = {"id": reading.station_id, "name": reading.station_name}
     if reading.provenance:

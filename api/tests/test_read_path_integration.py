@@ -188,9 +188,103 @@ async def scenario(test_url):
             pass
     print("  no forecast for the code at all: refused rather than reported as an absence")
 
+    await containing_slot(Session)
+
     await engine.dispose()
     print("read path: observation, fallback, revision, absence and both refusals all hold")
     return later_publication
+
+
+async def containing_slot(Session):
+    """The 2026-08-12 ruling: a value is read from the slot that CONTAINS the hour.
+
+    Planted to match what CWA actually publishes, which was measured on publication 27 rather
+    than assumed:
+
+      * hourly elements (`溫度`) carry **`slot_end` NULL**, spaced one hour near-term and
+        **three hours further out** — the far-out ones are the reason a
+        `coalesce(slot_end, slot_start + 1 hour)` fix is wrong, and they are planted here so
+        that shortcut fails this test
+      * three-hourly elements (`天氣現象`) carry `slot_end`, spanning 09:00–12:00 and so on
+
+    Before the ruling the query matched `slot_start = :hour`, so one hour in three looked
+    complete and the other two returned half a card with no error and no absence_reason.
+    """
+    nine = SEVEN.replace(hour=9)          # 09:00 Taipei — a block start
+    ten = SEVEN.replace(hour=10)          # inside the 09:00–12:00 block
+    eighteen = SEVEN.replace(hour=18)     # a far-out hourly slot, three hours wide, end NULL
+    nineteen = SEVEN.replace(hour=19)     # inside it
+
+    async with Session() as session:
+        await session.execute(text("delete from forecast_reading"))
+        await session.execute(text("delete from forecast_publication"))
+        publication = (
+            await session.execute(
+                text(
+                    "insert into forecast_publication (dataset_id, content_sha256, detected_at, "
+                    "payload_bytes) values ('F-D0047-061', :sha, :detected, 100) returning id"
+                ),
+                {"sha": "c" * 64, "detected": SEVEN},
+            )
+        ).scalar()
+
+        planted = [
+            # 溫度: hourly at 09 and 10, then a three-hour spacing from 18 with NULL end.
+            ("溫度", "Temperature", nine, None, "30"),
+            ("溫度", "Temperature", ten, None, "31"),
+            ("溫度", "Temperature", eighteen, None, "27"),
+            ("溫度", "Temperature", eighteen + timedelta(hours=3), None, "25"),
+            # 天氣現象: one three-hour block covering 09:00–12:00, with its end stated.
+            ("天氣現象", "Weather", nine, nine + timedelta(hours=3), "多雲"),
+        ]
+        for element, measure, start, end, value in planted:
+            await session.execute(
+                text(
+                    "insert into forecast_reading (publication_id, township_code, township, "
+                    "element, measure, slot_start, slot_end, value) values (:p, :code, '士林區', "
+                    ":element, :measure, :start, :end, :value)"
+                ),
+                {"p": publication, "code": SHILIN, "element": element, "measure": measure,
+                 "start": start, "end": end, "value": value},
+            )
+        await session.commit()
+
+    async with Session() as session:
+        reading = await reading_for(session, SHILIN, ten)
+    assert reading.kind == "forecast", reading.kind
+    # The hourly element belongs to 10:00 itself.
+    assert reading.measures["temperature_c"] == "31", reading.measures
+    # The three-hourly one comes from the block that contains 10:00 and did not start on it.
+    # This is the assertion the old `slot_start = :hour` query failed.
+    assert reading.measures.get("weather_text") == "多雲", (
+        "10:00 must read the 09:00–12:00 block; got {}".format(reading.measures)
+    )
+    start, end = reading.slots["weather_text"]
+    assert start == nine and end == nine + timedelta(hours=3), reading.slots["weather_text"]
+    print("  containing slot: 10:00 reads the 09:00–12:00 block, and says which block it was")
+
+    async with Session() as session:
+        reading = await reading_for(session, SHILIN, nineteen)
+    # 19:00 sits inside an hourly-series slot that is three hours wide and stores NULL as its
+    # end. A one-hour assumption returns nothing here, which is exactly the bug moved to the
+    # far end of the horizon instead of fixed.
+    assert reading.measures.get("temperature_c") == "27", (
+        "19:00 must read the 18:00 slot, whose extent comes from the next slot's start, not "
+        "from an assumed hour; got {}".format(reading.measures)
+    )
+    start, end = reading.slots["temperature_c"]
+    assert (start, end) == (eighteen, eighteen + timedelta(hours=3)), reading.slots["temperature_c"]
+    print("  containing slot: a NULL slot_end takes its extent from the next slot, not from +1h")
+
+    # The last slot in a series covers its own start and nothing after it. Extending it would
+    # invent a horizon the source never published — and a stale forecast presented as current
+    # is worse than an absence, because D15 would pin it into a round.
+    async with Session() as session:
+        reading = await reading_for(session, SHILIN, eighteen + timedelta(hours=4))
+    assert "temperature_c" not in reading.measures, (
+        "an hour past the last slot must not inherit it: {}".format(reading.measures)
+    )
+    print("  containing slot: the last slot does not extend past itself")
 
 
 async def with_temporary_database():
