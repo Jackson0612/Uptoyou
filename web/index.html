@@ -48,7 +48,19 @@
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--paper); color: var(--ink);
-    font: 16px/1.65 system-ui, -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    /* **A Traditional Chinese face is named before `system-ui`, and the reason is Han
+     unification rather than anything measured here.** Many codepoints are shared between
+     Traditional and Simplified and carry different regional glyph forms, so leaving
+     `system-ui` first delegates glyph choice to however the viewer's system is configured —
+     for a `lang="zh-Hant"` product that is a decision worth making rather than inheriting.
+
+     **What this reorder is NOT based on:** a screenshot comparison that appeared to show 区
+     for 區 at 430px. Re-shot at 900px, all twelve township names render Traditional, and the
+     apparent difference was small-size rendering plus a font this session had briefly
+     mis-installed as ExtraBold. The premise was wrong; the principle stands on its own, and
+     the false finding is recorded here rather than quietly dropped. */
+    font: 16px/1.65 "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui,
+          -apple-system, sans-serif;
     display: grid; place-items: start center; min-height: 100vh; padding: 2rem 1.25rem 3rem;
   }
   main { width: 100%; max-width: 26rem; }
