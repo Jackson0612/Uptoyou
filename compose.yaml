@@ -118,6 +118,22 @@ services:
       # dies with "Invalid auth token: Signature verification failed" — which reads like a
       # credential problem in the DAG and is a configuration problem in the stack.
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
+      # Two api-server workers rather than the default four, and this is a measured fix, not
+      # a tidy-up. uvicorn's supervisor pings each worker and kills it if the ping is not
+      # answered in five seconds — a constant inside uvicorn, with no Airflow setting for it.
+      # A worker that is still importing Airflow's FastAPI app does not answer, so it is
+      # killed and replaced by another cold import. Measured on this machine: workers 36, 37
+      # and 38 were killed at exactly 5.0s intervals and the first worker to survive appeared
+      # 32s after the parent, on the sixth attempt. On the CI runner it never converged — 11
+      # minutes of restarts, PIDs 398 through 600, and not one "Started server process". Four
+      # simultaneous cold imports on four cores is the pressure; two is the same fix the
+      # product api already makes for its own reason above.
+      # Cost admitted: half the concurrency for the orchestrator UI. It serves one operator
+      # and, over the Execution API, two hourly tasks — so the capacity was never the
+      # constraint, and the failure mode was.
+      # Rejected: one worker. It removes the contention entirely and also removes the second
+      # worker that answers the UI while the first is blocked serving a task heartbeat.
+      AIRFLOW__API__WORKERS: "2"
       # Where the simple auth manager keeps the admin password. Left at its default this is a
       # file inside the api-server's own container filesystem, which means a password nobody
       # chose and a different one after every `down`. Pointing it at a named volume lets
@@ -146,15 +162,56 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\" || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      # Sized for a cold start, not a warm one. On a machine with no images and an empty
-      # database — which is the only machine §6 actually grades — Airflow migrates its
-      # metadata before the first component answers, and a 45s allowance marked every
-      # service unhealthy while all three were merely still starting. The split-boot check
-      # found it; the warm stack never would.
-      start_period: 180s
+      # These five numbers are one budget, and they are the same on all three Airflow
+      # components. The reasoning lives here only; the other two carry a pointer and state
+      # what differs, because three copies of this drifted once already.
+      #
+      # **What the old numbers cost: a red CI run, and the check was never wrong.** The
+      # split-boot job failed on the runner while the scheduler's own log looked perfect —
+      # "Starting the scheduler", gunicorn listening, the orphaned-task loop ticking every
+      # five minutes. What failed was this healthcheck's clock, twice over.
+      #
+      # **`airflow jobs check` is a full Airflow CLI cold start, and it costs 8 seconds.**
+      # Measured off Docker's own health log on this 4-core machine, warm and idle:
+      # 7.98 / 7.99 / 8.17 / 8.68 / 8.73s, against a 10s timeout. With the host merely
+      # 2x oversubscribed it goes 9.26 / 11.43 / 9.00s, and at 4x 12.24 / 9.74 / 11.41s —
+      # over the timeout at the first step of load. **Exit code 0 every time.** The command
+      # answers "Found one alive job" and is killed for being slow, so the neighbouring
+      # theory — that the check honestly returned non-zero for a while — is not what
+      # happened. On a CI runner, four Airflow containers cold-import Python at once on the
+      # same four cores, and 8 seconds becomes more than 10.
+      # Confirmed by arithmetic against the runner's own timestamps: 687s from container
+      # start to "is unhealthy" equals 180 + 20 x (10 timeout + 15 interval). A probe that
+      # failed fast would have taken 480s. Every one of the 20 probes burned its full
+      # timeout.
+      #
+      # **And 180s expired before the thing it asks about existed.** On the runner the
+      # container started at 02:08:08 and the scheduler printed "Starting the scheduler" at
+      # 02:12:02 — 234s. The allowance ran out 54s early, so the first counted failures were
+      # guaranteed rather than informative. 360s covers the measured cold start with margin.
+      #
+      # **`start_interval` is the one that stops this check from causing what it reports.**
+      # Docker's default is 5s, so during the start period two containers each ran an
+      # 8-second CLI probe every 13s — about 1.2 of 4 cores spent proving that a starting
+      # service had not started, exactly while it was trying to. 30s makes it 0.2.
+      #
+      # Cost admitted: a scheduler that dies is now called unhealthy after up to
+      # 360 + 6 x (45 + 20) = 750s instead of 480s. That buys nothing back, because nothing
+      # acts on this status — `restart: unless-stopped` does not restart on unhealthy, no
+      # service depends on it, and the only readers are `up --wait` and a human at
+      # `compose ps`. 750s is deliberately under split_boot_check.sh's `--wait-timeout 900`,
+      # so a real failure is still reported as "container X is unhealthy" rather than as a
+      # bare compose timeout that names nobody.
+      # Rejected: keeping 10s and asserting something cheaper instead — reading the
+      # scheduler's heartbeat out of the metadata database, or trusting airflow-api's
+      # /monitor/health, which reports every component centrally. Both are faster and both
+      # change what is asserted: this container would stop vouching for itself. Not a
+      # timeout's decision to make.
+      interval: 20s
+      timeout: 45s
+      retries: 6
+      start_period: 360s
+      start_interval: 30s
     restart: unless-stopped
 
   # Airflow 3 splits DAG parsing out of the scheduler into its own component, and it is not
@@ -172,15 +229,14 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --hostname \"$${HOSTNAME}\" || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      # Sized for a cold start, not a warm one. On a machine with no images and an empty
-      # database — which is the only machine §6 actually grades — Airflow migrates its
-      # metadata before the first component answers, and a 45s allowance marked every
-      # service unhealthy while all three were merely still starting. The split-boot check
-      # found it; the warm stack never would.
-      start_period: 180s
+      # airflow-scheduler's healthcheck carries the whole budget and why. Identical here,
+      # and for the identical reason: this is the same 8-second CLI cold start. Measured on
+      # this container, warm and idle: 7.97 / 8.15 / 8.22 / 8.44 / 8.61s.
+      interval: 20s
+      timeout: 45s
+      retries: 6
+      start_period: 360s
+      start_interval: 30s
     restart: unless-stopped
 
   airflow-api:
@@ -203,15 +259,23 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v2/monitor/health || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      # Sized for a cold start, not a warm one. On a machine with no images and an empty
-      # database — which is the only machine §6 actually grades — Airflow migrates its
-      # metadata before the first component answers, and a 45s allowance marked every
-      # service unhealthy while all three were merely still starting. The split-boot check
-      # found it; the warm stack never would.
-      start_period: 180s
+      # airflow-scheduler's healthcheck carries the budget and why. **Two numbers differ, and
+      # the difference is the point.** This probe is not a CLI cold start: measured warm off
+      # Docker's health log at 0.06 / 0.07 / 0.08 / 0.08 / 0.10s, so 45s would be a timeout
+      # for a check that costs a tenth of a second.
+      # 15s rather than 5s all the same, because of how this one fails. The uvicorn *parent*
+      # owns the listening socket, so while no worker has finished importing the kernel still
+      # accepts the connection and nothing ever answers it — curl hangs rather than being
+      # refused. That is why this container, not the scheduler, is the one compose named
+      # first on the failed run; it was hanging to timeout on every probe for 11 minutes
+      # while its workers were killed and respawned. AIRFLOW__API__WORKERS above is that
+      # half of the fix.
+      # Worst case here: 360 + 6 x (15 + 20) = 570s.
+      interval: 20s
+      timeout: 15s
+      retries: 6
+      start_period: 360s
+      start_interval: 30s
     restart: unless-stopped
 
 volumes:
