@@ -4,11 +4,13 @@
 Run inside the stack:
     docker compose exec api python /srv/tests/test_place_ingest_integration.py
 
-**Not yet run. Written against the schema and unverified.** No database was reachable when
-this was written — another session held the stack — so every claim below is a claim about what
-the code should do, not a report of what it did. It is committed unrun on purpose: an assertion
-written before the first live run is one that has not been fitted to whatever the first live run
-happened to produce.
+**The H14 scenario was committed unrun on purpose** — no database was reachable when it was
+written, so every assertion in it was a claim about what the code should do rather than a report
+of what it did. An assertion written before the first live run is one that has not been fitted to
+whatever the first live run happened to produce. **It first passed 2026-08-12**, unchanged.
+
+**A second scenario was added 2026-08-12: `runlog_scenario`, ticket 09's run row.** Its own
+header says what it holds and how it was shown to discriminate.
 
 H14 names this test, and names what it must not settle for:
 
@@ -65,6 +67,11 @@ ROWS = [
 ]
 CHANGED_ROWS = ROWS[:2] + [
     '"某小吃店","20003433","台北市中山區長安東路一段58號","A-200034336-00001-9","餐飲場所"',
+]
+# A third distinct content, for the run-row scenario, so it never has to reuse a hash the H14
+# scenario above already spent.
+LATER_ROWS = ROWS[:2] + [
+    '"某小吃店","20003433","台北市大安區長安東路一段58號","A-200034336-00001-9","餐飲場所"',
 ]
 
 PLACES = len(ROWS)
@@ -210,6 +217,137 @@ async def scenario(test_url: str) -> None:
     print("H14/item 11: one publication per content hash; a forced re-parse writes no duplicate")
 
 
+async def runs(Session):
+    """Every run row, oldest first, with the three publication columns beside it."""
+    async with Session() as session:
+        result = await session.execute(
+            text(
+                "select id, source, outcome, rows_written, detail, invoked_by, started_at, "
+                "finished_at, forecast_publication_id, observation_publication_id, "
+                "place_publication_id from ingest_run order by id"
+            )
+        )
+        return result.fetchall()
+
+
+async def runlog_scenario(test_url: str) -> None:
+    """Ticket 09's other half: **a run leaves a row, including the runs that wrote nothing.**
+
+    `run_places` never called `runlog.record`, so item 11 left no `ingest_run` row on any path —
+    not on the daily no-op D34 schedules, not on a failure, not even when it stored. This goes
+    through `ingest_once`, which is where the row is written, rather than through
+    `ingest_archive` as the H14 scenario above does.
+
+    **What this asserts that the unit tests cannot:** revision 0005's CHECKs. `run_record`'s
+    mapping is asserted in `test_fda_ingest.py` with no database; here the rows have to survive
+    `ck_ingest_run_stored_has_publication`, `ck_ingest_run_rows_only_when_stored` and
+    `ck_ingest_run_outcome`, which is why a wrong mapping fails as an `IntegrityError` rather
+    than as a mismatched value.
+
+    **Shown to discriminate.** Delete the `runlog.record` call at the end of `ingest_once` and
+    the first assertion below fails with *expected one run row after a stored run, got 0*.
+    Attach the verdict's publication id on the no-op path — `publication_id=verdict.publication_id`
+    in `run_record` — and step 2 fails inside PostgreSQL on the stored-has-publication CHECK.
+    """
+    from upto.db import dispose_all
+    from upto.ingest import run_places
+
+    engine = create_async_engine(test_url, poolclass=None)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    STAMP = (2026, 9, 3, 11, 0, 0)
+    raw = archive_bytes(LATER_ROWS, STAMP)
+
+    def at(hour):
+        return archive(LATER_ROWS, STAMP, datetime(2026, 8, 12, hour, 0, tzinfo=TAIPEI), raw=raw)
+
+    # The DAG sets this, and the row records it: lineage over a scheduled run and over a
+    # hand-triggered one are different answers to "why does this row exist".
+    previous_invoker = os.environ.get("UPTO_INVOKED_BY")
+    os.environ["UPTO_INVOKED_BY"] = "airflow"
+    try:
+        # 1 — a stored run. The row names the publication it wrote and how many rows landed.
+        stored = await run_places.ingest_once(archive=at(3), url=test_url)
+        assert stored.stored and stored.parsed
+        rows = await runs(Session)
+        assert len(rows) == 1, "expected one run row after a stored run, got {}".format(len(rows))
+        first = rows[0]
+        assert first.source == fda.SOURCE, first.source
+        assert first.outcome == "stored", "a run that stored must say so: {}".format(first.outcome)
+        assert first.place_publication_id == stored.publication_id, (
+            "D24: item 11's run points at its publication through its own column"
+        )
+        assert first.forecast_publication_id is None
+        assert first.observation_publication_id is None
+        assert first.rows_written == PLACES, "expected {}, got {}".format(PLACES, first.rows_written)
+        assert first.invoked_by == "airflow", first.invoked_by
+        assert first.finished_at >= first.started_at
+        assert "stored" in first.detail, first.detail
+
+        # 2 — the same bytes again: D34's ordinary day. It wrote nothing and it is still a run.
+        again = await run_places.ingest_once(archive=at(4), url=test_url)
+        assert not again.stored and not again.parsed
+        rows = await runs(Session)
+        assert len(rows) == 2, "a no-op leaves a row too, or it is inferred from an absence"
+        second = rows[1]
+        assert second.outcome == "no_change", (
+            "a no-op is not a failure and not an absence: {}".format(second.outcome)
+        )
+        assert second.place_publication_id is None, (
+            "the verdict names the publication still current; the row must not claim to have "
+            "written it"
+        )
+        assert second.rows_written == 0
+        assert "no change" in second.detail, second.detail
+
+        # 3 — H14's forced re-parse. Rows were offered, none were accepted, none were written.
+        forced = await run_places.ingest_once(archive=at(5), url=test_url, force_parse=True)
+        assert forced.parsed and not forced.stored
+        third = (await runs(Session))[2]
+        assert third.outcome == "no_change", third.outcome
+        assert third.rows_written == 0, "offered is not written: {}".format(third.rows_written)
+        assert third.place_publication_id is None
+
+        # 4 — the source did not answer. `failed` and `no_change` are the pair that cannot be
+        # told apart once they are inferred from an absence, which is the whole of ticket 09.
+        def unavailable():
+            raise fda.FdaUnavailable("fda-97: the download was empty")
+
+        real_fetch = run_places.fetch_archive
+        run_places.fetch_archive = unavailable
+        try:
+            failed_as_expected = False
+            try:
+                await run_places.ingest_once(url=test_url)
+            except fda.FdaUnavailable:
+                failed_as_expected = True
+            assert failed_as_expected, "a source that did not answer must still raise"
+        finally:
+            run_places.fetch_archive = real_fetch
+
+        rows = await runs(Session)
+        assert len(rows) == 4, "the failure leaves a row: {}".format(len(rows))
+        fourth = rows[3]
+        assert fourth.outcome == "failed", fourth.outcome
+        assert fourth.place_publication_id is None
+        assert fourth.rows_written == 0
+        assert "the download was empty" in fourth.detail, fourth.detail
+        assert fourth.source == fda.SOURCE, "a failure before the fetch still names the source"
+
+        outcomes = [row.outcome for row in rows]
+        assert outcomes == ["stored", "no_change", "no_change", "failed"], outcomes
+    finally:
+        if previous_invoker is None:
+            os.environ.pop("UPTO_INVOKED_BY", None)
+        else:
+            os.environ["UPTO_INVOKED_BY"] = previous_invoker
+        await engine.dispose()
+        # `ingest_once` builds its engine through the module-level cache, so it outlives this
+        # function and would still hold connections when the database is dropped.
+        await dispose_all()
+    print("ticket 09/item 11: stored, no_change, no_change and failed all leave a run row")
+
+
 async def with_temporary_database() -> int:
     admin_url, test_url = urls()
     admin = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
@@ -232,6 +370,9 @@ async def with_temporary_database() -> int:
 
         await load(test_url)
         await scenario(test_url)
+        # After the H14 scenario on purpose: it drives `ingest_archive` directly and so writes no
+        # run rows at all, which leaves `ingest_run` empty for the one below to count from zero.
+        await runlog_scenario(test_url)
     finally:
         admin = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
         async with admin.connect() as connection:

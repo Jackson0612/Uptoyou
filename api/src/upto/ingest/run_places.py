@@ -24,6 +24,11 @@ decompress the CSV. The claim is what tells them so, and it costs one insert.
        both are possible: content moved with a still stamp (stored), or the stamp moved with
        still content (nothing stored).
 
+**All three leave an `ingest_run` row, which is ticket 09's requirement and was missing here.**
+`stored`; `no_change` for both the silent no-op and a forced re-parse; `failed` for exit 1. Exit
+code 2 is not a fourth outcome — by the time a disagreement is raised the rows are already
+written, so it is recorded inside that row's `detail`. `run_record` below holds the mapping.
+
 Why a disagreement is non-zero rather than a printed warning: whatever the run decided to
 write it has already written before this code is returned, so nothing is in doubt except the
 *label* — and a warning on the stdout of a green task is a fact filed where nobody looks. A
@@ -34,10 +39,13 @@ D34 already admits for the twenty-nine no-ops.
 
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Callable, List, Optional
 
+from . import runlog
 from .fda import (
     SCOPE,
     SOURCE,
@@ -221,6 +229,42 @@ async def ingest_archive(
     )
 
 
+def run_record(verdict: Verdict, started_at: datetime, invoked_by: Optional[str]) -> runlog.RunRecord:
+    """Turn a verdict into ticket 09's run row. Separate from the write so it needs no database.
+
+    **Three things this mapping has to get right, and each one is a constraint in revision 0005
+    rather than a preference.**
+
+    *A run that stored nothing must attach no publication.* A no-op's verdict carries the
+    **previous** publication's id, because its printed line names what is still current — but
+    `ck_ingest_run_stored_has_publication` reads `(outcome = 'stored') = (exactly one
+    publication attached)`, so passing that id through would fail the insert. It would also be
+    the wrong claim: this run did not write those rows.
+
+    *`--force-parse` is a `no_change` too.* It parses and offers every row, and the database
+    accepts none of them (H14's test is that fact). `rows_written` is what landed, so it is
+    `rows_held` rather than `rows_offered` — a column called *written* may not report an offer.
+
+    *An alarm is not a failure.* Exit code 2 means the stamp and the hash disagree, and by then
+    whatever the run decided to write is already written, so the outcome stays `stored` or
+    `no_change`. The disagreement goes into `detail` instead: a row reading as an ordinary
+    no-op while the run raised an alarm is exactly the *indistinguishable from an absence*
+    failure `runlog` was built to prevent, and `detail` is where the runner's own words belong.
+    """
+    detail = verdict.line()
+    if verdict.alarms:
+        detail = "\n".join([detail] + verdict.alarms)
+    return runlog.RunRecord(
+        source=verdict.source,
+        started_at=started_at,
+        outcome=runlog.STORED if verdict.stored else runlog.NO_CHANGE,
+        rows_written=verdict.rows_held if verdict.stored else 0,
+        detail=detail,
+        publication_id=verdict.publication_id if verdict.stored else None,
+        invoked_by=invoked_by,
+    )
+
+
 async def ingest_once(
     archive: Optional[Archive] = None,
     force_parse: bool = False,
@@ -231,19 +275,53 @@ async def ingest_once(
     sqlalchemy is imported here rather than at the top for the reason the township seed gives:
     the sequencing is testable without a database, and that has to mean without the database
     libraries too, or the tests only run where the stack already does.
+
+    **The run is recorded here and not inside `ingest_archive`**, which is where item 10's
+    `run.py` puts it too. Two reasons, and neither is symmetry: `ingest_archive` is handed a
+    *store* rather than a session precisely so its sequencing can be tested with no database at
+    all, and the row has to be written **after** the attempt in its own transaction — the no-op
+    path has just rolled its transaction back, and a failure has no transaction to ride on.
+
+    Ticket 09 requires a run that wrote nothing to be answerable. Until this call existed item
+    11 left no `ingest_run` row on any path, so its daily no-ops — twenty-nine in thirty (D34) —
+    were as unrecoverable as item 10's were before `runlog` was written.
     """
     from ..db import session_factory
     from .fda_store import PlaceStore
 
-    fetched = archive if archive is not None else fetch_archive()
-    async with session_factory(url)() as session:
-        return await ingest_archive(PlaceStore(session), fetched, force_parse=force_parse)
+    Session = session_factory(url)
+    started = runlog.now()
+    # Lineage over a scheduled run and over a hand-triggered one are different answers to "why
+    # does this row exist" — item 10's DAG sets this, and item 11's now does as well.
+    invoked_by = os.environ.get("UPTO_INVOKED_BY") or "cli"
+
+    try:
+        fetched = archive if archive is not None else fetch_archive()
+        async with Session() as session:
+            verdict = await ingest_archive(PlaceStore(session), fetched, force_parse=force_parse)
+    except FdaUnavailable as failure:
+        # A source that did not answer is a failure; a source that answered the same bytes as
+        # yesterday is not. The row is written before the exception continues, because `main`
+        # owns the exit code and this function must not decide it.
+        async with Session() as session:
+            await runlog.record(
+                session,
+                runlog.RunRecord(
+                    source=SOURCE, started_at=started, outcome=runlog.FAILED,
+                    detail=str(failure), invoked_by=invoked_by,
+                ),
+            )
+        raise
+
+    async with Session() as session:
+        await runlog.record(session, run_record(verdict, started, invoked_by))
+    return verdict
 
 
 def main(argv=None) -> int:
     import argparse
     import asyncio
-    from datetime import datetime, timezone
+    from datetime import timezone
 
     parser = argparse.ArgumentParser(description="Run item 11's reference ingest once.")
     parser.add_argument(

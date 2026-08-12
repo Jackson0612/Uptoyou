@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from upto.ingest import fda  # noqa: E402
 from upto.ingest import run_places  # noqa: E402
+from upto.ingest import runlog  # noqa: E402
 
 TAIPEI = timezone(timedelta(hours=8))
 NOW = datetime(2026, 8, 11, 14, 0, tzinfo=timezone.utc)
@@ -493,6 +494,96 @@ class StampVersusHash(unittest.TestCase):
         verdict = asyncio.run(run_places.ingest_archive(store, archive))
         self.assertTrue(verdict.stored, "the rows are written before the alarm is raised")
         self.assertEqual(verdict.exit_code(), 2)
+
+
+class TheRunRow(unittest.TestCase):
+    """Ticket 09's row, and the half of it that needs no database: the mapping.
+
+    `run_places` recorded nothing at all until 2026-08-12, so every one of item 11's runs —
+    including the daily no-ops D34 schedules — left no trace. These assert what each outcome
+    maps to; `test_place_ingest_integration.py` asserts that the rows actually insert, which is
+    where revision 0005's CHECKs get to have an opinion.
+    """
+
+    STARTED = datetime(2026, 8, 12, 3, 0, tzinfo=timezone.utc)
+
+    def record(self, verdict, invoked_by="airflow"):
+        return run_places.run_record(verdict, self.STARTED, invoked_by)
+
+    def stored_verdict(self):
+        archive = archive_of()
+        store = FakeStore(previous=None, claim_id=7)
+        return asyncio.run(run_places.ingest_archive(store, archive))
+
+    def no_op_verdict(self):
+        archive = archive_of()
+        store = FakeStore(
+            previous=FakePrevious(3, archive.content_sha256, archive.archive_stamp),
+            claim_id=None,
+        )
+        return asyncio.run(run_places.ingest_archive(store, archive, parse=refuse_to_parse))
+
+    def test_a_stored_run_records_its_publication_and_what_landed(self):
+        record = self.record(self.stored_verdict())
+        self.assertEqual(record.source, fda.SOURCE)
+        self.assertEqual(record.outcome, runlog.STORED)
+        self.assertEqual(record.publication_id, 7)
+        self.assertEqual(record.column(), runlog.PLACE_COLUMN, "D24: item 11's own column")
+        self.assertEqual(record.rows_written, 2)
+        self.assertEqual(record.started_at, self.STARTED)
+        self.assertEqual(record.invoked_by, "airflow")
+        self.assertIn("stored publication 7", record.detail)
+
+    def test_a_no_op_is_recorded_as_no_change_and_not_as_an_absence(self):
+        """D42's silent success is still a run, and `no_change` is not `failed`."""
+        record = self.record(self.no_op_verdict())
+        self.assertEqual(record.outcome, runlog.NO_CHANGE)
+        self.assertEqual(record.rows_written, 0)
+        self.assertIn("no change", record.detail)
+
+    def test_a_no_op_attaches_no_publication_even_though_its_verdict_names_one(self):
+        """The subtlety, and revision 0005 refuses the alternative.
+
+        A no-op's verdict carries the *previous* publication's id so its line can name what is
+        still current. `ck_ingest_run_stored_has_publication` ties having a publication to the
+        outcome being `stored`, so the row must not carry it — and it would be a false claim
+        anyway, since this run wrote none of those rows.
+        """
+        verdict = self.no_op_verdict()
+        self.assertEqual(verdict.publication_id, 3, "the verdict does name it")
+        record = self.record(verdict)
+        self.assertIsNone(record.publication_id)
+        self.assertIsNone(record.column(), "no column may be filled on a run that stored nothing")
+
+    def test_a_forced_re_parse_is_a_no_change_that_wrote_nothing(self):
+        """H14's scenario: rows are offered, the constraint accepts none, so none were written."""
+        archive = archive_of()
+        store = FakeStore(
+            previous=FakePrevious(3, archive.content_sha256, archive.archive_stamp),
+            claim_id=None,
+            held_id=3,
+        )
+        verdict = asyncio.run(run_places.ingest_archive(store, archive, force_parse=True))
+        self.assertTrue(verdict.parsed)
+        self.assertEqual(verdict.rows_offered, 2, "it did offer them")
+        record = self.record(verdict)
+        self.assertEqual(record.outcome, runlog.NO_CHANGE)
+        self.assertEqual(record.rows_written, 0)
+        self.assertIsNone(record.publication_id)
+
+    def test_a_disagreement_is_still_a_stored_run_and_keeps_the_alarm_in_the_detail(self):
+        """Exit code 2 is not an outcome — the rows are written before the alarm is raised."""
+        archive = archive_of()
+        store = FakeStore(previous=FakePrevious(3, "0" * 64, archive.archive_stamp), claim_id=7)
+        verdict = asyncio.run(run_places.ingest_archive(store, archive))
+        self.assertEqual(verdict.exit_code(), 2)
+        record = self.record(verdict)
+        self.assertEqual(record.outcome, runlog.STORED)
+        self.assertEqual(record.publication_id, 7)
+        self.assertIn("DISAGREEMENT", record.detail, "a row that reads as ordinary hides this")
+
+    def test_the_invoker_is_carried_rather_than_guessed(self):
+        self.assertEqual(self.record(self.stored_verdict(), invoked_by="cli").invoked_by, "cli")
 
 
 class TlsPosture(unittest.TestCase):

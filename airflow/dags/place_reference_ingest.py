@@ -90,6 +90,11 @@ def upto_place_reference_ingest():
         environment = dict(os.environ)
         environment["PYTHONPATH"] = source
         environment["UPTO_DATABASE_URL"] = _database_url()
+        # Ticket 09, and the weather DAG has carried this line since `runlog` was written: a
+        # scheduled run and a hand-triggered one are different answers to "why does this row
+        # exist". Absent, every run of this DAG records itself as `cli`, which is worse than
+        # recording nothing because it is a wrong fact rather than a missing one.
+        environment["UPTO_INVOKED_BY"] = "airflow"
 
         finished = subprocess.run(
             [interpreter, "-m", "upto.ingest.run_places"],
