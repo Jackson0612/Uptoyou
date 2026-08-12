@@ -18,12 +18,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+PLACE_COLUMN = "place_publication_id"
+
+# D24's pattern: one nullable foreign key per source, so a run points at its own publication and
+# at nothing else. **Every source is registered here by name, and an unregistered one is refused.**
+#
+# This was a `.get(source, PLACE_COLUMN)` fallback until 2026-08-12, and the comment above
+# `PLACE_COLUMN` claimed item 11's source was "matched by prefix" — a mechanism that never existed.
+# `fda.SOURCE` is `"fda-97"`: short, fixed, and reached only because it was the default. With three
+# sources the fallback is invisible; the fourth one added without registering it would have been
+# filed into item 11's column silently, which is H23's *degrades quietly* shape and worse than an
+# error, because a wrong row cannot be told apart from a right one afterwards.
+#
+# `"fda-97"` is written out rather than imported from `upto.ingest.fda`: this module is imported by
+# every runner and must not depend on any of them. **The duplicate can drift, and `test_runlog.py`
+# asserts it has not.**
 PUBLICATION_COLUMNS = {
     "F-D0047-061": "forecast_publication_id",
     "O-A0001-001": "observation_publication_id",
+    "fda-97": PLACE_COLUMN,
 }
-# Item 11's source string is longer and varies with the scope, so it is matched by prefix.
-PLACE_COLUMN = "place_publication_id"
+
+
+class UnknownSource(LookupError):
+    """A run carries a publication but its source is not registered above.
+
+    Raised rather than defaulted. The caller cannot recover — there is no column this row belongs
+    in — and guessing one writes a fact that reads as true. Registering a new source is one line;
+    that friction is the point.
+    """
+
 
 STORED = "stored"
 NO_CHANGE = "no_change"
@@ -41,10 +65,23 @@ class RunRecord:
     invoked_by: str | None = None
 
     def column(self) -> str | None:
-        """Which nullable foreign key this run's publication belongs in (D24's pattern)."""
+        """Which nullable foreign key this run's publication belongs in (D24's pattern).
+
+        `None` when the run holds no publication — a no-op and a failure both do, and revision
+        0005's `ck_ingest_run_stored_has_publication` is what makes that structural rather than
+        conventional.
+        """
         if self.publication_id is None:
             return None
-        return PUBLICATION_COLUMNS.get(self.source, PLACE_COLUMN)
+        try:
+            return PUBLICATION_COLUMNS[self.source]
+        except KeyError:
+            raise UnknownSource(
+                "no publication column is registered for source {!r}. Add it to "
+                "PUBLICATION_COLUMNS; this is refused rather than defaulted because a "
+                "publication filed under the wrong source cannot be told from a correct "
+                "one afterwards.".format(self.source)
+            ) from None
 
 
 def now() -> datetime:
