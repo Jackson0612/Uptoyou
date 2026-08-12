@@ -44,7 +44,10 @@ def urls():
     return head + "/postgres", head + "/" + TEST_DB
 
 
-async def plant_observation(session, hour, temperature, detected_at, sha):
+async def plant_observation(session, hour, temperature, detected_at, sha, weather="陰"):
+    """`weather=None` plants the hour with `Weather` left out, which is not a hypothetical: one
+    publication in a measured 25.5 hours did exactly that, at `ObsTime` 03:00, for nine of
+    nineteen stations, with the temperature beside it present."""
     result = await session.execute(
         text(
             "insert into observation_publication (dataset_id, content_sha256, detected_at, payload_bytes) "
@@ -53,7 +56,10 @@ async def plant_observation(session, hour, temperature, detected_at, sha):
         {"sha": sha, "detected": detected_at},
     )
     publication = result.scalar()
-    for element, value in (("AirTemperature", temperature), ("Weather", "陰")):
+    planted = [("AirTemperature", temperature)]
+    if weather is not None:
+        planted.append(("Weather", weather))
+    for element, value in planted:
         await session.execute(
             text(
                 "insert into observation_reading (publication_id, station_id, station_name, county, "
@@ -189,10 +195,54 @@ async def scenario(test_url):
     print("  no forecast for the code at all: refused rather than reported as an absence")
 
     await containing_slot(Session)
+    await absent_element(Session)
 
     await engine.dispose()
     print("read path: observation, fallback, revision, absence and both refusals all hold")
     return later_publication
+
+
+async def absent_element(Session):
+    """D58: **a measure the source left out is a key holding `None`, never a missing key.**
+
+    Two different facts used to look identical in the response, because both were an absent key:
+    *this dataset has no such measure* — the observation dataset carries no rain probability, ever
+    — and *this publication left it out*, which was measured happening. The first is permanent and
+    tells the caller to stop asking; the second is a hole in one hour.
+
+    Planted here: an hour whose observation carries `AirTemperature` and no `Weather`.
+    """
+    hour = datetime(2026, 8, 20, 3, 0, tzinfo=timezone.utc)
+    async with Session() as session:
+        await plant_observation(session, hour, "27", hour + timedelta(minutes=9), "ab" * 32,
+                                weather=None)
+        # A forecast for the same hour, so a fallback would visibly succeed if one happened. It
+        # must not: the observation exists, and mixing sources inside one answer would make `kind`
+        # and the publication id a lie about half the card.
+        await plant_forecast(session, hour, "31", hour - timedelta(hours=4), "cd" * 32,
+                            weather="多雲")
+
+    async with Session() as session:
+        reading = await reading_for(session, SHILIN, hour)
+
+    assert reading.kind == "observation", "the observation exists; it must answer"
+    assert reading.measures["temperature_c"] == "27"
+
+    assert "weather_text" in reading.measures, (
+        "D58: a measure the source left out must still have a key — omitting it makes 'the "
+        "dataset has no such measure' and 'this publication left it out' indistinguishable"
+    )
+    assert reading.measures["weather_text"] is None, (
+        "the key must hold None, not the forecast's 多雲: an observation answer that borrows one "
+        "field from the forecast makes its own publication id false for that field"
+    )
+    print("  absent element: the key is present and holds None, and no source is mixed in")
+
+    assert "rain_probability_pct" not in reading.measures, (
+        "the observation dataset carries no rain probability at all, so its key must be absent "
+        "rather than None — that is the distinction D58 exists to make"
+    )
+    print("  absent element: a measure the dataset never carries has no key at all")
 
 
 async def containing_slot(Session):

@@ -295,6 +295,11 @@ createApp({
       setInterval(load, 5 * 60 * 1000);
     });
 
+    // A dash covers three different situations, and D58 admits that as its cost rather than
+    // hiding it: no reading at all, a measure this dataset never carries (no key), and a measure
+    // the source published this hour without (a key holding null). The API distinguishes the last
+    // two; the screen deliberately does not, because "CWA left this field out of the 03:00
+    // publication" is not a sentence a person deciding on lunch has any use for.
     const measure = (name) => (reading.value && reading.value.measures[name]) || '—';
 
     const hourLabel = computed(() => {

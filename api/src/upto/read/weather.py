@@ -17,13 +17,13 @@ actually read, and item 14 has to be able to answer for it later. A forecast's t
 returned labelled a **detection** time (D42): CWA never says when a forecast was published,
 so nothing downstream may present it as publication.
 
-**One thing here is assumed rather than ruled, and it is flagged in `_map.md`.** The
-observation is revised *in place* within its own hour — measured 2026-08-11, two publications
-carrying the same `ObsTime` and eight differing rows of 7,884. So "the observation for that
-hour" now has more than one version, and this module takes **the latest publication for that
-hour**. It is reversible: every version is stored, the answer names the publication it used,
-and a round that pinned an earlier one still reads as it did. The ruling is owed; the data is
-not at risk either way.
+**The latest publication for an hour wins — ruled 2026-08-12, D57, and it was an assumption in
+this module until then.** The observation is revised *in place* within its own hour: measured
+2026-08-11, two publications carrying the same `ObsTime` and eight differing rows of 7,884. A
+revision is CWA correcting itself, so preferring our older copy would put our copy ahead of the
+source's own fix. The cost is that the same hour reads differently before and after a revision;
+what makes that recoverable is the publication id in the answer, which D15's snapshot stores —
+reproducing a read means naming the version, not re-running the query.
 
 **Both tables are now reached by identifier, which closes ticket 05's gap.** The forecast used
 to be found by township *name*, and the guard below existed because a misspelling and an
@@ -218,11 +218,19 @@ async def reading_for(session, township_code: str, hour: datetime) -> WeatherRea
         )
     ).mappings().all()
     if rows:
+        # **Every measure this dataset carries gets a key, `None` when the source did not say.**
+        # Ruled 2026-08-12. Omitting it made two different facts look identical: *this dataset has
+        # no such measure* and *this publication left it out*. The first is permanent and the
+        # second was measured happening — one publication in 25.5 hours, `ObsTime` 03:00, nine of
+        # nineteen stations, `Weather` absent while the temperature beside it was present.
+        #
+        # So a **missing key** means the observation dataset has no such measure at all (it carries
+        # no rain probability, ever), and a **key holding `None`** means CWA published this hour and
+        # left that element out. The caller can tell them apart without knowing either dataset.
         values = {}
         for name, (element, _) in OBSERVATION_MEASURES.items():
             match = next((r for r in rows if r["element"] == element), None)
-            if match is not None:
-                values[name] = match["value"]
+            values[name] = None if match is None else match["value"]
         first = rows[0]
         return WeatherReading(
             kind="observation",
@@ -267,14 +275,17 @@ async def reading_for(session, township_code: str, hour: datetime) -> WeatherRea
             ),
         )
 
+    # Same rule as the observation branch above: a key for every measure this dataset carries,
+    # `None` when the source did not say. `slots` gets an entry only for a measure that has a
+    # value — a slot for an absent reading would be describing a hole.
     values = {}
     spans = {}
     for label, (element, measure) in FORECAST_MEASURES.items():
         match = next(
             (r for r in rows if r["element"] == element and r["measure"] == measure), None
         )
+        values[label] = None if match is None else match["value"]
         if match is not None:
-            values[label] = match["value"]
             spans[label] = (match["slot_start"], match["slot_end"])
     first = rows[0]
     return WeatherReading(
