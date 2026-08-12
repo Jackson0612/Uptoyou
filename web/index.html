@@ -34,14 +34,35 @@
 -->
 <script src="/vendor/vue.global.prod.js"></script>
 <style>
+  /* **`--line` and `--edge` are two tokens on purpose, and the split is the fix for a measured
+     failure.** `--line` is decoration — the card's outline and the divider inside it — and WCAG
+     says nothing about either. `--edge` is the boundary of something you can press, which 1.4.11
+     requires to reach 3:1 against what surrounds it.
+
+     One token used to do both jobs, at **1.26:1 in light and 1.30:1 in dark** against the page.
+     The unselected township pills have no fill and no label chrome, so that border is the only
+     thing saying they are buttons — and at 1.3 it is not saying it to anyone with reduced vision
+     or a phone in sunlight. **This was never a dark-mode regression:** the two modes measured
+     within 0.04 of each other, both far under. Nobody had measured it.
+
+     Measured against `--paper`, which is what the picker actually sits on: `--edge` is 3.12:1 in
+     light and 3.24:1 in dark (3.01:1 on `--raised`, so it still holds if the pills ever move onto
+     a card). Values sit above 3.0 with margin rather than on it, because a token pinned to exactly
+     3.00 fails the next time either colour is nudged.
+
+     **Why not simply darken `--line`:** it would drag the card outline and the divider with it, and
+     the card would stop reading as a sheet of paper lifted slightly off the page and start reading
+     as a box with a frame. That is a whole-surface change bought for one control. */
   :root {
     color-scheme: light dark;
-    --ink: #1a1a1a; --paper: #fbfaf8; --muted: #6b6560; --line: #e4e0da;
+    --ink: #1a1a1a; --paper: #fbfaf8; --muted: #6b6560;
+    --line: #e4e0da; --edge: #928e88;
     --raised: #ffffff; --accent: #1f7a4d;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --ink: #ece9e4; --paper: #17161a; --muted: #9b948c; --line: #2e2c31;
+      --ink: #ece9e4; --paper: #17161a; --muted: #9b948c;
+      --line: #2e2c31; --edge: #6a676e;
       --raised: #1e1d22; --accent: #58c68d;
     }
   }
@@ -74,7 +95,8 @@
   .picker { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
   .picker button {
     font: inherit; font-size: .85rem; padding: .3rem .7rem; border-radius: 999px;
-    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    /* `--edge`, not `--line`: this is the only boundary an unselected pill has. */
+    border: 1px solid var(--edge); background: transparent; color: var(--muted);
     cursor: pointer; transition: color .12s, border-color .12s;
   }
   .picker button:hover { color: var(--ink); border-color: var(--muted); }
