@@ -1,0 +1,24 @@
+"""D39's generator: a place's category, produced offline and validated before it is written.
+
+The package splits three ways on purpose. `categories` holds D38's closed list and the
+validation D39 rests on; `prompt` holds the version-controlled instruction, which is the
+*Skill / Tool / Prompt* artifact §6's re-derivation names; `classify` is the pure step —
+a name and a way to ask a model in, one validated category or a stated refusal out.
+
+Nothing here reaches a database or a network. The runner that does both is separate, for
+the same reason D43 keeps contributors pure: what can be replayed can be audited.
+"""
+
+from upto.classify.categories import CATEGORIES, is_valid
+from upto.classify.classify import Classified, Refused, classify_name
+from upto.classify.prompt import PROMPT_VERSION, build
+
+__all__ = [
+    "CATEGORIES",
+    "Classified",
+    "PROMPT_VERSION",
+    "Refused",
+    "build",
+    "classify_name",
+    "is_valid",
+]
