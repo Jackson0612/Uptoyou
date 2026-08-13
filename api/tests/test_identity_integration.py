@@ -38,10 +38,11 @@ TEST_DB = "upto_identity_check"
 
 # Tables that are allowed to carry a foreign key to `principal` because they are
 # authentication rather than product domain — D12 puts device secrets and account bindings
-# there explicitly. Empty because neither is built (D7's surface, a separate decision), and it
-# is a declaration rather than a list of exceptions: a domain table added here is H19 being
-# stepped over, which is the whole thing the frozen set exists to make visible.
-AUTHENTICATION_TABLES = frozenset()
+# there explicitly. It is a declaration rather than a list of exceptions: a domain table added
+# here is H19 being stepped over, which is the whole thing the frozen set exists to make
+# visible. `device_secret` is 0010, D67's table — the first name, added deliberately in the
+# same commit that created it, which is exactly the act D12 designed this set to demand.
+AUTHENTICATION_TABLES = frozenset({"device_secret"})
 
 
 def urls():
