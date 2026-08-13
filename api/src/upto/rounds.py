@@ -41,7 +41,10 @@ from .engine.table import build as build_table
 from .engine.table import place_for
 from .stream import publish
 
-router = APIRouter(prefix="/api")
+# No prefix: the proxy strips /api/ before forwarding (upto.conf's rewrite), so the app
+# serves /circles/... and the outside world sees /api/circles/... — same convention as
+# /weather. A prefix here once produced a proxy-only 404 the tests could not see.
+router = APIRouter()
 
 _resolve_member = resolve_member
 

@@ -159,23 +159,23 @@ async def scenario(test_url: str) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         # D67: no token and a wrong token read the same 401.
-        assert (await client.post(f"/api/circles/{circle}/rounds", json={})).status_code == 401
+        assert (await client.post(f"/circles/{circle}/rounds", json={})).status_code == 401
         assert (
             await client.post(
-                f"/api/circles/{circle}/rounds",
+                f"/circles/{circle}/rounds",
                 json={},
                 headers={"Authorization": "Bearer wrong"},
             )
         ).status_code == 401
 
         # The open, defaulted: the hour is the hour the opener stands in (D73).
-        opened = await client.post(f"/api/circles/{circle}/rounds", json={}, headers=auth)
+        opened = await client.post(f"/circles/{circle}/rounds", json={}, headers=auth)
         assert opened.status_code == 201, opened.text
         round_id = opened.json()["round_id"]
         assert opened.json()["target_hour_typed"] is False
 
         # D68: the losing open gets 409 carrying the winner.
-        lost = await client.post(f"/api/circles/{circle}/rounds", json={}, headers=auth)
+        lost = await client.post(f"/circles/{circle}/rounds", json={}, headers=auth)
         assert lost.status_code == 409
         assert lost.json()["detail"]["open_round"]["round_id"] == round_id
 
@@ -183,26 +183,26 @@ async def scenario(test_url: str) -> None:
         # 409 for the fourth by one member (§3.0).
         for place in (rainy, locals_[0], locals_[1]):
             created = await client.post(
-                f"/api/rounds/{round_id}/proposals", json={"place_id": place}, headers=auth
+                f"/rounds/{round_id}/proposals", json={"place_id": place}, headers=auth
             )
             assert created.status_code == 201, created.text
         repeat = await client.post(
-            f"/api/rounds/{round_id}/proposals", json={"place_id": rainy}, headers=auth
+            f"/rounds/{round_id}/proposals", json={"place_id": rainy}, headers=auth
         )
         assert repeat.status_code == 200 and repeat.json()["pooled"] is True
         unseen = await client.post(
-            f"/api/rounds/{round_id}/proposals",
+            f"/rounds/{round_id}/proposals",
             json={"place_id": foreign_place},
             headers=auth,
         )
         assert unseen.status_code == 404
         capped = await client.post(
-            f"/api/rounds/{round_id}/proposals", json={"place_id": locals_[2]}, headers=auth
+            f"/rounds/{round_id}/proposals", json={"place_id": locals_[2]}, headers=auth
         )
         assert capped.status_code == 409
 
         # The roll: the whole chain in one transaction.
-        rolled = await client.post(f"/api/rounds/{round_id}/roll", headers=auth)
+        rolled = await client.post(f"/rounds/{round_id}/roll", headers=auth)
         assert rolled.status_code == 200, rolled.text
         result = rolled.json()
         assert result["status"] == "closed"
@@ -225,7 +225,7 @@ async def scenario(test_url: str) -> None:
         assert result["panel"][str(locals_[0])]["factors"] == []
 
         # D69: the retry gets the stored result, dice and all, in the same shape.
-        again = await client.post(f"/api/rounds/{round_id}/roll", headers=auth)
+        again = await client.post(f"/rounds/{round_id}/roll", headers=auth)
         assert again.status_code == 200
         assert again.json()["dice"] == result["dice"]
         assert again.json()["winning_place_id"] == result["winning_place_id"]
@@ -234,7 +234,7 @@ async def scenario(test_url: str) -> None:
 
         # Proposing into a closed round is a 409, not a quiet anything.
         late = await client.post(
-            f"/api/rounds/{round_id}/proposals", json={"place_id": locals_[2]}, headers=auth
+            f"/rounds/{round_id}/proposals", json={"place_id": locals_[2]}, headers=auth
         )
         assert late.status_code == 409
 
