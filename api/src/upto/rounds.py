@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from .auth import member_for
+from .api_common import place_names, resolve_member, result_body
 from .db import session_factory
 from .engine.fold import fold
 from .engine.load import load_contributions
@@ -39,21 +39,11 @@ from .engine.store import write_roll
 from .engine.table import EmptyPoolError, allocate
 from .engine.table import build as build_table
 from .engine.table import place_for
+from .stream import publish
 
 router = APIRouter(prefix="/api")
 
-
-async def _resolve_member(session, request: Request, circle_id: int) -> int:
-    header = request.headers.get("authorization", "")
-    if not header.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="a bearer token is required (D67)")
-    member = await member_for(session, header[7:].strip(), circle_id)
-    if member is None:
-        # One answer for both halves: which half failed is not the caller's to learn.
-        raise HTTPException(
-            status_code=401, detail="the token does not resolve to a member of this circle"
-        )
-    return member
+_resolve_member = resolve_member
 
 
 class OpenRoundBody(BaseModel):
@@ -73,12 +63,26 @@ async def open_round(circle_id: int, body: OpenRoundBody, request: Request) -> d
                     text(
                         "insert into round (circle_id, target_hour, target_hour_typed) "
                         "values (:c, coalesce(:h, date_trunc('hour', now())), :typed) "
-                        "returning id, target_hour, target_hour_typed"
+                        "returning id, target_hour, target_hour_typed, opened_at"
                     ),
                     {"c": circle_id, "h": body.target_hour, "typed": typed},
                 )
             ).one()
             await session.commit()
+            # After the commit, never before: an event for a rolled-back write is a lie.
+            publish(
+                circle_id,
+                {
+                    "type": "round_opened",
+                    "round": {
+                        "round_id": row.id,
+                        "target_hour": row.target_hour.isoformat(),
+                        "target_hour_typed": row.target_hour_typed,
+                        "opened_at": row.opened_at.isoformat(),
+                        "pool": [],
+                    },
+                },
+            )
         except IntegrityError:
             # D52's partial unique index fired: someone else's open won. D68: say so, and
             # hand over the winner so the client enters it without a second fetch.
@@ -147,6 +151,18 @@ async def propose(round_id: int, body: ProposeBody, request: Request, response: 
                 {"r": round_id, "p": body.place_id, "m": member},
             )
             await session.commit()
+            names = await place_names(session, [body.place_id])
+            publish(
+                round_row.circle_id,
+                {
+                    "type": "pooled",
+                    "round_id": round_id,
+                    "place": {
+                        "place_id": body.place_id,
+                        "name": names.get(body.place_id),
+                    },
+                },
+            )
         except (IntegrityError, DBAPIError) as failure:
             await session.rollback()
             message = str(getattr(failure, "orig", failure))
@@ -162,24 +178,21 @@ async def propose(round_id: int, body: ProposeBody, request: Request, response: 
     return {"round_id": round_id, "place_id": body.place_id, "pooled": True}
 
 
-def _result_body(
+async def _closed_body(
+    session,
     round_id: int,
     dice: tuple[int, int] | None,
     winning_place_id: int,
     weights: dict[int, object],
 ) -> dict:
-    counts = allocate({p: w for p, w in weights.items()})
-    return {
-        "round_id": round_id,
-        "status": "closed",
-        "dice": list(dice) if dice is not None else None,
-        "sum": dice[0] + dice[1] if dice is not None else None,
-        "winning_place_id": winning_place_id,
-        # Strings, not floats: the weights are exact decimals and stay that way (D46).
-        "weights": {str(p): str(w) for p, w in weights.items()},
-        # The table is the truth of the draw (D72): each place's share of the 36 outcomes.
-        "allocation": {str(p): n for p, n in counts.items()},
-    }
+    return result_body(
+        round_id,
+        dice,
+        winning_place_id,
+        weights,
+        await place_names(session, weights.keys()),
+        allocate({p: w for p, w in weights.items()}),
+    )
 
 
 @router.post("/rounds/{round_id}/roll")
@@ -209,8 +222,8 @@ async def roll(round_id: int, request: Request) -> dict:
             dice = (
                 (round_row.die1, round_row.die2) if round_row.die1 is not None else None
             )
-            return _result_body(
-                round_id, dice, round_row.winning_place_id,
+            return await _closed_body(
+                session, round_id, dice, round_row.winning_place_id,
                 {row.place_id: row.weight for row in stored},
             )
 
@@ -248,4 +261,7 @@ async def roll(round_id: int, request: Request) -> dict:
         winner = place_for(table, dice[0], dice[1])
         await write_roll(session, round_id, pinned, weights, winner, dice)
         await session.commit()
-    return _result_body(round_id, dice, winner, weights)
+        body = await _closed_body(session, round_id, dice, winner, weights)
+        # D53: the close is pushed once, with its result, and then the channel is quiet.
+        publish(round_row.circle_id, {"type": "closed", "result": body})
+    return body
