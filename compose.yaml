@@ -304,8 +304,40 @@ services:
       start_interval: 45s
     restart: unless-stopped
 
+  # D63/D64's model, and it is deliberately not part of `docker compose up`.
+  #
+  # **Behind a profile, ruled 2026-08-14.** The classification backfill is a batch that runs
+  # occasionally over one township (D75) — it does not need a resident service, and the
+  # October EC2 instance (D61) has 4 GB, which a 2 GB model would take most of. So the
+  # service is declared here, where a reader can see the deployment and reproduce it, and
+  # started only when a backfill runs:
+  #
+  #   docker compose --profile model up -d ollama
+  #
+  # Measured 2026-08-14 before it was written: the model peaks at 2,124 MB beside the whole
+  # running stack, with 2,919 MB available — it fits this machine, which is why it is here
+  # rather than on a GPU somewhere (D64's ladder, step 1).
+  ollama:
+    image: ollama/ollama:0.12.3
+    profiles: ["model"]
+    environment:
+      # Unload after one pass rather than holding 2 GB between nightly runs.
+      OLLAMA_KEEP_ALIVE: "5m"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
   db-data:
+  # The pulled weights. A named volume because a 2 GB model must survive a rebuild, and
+  # because it is the one thing here that must never reach the image or the repository.
+  ollama-models:
   # Only ever holds the admin password file. A named volume rather than a bind mount for the
   # reason db-data gives, and because the password does not belong in the repository.
   airflow-auth:
