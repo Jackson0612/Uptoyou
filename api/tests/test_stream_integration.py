@@ -119,21 +119,21 @@ async def scenario(test_url: str, base_url: str) -> None:
     auth = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient(base_url=base_url, timeout=15) as client:
         # The stream requires the same resolution every write does (D67).
-        bare = await client.get(f"/api/circles/{circle}/places", params={"q": "店"})
+        bare = await client.get(f"/circles/{circle}/places", params={"q": "店"})
         assert bare.status_code == 401
 
         # D28's two doors, both idempotent.
         created = await client.post(
-            f"/api/circles/{circle}/places", json={"name": "巷口麵店"}, headers=auth
+            f"/circles/{circle}/places", json={"name": "巷口麵店"}, headers=auth
         )
         assert created.status_code == 201, created.text
         local_place = created.json()["place_id"]
         repeat = await client.post(
-            f"/api/circles/{circle}/places", json={"name": "巷口麵店"}, headers=auth
+            f"/circles/{circle}/places", json={"name": "巷口麵店"}, headers=auth
         )
         assert repeat.status_code == 200 and repeat.json()["place_id"] == local_place
         ref = await client.post(
-            f"/api/circles/{circle}/places",
+            f"/circles/{circle}/places",
             json={"registry_no": "A-11111111-00001-1"},
             headers=auth,
         )
@@ -142,19 +142,19 @@ async def scenario(test_url: str, base_url: str) -> None:
         assert ref.json()["name"] == "雨中的店", "a reference place resolves its name (D28)"
         assert (
             await client.post(
-                f"/api/circles/{circle}/places", json={"registry_no": "X-404"}, headers=auth
+                f"/circles/{circle}/places", json={"registry_no": "X-404"}, headers=auth
             )
         ).status_code == 404
         assert (
             await client.post(
-                f"/api/circles/{circle}/places",
+                f"/circles/{circle}/places",
                 json={"name": "x", "registry_no": "y"},
                 headers=auth,
             )
         ).status_code == 422
 
         found = await client.get(
-            f"/api/circles/{circle}/places", params={"q": "店"}, headers=auth
+            f"/circles/{circle}/places", params={"q": "店"}, headers=auth
         )
         kinds = {c["kind"] for c in found.json()["candidates"]}
         assert kinds == {"circle-local", "reference"}, found.text
@@ -166,7 +166,7 @@ async def scenario(test_url: str, base_url: str) -> None:
 
         async def reader():
             async with client.stream(
-                "GET", f"/api/circles/{circle}/stream", headers=auth
+                "GET", f"/circles/{circle}/stream", headers=auth
             ) as response:
                 assert response.status_code == 200
                 async for line in response.aiter_lines():
@@ -182,12 +182,12 @@ async def scenario(test_url: str, base_url: str) -> None:
         await asyncio.wait_for(got_snapshot.wait(), timeout=10)
         assert events[0]["type"] == "snapshot" and events[0]["open_round"] is None
 
-        opened = await client.post(f"/api/circles/{circle}/rounds", json={}, headers=auth)
+        opened = await client.post(f"/circles/{circle}/rounds", json={}, headers=auth)
         round_id = opened.json()["round_id"]
         for place in (rainy, local_place):
             assert (
                 await client.post(
-                    f"/api/rounds/{round_id}/proposals",
+                    f"/rounds/{round_id}/proposals",
                     json={"place_id": place},
                     headers=auth,
                 )
@@ -195,7 +195,7 @@ async def scenario(test_url: str, base_url: str) -> None:
 
         # A reconnect mid-round is the same code path: snapshot with the named pool (D56).
         async with client.stream(
-            "GET", f"/api/circles/{circle}/stream", headers=auth
+            "GET", f"/circles/{circle}/stream", headers=auth
         ) as second:
             async for line in second.aiter_lines():
                 if line.startswith("data: "):
@@ -204,7 +204,7 @@ async def scenario(test_url: str, base_url: str) -> None:
         assert mid["open_round"]["round_id"] == round_id
         assert {p["name"] for p in mid["open_round"]["pool"]} == {"雨中的店", "巷口麵店"}
 
-        rolled = await client.post(f"/api/rounds/{round_id}/roll", headers=auth)
+        rolled = await client.post(f"/rounds/{round_id}/roll", headers=auth)
         assert rolled.status_code == 200, rolled.text
         await asyncio.wait_for(done.wait(), timeout=10)
         task.cancel()
@@ -222,7 +222,7 @@ async def scenario(test_url: str, base_url: str) -> None:
 
         # D54: after the close, a fresh snapshot carries the result and no open round.
         async with client.stream(
-            "GET", f"/api/circles/{circle}/stream", headers=auth
+            "GET", f"/circles/{circle}/stream", headers=auth
         ) as third:
             async for line in third.aiter_lines():
                 if line.startswith("data: "):

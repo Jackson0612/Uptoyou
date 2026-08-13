@@ -32,7 +32,8 @@ from .db import session_factory
 from .engine.table import allocate
 from .stream import subscribe
 
-router = APIRouter(prefix="/api")
+# No prefix — the proxy strips /api/ before forwarding, same as rounds.py explains.
+router = APIRouter()
 
 
 async def _snapshot(session, circle_id: int) -> dict:
