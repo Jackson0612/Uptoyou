@@ -215,6 +215,14 @@ async def scenario(test_url: str) -> None:
         }
         assert sum(result["allocation"].values()) == 36
         assert result["allocation"][str(result["winning_place_id"])] > 0
+        # The panel's evidence rides in the result: the rainy place carries its factor in
+        # D46's order, and the weather sentence stays behind ('none' visibility, D13).
+        rainy_panel = result["panel"][str(rainy)]
+        assert rainy_panel["factors"] == [
+            {"channel": "contextual", "contributor": "weather", "effect": "0.8", "reason": None}
+        ]
+        assert rainy_panel["clamps"] == []
+        assert result["panel"][str(locals_[0])]["factors"] == []
 
         # D69: the retry gets the stored result, dice and all, in the same shape.
         again = await client.post(f"/api/rounds/{round_id}/roll", headers=auth)
