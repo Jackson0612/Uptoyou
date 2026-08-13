@@ -131,6 +131,73 @@
 
   footer { margin-top: 1.5rem; color: var(--muted); font-size: .82rem; line-height: 1.6; }
   footer code { font-size: .95em; }
+
+  /* The circle half — tickets 19/20's screens. Same tokens, same paper. */
+  .tabs { display: flex; gap: .35rem; margin-top: .9rem; }
+  .tabs button {
+    font: inherit; font-size: .85rem; padding: .3rem .8rem; border-radius: 999px;
+    border: 1px solid var(--edge); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .tabs button[aria-pressed="true"] { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+
+  .fieldlabel { display: block; color: var(--muted); font-size: .87rem; margin: .9rem 0 .25rem; }
+  input {
+    font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .55rem;
+    border: 1px solid var(--edge); background: var(--paper); color: var(--ink);
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .act {
+    font: inherit; display: block; width: 100%; margin-top: 1.1rem; padding: .65rem;
+    border-radius: .6rem; border: 1px solid var(--ink); background: var(--ink);
+    color: var(--paper); cursor: pointer; font-weight: 550;
+  }
+  .act:disabled { opacity: .45; cursor: default; }
+  .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
+
+  .roundhead { display: flex; flex-wrap: wrap; gap: .4rem; align-items: baseline;
+               font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: .85rem; }
+
+  .pool { list-style: none; margin: .9rem 0 0; padding: 0; }
+  .pool li { padding: .5rem 0; border-bottom: 1px solid var(--line); }
+  .pool li:last-child { border-bottom: 0; }
+
+  .candidates { list-style: none; margin: .4rem 0 0; padding: 0; }
+  .candidates .pick {
+    font: inherit; width: 100%; text-align: left; padding: .45rem .6rem; margin-top: .25rem;
+    border-radius: .5rem; border: 1px solid var(--edge); background: transparent;
+    color: var(--ink); cursor: pointer;
+  }
+  .candidates .pick:hover { border-color: var(--muted); }
+
+  .dicebox { display: flex; align-items: center; justify-content: center; gap: .6rem;
+             font-variant-numeric: tabular-nums; }
+  .die { font-size: 3.2rem; line-height: 1; }
+  .dicesum { color: var(--muted); font-size: 1.2rem; }
+  .winner { text-align: center; font-size: 1.35rem; font-weight: 650; margin: .6rem 0 1rem; }
+
+  .alloc { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .alloc caption { caption-side: bottom; color: var(--muted); font-size: .78rem;
+                   padding-top: .6rem; text-align: left; line-height: 1.5; }
+  .alloc th { color: var(--muted); font-size: .8rem; font-weight: 500; text-align: left;
+              border-bottom: 1px solid var(--line); padding: .35rem .3rem; }
+  .alloc td { padding: .45rem .3rem; border-bottom: 1px solid var(--line); }
+  .alloc .num { text-align: right; }
+  .alloc th:nth-child(n+2), .alloc td:nth-child(n+2) { text-align: right; }
+  .alloc tr.hit td { font-weight: 650; color: var(--accent); }
+
+  .factors { margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--line); }
+  .factorhead { margin: 0; font-size: .95rem; font-weight: 600; }
+  .ordernote { margin: .1rem 0 .4rem; color: var(--muted); font-size: .78rem; }
+  .factors ul { list-style: none; margin: 0; padding: 0; font-size: .9rem; }
+  .factors li { display: flex; flex-wrap: wrap; gap: .5rem; padding: .3rem 0; }
+  .factors .chan { color: var(--muted); }
+  .factors .num { font-variant-numeric: tabular-nums; }
+  .factors .why { color: var(--muted); }
+  .clampline { border-top: 1px dashed var(--line); }
+
+  .stacked { margin-top: 1rem; }
 </style>
 </head>
 <body>
@@ -173,10 +240,15 @@
   <header>
     <h1>Up to you</h1>
     <p class="promise">決定一頓飯，不用有人先犧牲。</p>
+    <nav class="tabs" v-if="hasDevice">
+      <button :aria-pressed="view === 'home' ? 'true' : 'false'" @click="view = 'home'">首頁</button>
+      <button :aria-pressed="view === 'round' ? 'true' : 'false'" @click="view = 'round'">這一餐</button>
+    </nav>
   </header>
   <!-- /chrome -->
 
   <!-- screen: home -->
+  <div v-if="view === 'home'">
   <div class="picker">
     <button
       v-for="place in townships"
@@ -221,9 +293,116 @@
        picker is doing here, and which screens do not exist yet. Chrome renders everywhere,
        so a sentence naming 天氣 would be a sentence naming it on the propose screen too. -->
   <footer>
-    只有天氣。提案、投票與擲骰的畫面還不存在——它們需要的資料表尚未建立。<br>
+    提案與擲骰在「這一餐」。<br>
     行政區在這裡是手選的；之後由圈子決定。
   </footer>
+  </div>
+  <!-- /screen -->
+
+  <!-- screen: device -->
+  <!-- D74: the operator hands both values over — a device is a browser holding a token, and
+       this screen is where it starts holding one. Stored in localStorage, sent as a bearer
+       header on every write (D67). No weather word may appear here: chrome and this screen
+       render beside every other screen's rules. -->
+  <div v-if="view === 'device'" class="card">
+    <p class="fieldlabel">這台裝置還沒有鑰匙。把管理者給你的兩個值貼進來：</p>
+    <label class="fieldlabel" for="device-token">裝置金鑰</label>
+    <input id="device-token" v-model="deviceForm.token" autocomplete="off">
+    <label class="fieldlabel" for="device-circle">圈子編號</label>
+    <input id="device-circle" v-model="deviceForm.circle" inputmode="numeric" autocomplete="off">
+    <button class="act" :disabled="!deviceForm.token.trim() || !deviceForm.circle.trim()"
+            @click="saveDevice">保存在這台裝置</button>
+    <p v-if="actionError" class="state bad">{{ actionError }}</p>
+  </div>
+  <!-- /screen -->
+
+  <!-- screen: round -->
+  <!-- The open round: the pool, the propose box, the dice. D20 governs every word here —
+       the hour is shown and nothing else about the sky (D16's confirmation shows the hour,
+       not the forecast). The full list stays visible with nothing removed (§3.0). -->
+  <div v-if="view === 'round' && openRound" class="card">
+    <div class="roundhead">
+      <span>用餐時間 {{ roundHourLabel }}</span>
+      <span v-if="!openRound.target_hour_typed" class="hint">（未指定，擲骰當下為準）</span>
+    </div>
+
+    <ul class="pool">
+      <li v-for="entry in openRound.pool" :key="entry.place_id">{{ entry.name }}</li>
+      <li v-if="!openRound.pool.length" class="hint">池子還是空的——先提一家。</li>
+    </ul>
+
+    <label class="fieldlabel" for="place-query">提案</label>
+    <input id="place-query" v-model="query" placeholder="店名" autocomplete="off">
+    <ul class="candidates" v-if="candidates.length">
+      <li v-for="candidate in candidates"
+          :key="candidate.kind + (candidate.registry_no || candidate.place_id)">
+        <button class="pick" @click="pickCandidate(candidate)">{{ candidate.name }}</button>
+      </li>
+    </ul>
+    <button v-if="query.trim() && !exactMatch" class="act ghost" @click="proposeTyped">
+      以「{{ query.trim() }}」提案
+    </button>
+
+    <button class="act" :disabled="!openRound.pool.length" @click="rollDice">擲骰</button>
+    <p v-if="actionError" class="state bad">{{ actionError }}</p>
+  </div>
+  <!-- /screen -->
+
+  <!-- screen: reveal -->
+  <!-- MVP item 8: the reveal panel. Everything on it is a fact of this round — the dice, the
+       36-slot table's shares, each place's weight, and the factor rows in the order served
+       (D46: by channel, never re-sorted; the label below says so, because position is not
+       influence). A clamp is its own line (D45) or the multiplication visibly fails. A factor
+       whose sentence stayed private still shows its number (D13): the odds were never the
+       secret. The contributor's own name may be a weather word, so rows are labelled by
+       channel (D21: the nudge is carried silently; D20: no weather word off the home screen). -->
+  <div v-if="view === 'round' && !openRound">
+    <div v-if="lastResult" class="card">
+      <div class="dicebox">
+        <span class="die">{{ dieGlyph(lastResult.dice && lastResult.dice[0]) }}</span>
+        <span class="die">{{ dieGlyph(lastResult.dice && lastResult.dice[1]) }}</span>
+        <span class="dicesum" v-if="lastResult.sum">＝ {{ lastResult.sum }}</span>
+      </div>
+      <p class="winner">{{ winnerName }}</p>
+
+      <table class="alloc">
+        <caption>兩顆骰子共 36 種點數組合，落在誰的格，就是誰。</caption>
+        <thead>
+          <tr><th>店</th><th>權重</th><th>格數</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in resultRows" :key="row.place_id"
+              :class="{ hit: row.place_id === lastResult.winning_place_id }">
+            <td>{{ row.name }}</td>
+            <td class="num">{{ row.weight }}</td>
+            <td class="num">{{ row.slots }}/36</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div v-for="row in factorRows" :key="'f' + row.place_id" class="factors">
+        <p class="factorhead">{{ row.name }} 的權重怎麼來</p>
+        <p class="ordernote">列序依通道分組，不代表影響力大小。</p>
+        <ul>
+          <li v-for="(factor, index) in row.factors" :key="index">
+            <span class="chan">{{ channelLabel(factor.channel) }}</span>
+            <span class="num">×{{ factor.effect }}</span>
+            <span v-if="factor.reason" class="why">{{ factor.reason }}</span>
+          </li>
+          <li v-for="(clamp, index) in row.clamps" :key="'c' + index" class="clampline">
+            <span class="chan">{{ channelLabel(clamp.channel) }}乘積 {{ clamp.raw }}</span>
+            <span class="num">→ 拉回 {{ clamp.clamped }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" :class="{ stacked: lastResult }">
+      <p v-if="!lastResult" class="state">這個圈子現在沒有進行中的一餐。</p>
+      <button class="act" @click="openNewRound">開一輪</button>
+      <p v-if="actionError" class="state bad">{{ actionError }}</p>
+    </div>
+  </div>
   <!-- /screen -->
 </main>
 
@@ -331,7 +510,212 @@ createApp({
       return `${word}於 ${when.toLocaleString('zh-TW', { hour12: false })} · publication ${source.publication_id}`;
     });
 
-    return { townships, selected, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel };
+    // ---------------- the circle half: device, round, reveal (tickets 19/20) ----------------
+
+    const token = ref(localStorage.getItem('upto_token') || '');
+    const circleId = ref(localStorage.getItem('upto_circle') || '');
+    const hasDevice = computed(() => Boolean(token.value && circleId.value));
+    const view = ref(hasDevice.value ? 'round' : 'device');
+    const deviceForm = ref({ token: '', circle: '' });
+    const openRound = ref(null);
+    const lastResult = ref(null);
+    const actionError = ref('');
+    const query = ref('');
+    const candidates = ref([]);
+
+    const authHeaders = () => ({ 'Authorization': 'Bearer ' + token.value });
+
+    function saveDevice() {
+      token.value = deviceForm.value.token.trim();
+      circleId.value = deviceForm.value.circle.trim();
+      localStorage.setItem('upto_token', token.value);
+      localStorage.setItem('upto_circle', circleId.value);
+      actionError.value = '';
+      view.value = 'round';
+      connectStream();
+    }
+
+    // The stream, over fetch rather than EventSource, because EventSource cannot carry the
+    // bearer header D67 requires. The snapshot is the first event on every connect (D56), so
+    // reconnecting after any failure resynchronises by construction — there is no state to
+    // repair, only a stream to reopen. Events are applied idempotently: the overlap between
+    // snapshot and subscription duplicates rather than drops, by the server's own design.
+    let streamGeneration = 0;
+    async function connectStream() {
+      const generation = ++streamGeneration;
+      while (generation === streamGeneration && hasDevice.value) {
+        try {
+          const response = await fetch(`/api/circles/${circleId.value}/stream`, {
+            headers: authHeaders(), cache: 'no-store',
+          });
+          if (response.status === 401) {
+            actionError.value = '這把鑰匙開不了這個圈子。';
+            view.value = 'device';
+            return;
+          }
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffered = '';
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done || generation !== streamGeneration) break;
+            buffered += decoder.decode(value, { stream: true });
+            const lines = buffered.split('\n');
+            buffered = lines.pop();
+            for (const line of lines) {
+              if (line.startsWith('data: ')) applyEvent(JSON.parse(line.slice(6)));
+            }
+          }
+        } catch (failure) {
+          // fall through to the retry below
+        }
+        if (generation !== streamGeneration) return;
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    }
+
+    function applyEvent(event) {
+      if (event.type === 'snapshot') {
+        openRound.value = event.open_round;
+        lastResult.value = event.last_result;
+      } else if (event.type === 'round_opened') {
+        openRound.value = event.round;
+        // D54: the last result is superseded by the next round opening, not by a clock.
+        lastResult.value = null;
+      } else if (event.type === 'pooled') {
+        if (openRound.value && event.round_id === openRound.value.round_id
+            && !openRound.value.pool.some((p) => p.place_id === event.place.place_id)) {
+          openRound.value.pool.push(event.place);
+        }
+      } else if (event.type === 'closed') {
+        openRound.value = null;
+        lastResult.value = event.result;
+      }
+    }
+
+    // A failure's own words, never a sentence invented here — same rule the home screen
+    // follows. D68's detail is an object carrying the round that won; entering it is the
+    // ruled behaviour, so that one is handled rather than printed.
+    async function failed(response) {
+      const body = await response.json().catch(() => ({}));
+      const detail = body.detail;
+      actionError.value = typeof detail === 'string' ? detail : `失敗（${response.status}）`;
+    }
+
+    async function openNewRound() {
+      actionError.value = '';
+      const response = await fetch(`/api/circles/${circleId.value}/rounds`, {
+        method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (response.status === 409) {
+        // D68: someone already opened; the ruled behaviour is to enter the winner. The
+        // stream's snapshot carries its pool, so reconnect rather than patch state by hand.
+        connectStream();
+        return;
+      }
+      if (!response.ok) { await failed(response); return; }
+      applyEvent({ type: 'round_opened', round: { ...(await response.json()), pool: [] } });
+    }
+
+    async function proposePlace(placeId) {
+      actionError.value = '';
+      const response = await fetch(`/api/rounds/${openRound.value.round_id}/proposals`, {
+        method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ place_id: placeId }),
+      });
+      if (!response.ok) { await failed(response); return; }
+      query.value = '';
+      candidates.value = [];
+    }
+
+    async function pickCandidate(candidate) {
+      if (candidate.place_id) { await proposePlace(candidate.place_id); return; }
+      const response = await fetch(`/api/circles/${circleId.value}/places`, {
+        method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registry_no: candidate.registry_no }),
+      });
+      if (!response.ok) { await failed(response); return; }
+      await proposePlace((await response.json()).place_id);
+    }
+
+    // D28: a name nothing matches is submitted as it stands and becomes this circle's row.
+    async function proposeTyped() {
+      const response = await fetch(`/api/circles/${circleId.value}/places`, {
+        method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: query.value.trim() }),
+      });
+      if (!response.ok) { await failed(response); return; }
+      await proposePlace((await response.json()).place_id);
+    }
+
+    async function rollDice() {
+      actionError.value = '';
+      const response = await fetch(`/api/rounds/${openRound.value.round_id}/roll`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      if (!response.ok) { await failed(response); return; }
+      // The stream delivers the same close; applying both is safe by design.
+      applyEvent({ type: 'closed', result: await response.json() });
+    }
+
+    let searchTimer = null;
+    watch(query, (value) => {
+      clearTimeout(searchTimer);
+      if (!value.trim()) { candidates.value = []; return; }
+      searchTimer = setTimeout(async () => {
+        const response = await fetch(
+          `/api/circles/${circleId.value}/places?q=${encodeURIComponent(value.trim())}`,
+          { headers: authHeaders() }
+        );
+        if (response.ok) candidates.value = (await response.json()).candidates;
+      }, 250);
+    });
+    const exactMatch = computed(
+      () => candidates.value.some((c) => c.name === query.value.trim())
+    );
+
+    const roundHourLabel = computed(
+      () => (openRound.value ? openRound.value.target_hour.slice(11, 16) : '')
+    );
+    const winnerName = computed(() => {
+      if (!lastResult.value) return '';
+      return lastResult.value.places[String(lastResult.value.winning_place_id)] || '';
+    });
+    // Rows in place-id order — the same order the 36 slots are laid in (D72), so the table
+    // a reader checks is the table the draw used.
+    const resultRows = computed(() => {
+      if (!lastResult.value) return [];
+      const r = lastResult.value;
+      return Object.keys(r.weights).map(Number).sort((a, b) => a - b).map((id) => ({
+        place_id: id,
+        name: (r.places && r.places[String(id)]) || String(id),
+        weight: r.weights[String(id)],
+        slots: (r.allocation && r.allocation[String(id)]) || 0,
+        factors: (r.panel && r.panel[String(id)] && r.panel[String(id)].factors) || [],
+        clamps: (r.panel && r.panel[String(id)] && r.panel[String(id)].clamps) || [],
+      }));
+    });
+
+    const factorRows = computed(
+      () => resultRows.value.filter((row) => row.factors.length || row.clamps.length)
+    );
+
+    // Rows are labelled by channel, not by the contributor's own name: the nudge is carried
+    // silently (D21), and a contributor's name can be a word D20 keeps off this screen.
+    const channelLabel = (channel) => (
+      { private: '私人', contextual: '情境', commercial: '商業' }[channel] || channel
+    );
+    const dieGlyph = (n) => (n >= 1 && n <= 6 ? '⚀⚁⚂⚃⚄⚅'[n - 1] : '？');
+
+    onMounted(() => { if (hasDevice.value) connectStream(); });
+
+    return {
+      townships, selected, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel,
+      hasDevice, view, deviceForm, openRound, lastResult, actionError, query, candidates,
+      saveDevice, openNewRound, pickCandidate, proposeTyped, rollDice, exactMatch,
+      roundHourLabel, winnerName, resultRows, factorRows, channelLabel, dieGlyph,
+    };
   }
 }).mount('#app');
 </script>
