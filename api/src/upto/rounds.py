@@ -33,7 +33,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from .api_common import place_names, resolve_member, result_body
 from .db import session_factory
-from .engine.fold import fold
+from .engine.fold import Contribution, fold
 from .engine.load import load_contributions
 from .engine.store import write_roll
 from .engine.table import EmptyPoolError, allocate
@@ -185,7 +185,7 @@ async def _closed_body(
     winning_place_id: int,
     weights: dict[int, object],
 ) -> dict:
-    return result_body(
+    body = result_body(
         round_id,
         dice,
         winning_place_id,
@@ -193,6 +193,62 @@ async def _closed_body(
         await place_names(session, weights.keys()),
         allocate({p: w for p, w in weights.items()}),
     )
+    # The reveal panel's evidence: the stored records, re-folded so the clamp lines D45
+    # requires are derived from the same rows the audit reads — never a second bookkeeping.
+    # A reason travels only at 'table' visibility (D13): this payload is circle-wide, so a
+    # represented member's sentence and a 'none' sentence alike stay behind; the factor and
+    # its contributor still show, because the *odds* were never the secret.
+    rows = (
+        await session.execute(
+            text(
+                "select id, place_id, channel, contributor, effect, reason, "
+                "reason_visibility from weight_contribution "
+                "where round_id = :r"
+            ),
+            {"r": round_id},
+        )
+    ).all()
+    panel: dict[str, dict] = {}
+    for place_id in weights:
+        contributions = [
+            Contribution(
+                id=row.id,
+                place_id=place_id,
+                channel=row.channel,
+                contributor=row.contributor,
+                effect=row.effect,
+                reason=row.reason,
+            )
+            for row in rows
+            if row.place_id == place_id
+        ]
+        folded = fold(place_id, contributions)
+        visibility = {row.id: row.reason_visibility for row in rows}
+        panel[str(place_id)] = {
+            # D46's total order, straight from the fold — the panel must never re-sort.
+            "factors": [
+                {
+                    "channel": c.channel,
+                    "contributor": c.contributor,
+                    # normalize(): numeric(4,3) reads back as 0.800, and the panel says ×0.8.
+                    # Display only — the fold and D15's reconciliation compare values.
+                    "effect": str(c.effect.normalize()),
+                    "reason": c.reason if visibility[c.id] == "table" else None,
+                }
+                for c in folded.contributions
+            ],
+            # D45: a clamped channel is its own line, or the arithmetic visibly fails.
+            "clamps": [
+                {
+                    "channel": cl.channel,
+                    "raw": str(cl.raw.normalize()),
+                    "clamped": str(cl.clamped.normalize()),
+                }
+                for cl in folded.clamps
+            ],
+        }
+    body["panel"] = panel
+    return body
 
 
 @router.post("/rounds/{round_id}/roll")
