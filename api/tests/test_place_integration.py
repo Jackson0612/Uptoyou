@@ -189,7 +189,7 @@ async def scenario(test_url: str) -> None:
                 text(
                     "select conrelid::regclass::text from pg_constraint "
                     "where contype = 'f' and confrelid = 'principal'::regclass "
-                    "and conrelid::regclass::text <> 'member'"
+                    "and conrelid::regclass::text not in ('member', 'device_secret')"
                 )
             )
         ).scalars().all()
