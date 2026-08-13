@@ -6,3 +6,5 @@ sqlalchemy[asyncio]==2.0.43
 asyncpg==0.30.0
 # Migrations, because a hand-rolled migration path fails silently (D4).
 alembic==1.16.4
+# The API tests exercise the app in-process over real HTTP semantics (ASGI transport).
+httpx==0.28.1

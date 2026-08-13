@@ -151,6 +151,7 @@ async def scenario(test_url: str) -> None:
             [rain_on(p1)],
             {p1: Decimal("0.8"), p2: Decimal("1")},
             winning_place_id=p2,
+            dice=(3, 4),
         )
         await session.commit()
 
@@ -175,7 +176,8 @@ async def scenario(test_url: str) -> None:
         round_row = (
             await session.execute(
                 text(
-                    "select status, winning_place_id, closed_at from round where id = :r"
+                    "select status, winning_place_id, closed_at, die1, die2 "
+                    "from round where id = :r"
                 ),
                 {"r": round_1},
             )
@@ -193,12 +195,15 @@ async def scenario(test_url: str) -> None:
     assert weights == {p1: Decimal("0.8"), p2: Decimal("1")}
     assert round_row.status == "closed" and round_row.winning_place_id == p2
     assert round_row.closed_at is not None
+    assert (round_row.die1, round_row.die2) == (3, 4), "the dice are part of the result (0011)"
     assert authored == 0, "the close through write_roll did not fire the erasure (D14)"
 
     # A second roll on the closed round is refused.
     try:
         async with Session() as session:
-            await write_roll(session, round_1, [], {p1: Decimal("1"), p2: Decimal("1")}, p1)
+            await write_roll(
+                session, round_1, [], {p1: Decimal("1"), p2: Decimal("1")}, p1, dice=(1, 1)
+            )
             await session.commit()
         raise AssertionError("a second roll on a closed round was accepted")
     except ReconciliationError:
@@ -217,7 +222,7 @@ async def scenario(test_url: str) -> None:
             adjusted = {p1: Decimal("0"), p2: Decimal("1")}
         try:
             async with Session() as session:
-                await write_roll(session, round_2, [rain_on(p1)], adjusted, winner)
+                await write_roll(session, round_2, [rain_on(p1)], adjusted, winner, dice=(2, 6))
                 await session.commit()
             raise AssertionError("accepted: " + why)
         except ReconciliationError:

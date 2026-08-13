@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from .db import dispose_all, session_factory
 from .read.weather import ForecastJoinBroken, TownshipUnknown, reading_for
+from .rounds import router as rounds_router
 
 app = FastAPI(
     title="Up to you",
@@ -18,6 +19,7 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
+app.include_router(rounds_router)
 
 
 @app.get("/health")

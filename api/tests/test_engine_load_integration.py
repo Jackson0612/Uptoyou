@@ -187,7 +187,7 @@ async def scenario(test_url: str) -> None:
     }
     assert weights == {rainy: Decimal("0.8"), sunny: Decimal("1"), local: Decimal("1")}
     async with Session() as session:
-        await write_roll(session, round_id, pinned, weights, winning_place_id=sunny)
+        await write_roll(session, round_id, pinned, weights, winning_place_id=sunny, dice=(2, 5))
         await session.commit()
     async with Session() as session:
         stored = (
