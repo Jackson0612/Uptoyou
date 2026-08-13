@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from upto.classify.categories import CATEGORIES, is_valid
-from upto.classify.prompt import PROMPT_VERSION, build
+from upto.classify.prompt import NO_SIGNAL, PROMPT_VERSION, build
 
 # Noise the model wraps an answer in. Anything beyond this list is a different answer,
 # not a dirtier one.
@@ -28,6 +28,21 @@ _STRIP = "。．.,，、：: \n\r\t「」『』\"'*"
 class Classified:
     name: str
     category: str
+    prompt_version: str
+
+
+@dataclass(frozen=True)
+class NoSignal:
+    """The string names a legal entity, not a place — ruled 2026-08-14, stored as NULL.
+
+    **Distinct from `Refused`, and the distinction is the whole point of the outcome.** Both
+    write nothing, and they mean opposite things: this one is a *decision* the model reached
+    and 其他 would have misreported as knowledge; a refusal is an answer we could not use.
+    Collapsing them would repeat the error `ingest_run` was built to avoid — an absence and a
+    failure inferred from the same silence.
+    """
+
+    name: str
     prompt_version: str
 
 
@@ -48,12 +63,14 @@ def _clean(raw: str) -> str:
     return answer.splitlines()[0].strip() if answer else answer
 
 
-def classify_name(name: str, ask: Callable[[str], str]) -> Classified | Refused:
+def classify_name(name: str, ask: Callable[[str], str]) -> Classified | NoSignal | Refused:
     """Ask the model about one name. `ask` takes the prompt text and returns the raw answer."""
     if not name.strip():
         return Refused(name=name, raw="", reason="empty name", prompt_version=PROMPT_VERSION)
     raw = ask(build(name))
     answer = _clean(raw)
+    if answer == NO_SIGNAL:
+        return NoSignal(name=name, prompt_version=PROMPT_VERSION)
     if not is_valid(answer):
         return Refused(
             name=name,

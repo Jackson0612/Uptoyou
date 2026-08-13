@@ -10,12 +10,14 @@ the same reason D43 keeps contributors pure: what can be replayed can be audited
 """
 
 from upto.classify.categories import CATEGORIES, is_valid
-from upto.classify.classify import Classified, Refused, classify_name
-from upto.classify.prompt import PROMPT_VERSION, build
+from upto.classify.classify import Classified, NoSignal, Refused, classify_name
+from upto.classify.prompt import NO_SIGNAL, PROMPT_VERSION, build
 
 __all__ = [
     "CATEGORIES",
     "Classified",
+    "NO_SIGNAL",
+    "NoSignal",
     "PROMPT_VERSION",
     "Refused",
     "build",

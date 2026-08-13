@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 
+from upto.classify import PROMPT_VERSION  # noqa: E402
 from upto.classify import run as runner  # noqa: E402
 
 TEST_DB = "upto_classify_check"
@@ -32,8 +33,9 @@ NAMES = {
     "A-3": "旨王開發有限公司",
     "A-4": "一階堂",
 }
-# What the stub model answers for each name. A-4's answer is outside D38's list on purpose.
-ANSWERS = {"啟祥早餐店": "早餐", "老捌麻辣食堂": "火鍋", "旨王開發有限公司": "其他", "一階堂": "拉麵"}
+# What the stub model answers. A-3 is a legal entity — the outcome ruled 2026-08-14, stored
+# as NULL rather than as a category. A-4's answer is outside D38's list on purpose.
+ANSWERS = {"啟祥早餐店": "早餐", "老捌麻辣食堂": "火鍋", "旨王開發有限公司": "法人", "一階堂": "拉麵"}
 
 
 def urls():
@@ -123,20 +125,41 @@ async def scenario(test_url: str) -> None:
     assert by_registry["A-1"].category == "早餐"
     assert by_registry["A-2"].category == "火鍋"
     assert by_registry["A-1"].category_model == "stub-model:test"
-    assert by_registry["A-1"].category_prompt_version.startswith("v1-")
+    # Against the constant, never a literal: a bumped version must not need a test edit,
+    # or the test starts asserting history instead of behaviour.
+    assert by_registry["A-1"].category_prompt_version == PROMPT_VERSION
     assert by_registry["A-1"].category_generated_at is not None
 
     # D63: an answer outside D38's list is not written and not coerced.
     assert by_registry["A-4"].category is None, "拉麵 was written despite being off the list"
     assert by_registry["A-4"].category_model is None
 
+    # Ruled 2026-08-14: a legal entity holds no category — the absence D58 states, never 其他.
+    assert by_registry["A-3"].category is None, "a legal entity was given a category"
+    assert by_registry["A-3"].category_model is None
+
     # The prompt the model actually received carries the ladder, not just the name.
     assert any("判斷順序" in prompt for prompt in asked)
 
-    # A second run is a near no-op: only the refused row is retried, nothing is rewritten.
+    # A second run retries exactly what holds no category: the off-list answer and the
+    # legal entity. Both are re-asked because both are stored as absence — which is the
+    # cost of not recording the sentinel, and it is two rows rather than a table scan.
     asked.clear()
     assert await runner.main("63000010") == 0
-    assert len(asked) == 1, f"a second pass re-asked {len(asked)} names instead of the one refused"
+    assert len(asked) == 2, f"a second pass re-asked {len(asked)} names instead of the two"
+
+    # A prompt version change invalidates its own output: the rows written under the old
+    # version are cleared and re-done, because a column holding two versions answers a
+    # different question per row (D39).
+    async with Session() as session:
+        await session.execute(
+            text("update place set category_prompt_version = 'v0-superseded' "
+                 "where category is not null")
+        )
+        await session.commit()
+    asked.clear()
+    assert await runner.main("63000010") == 0
+    assert len(asked) == 4, f"a superseded prompt version left {4 - len(asked)} rows unre-done"
 
     # The model being off is an ordinary outcome, distinct from a failure, and writes nothing.
     runner.available = lambda: False

@@ -17,7 +17,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from upto.classify import (  # noqa: E402
     CATEGORIES,
+    NO_SIGNAL,
     Classified,
+    NoSignal,
     PROMPT_VERSION,
     Refused,
     build,
@@ -46,6 +48,28 @@ class TestAcceptance(unittest.TestCase):
     def test_every_listed_value_is_acceptable(self):
         for value in CATEGORIES:
             self.assertIsInstance(classify_name("某店", answering(value)), Classified, value)
+
+
+class TestNoSignal(unittest.TestCase):
+    """Ruled 2026-08-14: a legal entity is a decided outcome, not a category and not a failure."""
+
+    def test_the_sentinel_is_its_own_outcome(self):
+        result = classify_name("安心食品服務股份有限公司", answering(NO_SIGNAL))
+        self.assertIsInstance(result, NoSignal)
+        self.assertEqual(result.prompt_version, PROMPT_VERSION)
+
+    def test_the_sentinel_is_not_one_of_the_ten(self):
+        # If it ever joined D38's list it would become something a person could pick, and
+        # 其他 would go back to meaning two things at once.
+        self.assertNotIn(NO_SIGNAL, CATEGORIES)
+
+    def test_noise_around_the_sentinel_is_stripped_too(self):
+        self.assertIsInstance(classify_name("某公司", answering("「法人」。")), NoSignal)
+
+    def test_it_is_not_a_refusal(self):
+        # Same effect on the database, opposite meanings — the distinction ingest_run draws
+        # between no change and failed, applied one table over.
+        self.assertNotIsInstance(classify_name("某公司", answering(NO_SIGNAL)), Refused)
 
 
 class TestRefusal(unittest.TestCase):
