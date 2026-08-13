@@ -1,0 +1,251 @@
+"""Ticket 19 — the write half's three endpoints: open, propose, roll.
+
+Every endpoint resolves the caller to a member of the round's circle before anything else
+(D67), and the two halves of a failed resolution — an unknown token, a circle without a seat
+— read identically, so the error is not a probe.
+
+The response shapes the entries already ruled:
+
+- a losing simultaneous open answers **409 carrying the round that won** (D68), so a typed
+  hour is never silently dropped;
+- a repeat proposal is a **quiet 200** (D70) — a proposal carries no input beyond which
+  place, so two requests for the same place cannot disagree;
+- rolling a closed round answers **200 with the stored result** (D69) — the retry gets
+  exactly the answer it missed, in the same shape a first roll returns it;
+- a swept or empty pool answers 409 out loud (D22's shape) rather than resolving to an
+  arbitrary winner.
+
+The roll is the whole chain in one transaction: re-resolve a defaulted hour to the hour the
+roll stands in (D73, D41), load and pin (D43), fold (D45/D46), apportion 36 outcomes (D72),
+two cryptographically random dice, and `write_roll` — which re-folds the records it stores
+and refuses the whole write on any mismatch (D15).
+"""
+
+from __future__ import annotations
+
+import secrets
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError, IntegrityError
+
+from .auth import member_for
+from .db import session_factory
+from .engine.fold import fold
+from .engine.load import load_contributions
+from .engine.store import write_roll
+from .engine.table import EmptyPoolError, allocate
+from .engine.table import build as build_table
+from .engine.table import place_for
+
+router = APIRouter(prefix="/api")
+
+
+async def _resolve_member(session, request: Request, circle_id: int) -> int:
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="a bearer token is required (D67)")
+    member = await member_for(session, header[7:].strip(), circle_id)
+    if member is None:
+        # One answer for both halves: which half failed is not the caller's to learn.
+        raise HTTPException(
+            status_code=401, detail="the token does not resolve to a member of this circle"
+        )
+    return member
+
+
+class OpenRoundBody(BaseModel):
+    target_hour: datetime | None = None
+
+
+@router.post("/circles/{circle_id}/rounds", status_code=201)
+async def open_round(circle_id: int, body: OpenRoundBody, request: Request) -> dict:
+    typed = body.target_hour is not None
+    if typed and body.target_hour.tzinfo is None:
+        raise HTTPException(status_code=422, detail="target_hour must carry a UTC offset (H17)")
+    async with session_factory()() as session:
+        await _resolve_member(session, request, circle_id)
+        try:
+            row = (
+                await session.execute(
+                    text(
+                        "insert into round (circle_id, target_hour, target_hour_typed) "
+                        "values (:c, coalesce(:h, date_trunc('hour', now())), :typed) "
+                        "returning id, target_hour, target_hour_typed"
+                    ),
+                    {"c": circle_id, "h": body.target_hour, "typed": typed},
+                )
+            ).one()
+            await session.commit()
+        except IntegrityError:
+            # D52's partial unique index fired: someone else's open won. D68: say so, and
+            # hand over the winner so the client enters it without a second fetch.
+            await session.rollback()
+            winner = (
+                await session.execute(
+                    text(
+                        "select id, target_hour, target_hour_typed, opened_at from round "
+                        "where circle_id = :c and status = 'open'"
+                    ),
+                    {"c": circle_id},
+                )
+            ).one_or_none()
+            detail: dict = {"error": "a round is already open in this circle (D68)"}
+            if winner is not None:
+                detail["open_round"] = {
+                    "round_id": winner.id,
+                    "target_hour": winner.target_hour.isoformat(),
+                    "target_hour_typed": winner.target_hour_typed,
+                    "opened_at": winner.opened_at.isoformat(),
+                }
+            raise HTTPException(status_code=409, detail=detail) from None
+    return {
+        "round_id": row.id,
+        "status": "open",
+        "target_hour": row.target_hour.isoformat(),
+        "target_hour_typed": row.target_hour_typed,
+    }
+
+
+class ProposeBody(BaseModel):
+    place_id: int
+
+
+@router.post("/rounds/{round_id}/proposals", status_code=201)
+async def propose(round_id: int, body: ProposeBody, request: Request, response: Response) -> dict:
+    async with session_factory()() as session:
+        round_row = (
+            await session.execute(
+                text("select circle_id, status from round where id = :r"), {"r": round_id}
+            )
+        ).one_or_none()
+        if round_row is None:
+            raise HTTPException(status_code=404, detail="no such round")
+        member = await _resolve_member(session, request, round_row.circle_id)
+        if round_row.status != "open":
+            raise HTTPException(status_code=409, detail="the round is closed")
+        place = (
+            await session.execute(
+                text("select origin, circle_id from place where id = :p"),
+                {"p": body.place_id},
+            )
+        ).one_or_none()
+        # A circle-local place of another circle answers exactly like no place at all:
+        # what other circles typed is not this circle's to discover (D28's scoping).
+        if place is None or (
+            place.origin == "circle-local" and place.circle_id != round_row.circle_id
+        ):
+            raise HTTPException(status_code=404, detail="no such place")
+        try:
+            await session.execute(
+                text(
+                    "insert into proposal (round_id, place_id, member_id) "
+                    "values (:r, :p, :m)"
+                ),
+                {"r": round_id, "p": body.place_id, "m": member},
+            )
+            await session.commit()
+        except (IntegrityError, DBAPIError) as failure:
+            await session.rollback()
+            message = str(getattr(failure, "orig", failure))
+            if "uq_proposal_place_per_round" in message:
+                # D70: the place is in the pool, which is what the request wanted.
+                response.status_code = 200
+                return {"round_id": round_id, "place_id": body.place_id, "pooled": True}
+            if "3 proposals" in message:
+                raise HTTPException(
+                    status_code=409, detail="three proposals per member per round (§3.0)"
+                ) from None
+            raise
+    return {"round_id": round_id, "place_id": body.place_id, "pooled": True}
+
+
+def _result_body(
+    round_id: int,
+    dice: tuple[int, int] | None,
+    winning_place_id: int,
+    weights: dict[int, object],
+) -> dict:
+    counts = allocate({p: w for p, w in weights.items()})
+    return {
+        "round_id": round_id,
+        "status": "closed",
+        "dice": list(dice) if dice is not None else None,
+        "sum": dice[0] + dice[1] if dice is not None else None,
+        "winning_place_id": winning_place_id,
+        # Strings, not floats: the weights are exact decimals and stay that way (D46).
+        "weights": {str(p): str(w) for p, w in weights.items()},
+        # The table is the truth of the draw (D72): each place's share of the 36 outcomes.
+        "allocation": {str(p): n for p, n in counts.items()},
+    }
+
+
+@router.post("/rounds/{round_id}/roll")
+async def roll(round_id: int, request: Request) -> dict:
+    async with session_factory()() as session:
+        round_row = (
+            await session.execute(
+                text(
+                    "select circle_id, status, target_hour_typed, die1, die2, "
+                    "winning_place_id from round where id = :r"
+                ),
+                {"r": round_id},
+            )
+        ).one_or_none()
+        if round_row is None:
+            raise HTTPException(status_code=404, detail="no such round")
+        await _resolve_member(session, request, round_row.circle_id)
+
+        if round_row.status == "closed":
+            # D69: the retry gets the answer it missed, in the shape a first roll returns.
+            stored = (
+                await session.execute(
+                    text("select place_id, weight from proposal where round_id = :r"),
+                    {"r": round_id},
+                )
+            ).all()
+            dice = (
+                (round_row.die1, round_row.die2) if round_row.die1 is not None else None
+            )
+            return _result_body(
+                round_id, dice, round_row.winning_place_id,
+                {row.place_id: row.weight for row in stored},
+            )
+
+        if not round_row.target_hour_typed:
+            # D73 through D41: a defaulted hour is re-resolved to the hour the roll stands in.
+            await session.execute(
+                text("update round set target_hour = date_trunc('hour', now()) where id = :r"),
+                {"r": round_id},
+            )
+
+        pinned = await load_contributions(session, round_id)
+        pool = (
+            (
+                await session.execute(
+                    text("select place_id from proposal where round_id = :r"), {"r": round_id}
+                )
+            )
+            .scalars()
+            .all()
+        )
+        weights = {
+            place: fold(
+                place, [p.contribution for p in pinned if p.contribution.place_id == place]
+            ).weight
+            for place in pool
+        }
+        try:
+            table = build_table(weights)
+        except EmptyPoolError:
+            raise HTTPException(
+                status_code=409,
+                detail="nothing can be drawn — the pool is empty or fully at weight zero (D22)",
+            ) from None
+        dice = (secrets.randbelow(6) + 1, secrets.randbelow(6) + 1)
+        winner = place_for(table, dice[0], dice[1])
+        await write_roll(session, round_id, pinned, weights, winner, dice)
+        await session.commit()
+    return _result_body(round_id, dice, winner, weights)

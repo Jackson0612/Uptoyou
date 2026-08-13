@@ -73,8 +73,11 @@ async def write_roll(
     pinned: list[PinnedContribution],
     weights: dict[int, Decimal],
     winning_place_id: int,
+    dice: tuple[int, int],
 ) -> None:
-    """Store contributions, weights and the close. Raises before writing on any mismatch."""
+    """Store contributions, weights, the dice and the close. Raises before writing on any mismatch."""
+    if not (1 <= dice[0] <= 6 and 1 <= dice[1] <= 6):
+        raise ReconciliationError(f"{dice} is not a roll of two dice (D72)")
     pool = set(
         (
             await session.execute(
@@ -172,9 +175,10 @@ async def write_roll(
         await session.execute(
             text(
                 "update round set status = 'closed', closed_at = now(), "
-                "winning_place_id = :w where id = :r and status = 'open' returning id"
+                "winning_place_id = :w, die1 = :d1, die2 = :d2 "
+                "where id = :r and status = 'open' returning id"
             ),
-            {"w": winning_place_id, "r": round_id},
+            {"w": winning_place_id, "r": round_id, "d1": dice[0], "d2": dice[1]},
         )
     ).scalar_one_or_none()
     if closed is None:
