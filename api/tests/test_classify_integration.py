@@ -7,9 +7,11 @@ Run inside the stack:
 The test builds its own database and drops it, so it never touches the stack's data.
 
 **The model is stubbed on purpose.** What is under test is the schema half — materialising
-a township (D76), writing provenance with the value (D39), leaving a refused answer
-unwritten (D63), and resuming where an interrupted run stopped. Whether the model answers
-*well* is the evaluation rounds' question and needs a fixed set, not a live service.
+a township (D76), writing provenance with the value (D39), D80's name ladder choosing what
+the model is asked about, D79's decided absence being skipped on the next pass while a
+refusal is retried, and a prompt-version change clearing every decided row. Whether the
+model answers *well* is the evaluation rounds' question and needs a fixed set, not a live
+service.
 """
 
 import asyncio
@@ -32,10 +34,19 @@ NAMES = {
     "A-2": "老捌麻辣食堂",
     "A-3": "旨王開發有限公司",
     "A-4": "一階堂",
+    "A-5": "悠旅測試股份有限公司",
 }
-# What the stub model answers. A-3 is a legal entity — the outcome ruled 2026-08-14, stored
-# as NULL rather than as a category. A-4's answer is outside D38's list on purpose.
-ANSWERS = {"啟祥早餐店": "早餐", "老捌麻辣食堂": "火鍋", "旨王開發有限公司": "法人", "一階堂": "拉麵"}
+# What the stub model answers, keyed by the string it is asked about. D80's ladder decides
+# that string: A-2 is asked as its storefront sign, A-5 as its single brand, the rest as
+# their registered names. A-3 is a legal entity — D79's decided absence. A-4's answer is
+# outside D38's list on purpose.
+ANSWERS = {
+    "啟祥早餐店": "早餐",
+    "老捌麻辣鍋物": "火鍋",  # A-2's sign — the registered name must never reach the model
+    "旨王開發有限公司": "法人",
+    "一階堂": "拉麵",
+    "星巴克測試": "咖啡飲料",  # A-5's brand — likewise
+}
 
 
 def urls():
@@ -88,17 +99,60 @@ async def scenario(test_url: str) -> None:
             ),
             {"pub": publication},
         )
+        # D80's ladder, seeded: A-2 carries a storefront sign, A-5 a single brand.
+        brand_pub = (
+            await session.execute(
+                text(
+                    "insert into brand_publication (source, content_sha256, detected_at, "
+                    "payload_bytes, scope) values ('taipei-foodtracer', repeat('c', 64), "
+                    "now(), 1000, 'x') returning id"
+                )
+            )
+        ).scalar_one()
+        await session.execute(
+            text(
+                "insert into brand_registration (publication_id, company_name, "
+                "company_name_raw, brand_name, brand_name_raw) "
+                "values (:p, '悠旅測試股份有限公司', '悠旅測試股份有限公司', "
+                "'星巴克測試', '星巴克測試')"
+            ),
+            {"p": brand_pub},
+        )
+        storefront_pub = (
+            await session.execute(
+                text(
+                    "insert into storefront_publication (source, content_sha256, "
+                    "detected_at, payload_bytes, scope) values ('taipei-hygiene-grade', "
+                    "repeat('d', 64), now(), 1000, 'x') returning id"
+                )
+            )
+        ).scalar_one()
+        await session.execute(
+            text(
+                "insert into storefront_name (publication_id, registry_no, name, name_raw, "
+                "grade) values (:p, 'A-2', '老捌麻辣鍋物', '老捌麻辣鍋物', '優')"
+            ),
+            {"p": storefront_pub},
+        )
         await session.commit()
 
     # The stub: answers from the table above, and records what it was asked.
     asked = []
 
     def stub(prompt):
+        # Matched on the 店名 line alone, never by substring over the whole prompt: the
+        # instruction's own step-0 example (「旨王開發有限公司」) is inside every prompt,
+        # and a substring match returns 法人 for anything it reaches first — a stub bug the
+        # old schema hid, because a swallowed refusal and a decided absence both wrote
+        # nothing. D79 made them distinguishable and this stub honest.
         asked.append(prompt)
-        for name, answer in ANSWERS.items():
-            if name in prompt:
-                return answer
-        raise AssertionError("the runner asked about a name the test never seeded")
+        name = prompt.rsplit("店名：", 1)[1].split("\n", 1)[0].strip()
+        try:
+            return ANSWERS[name]
+        except KeyError:
+            raise AssertionError(
+                "the runner asked about a name the test never seeded: " + name
+            ) from None
 
     runner.ask = stub
     runner.available = lambda: True
@@ -106,12 +160,18 @@ async def scenario(test_url: str) -> None:
 
     assert await runner.main("63000010") == 0
 
+    # D80: the registered names of the sign-carrying and brand-carrying rows never reached
+    # the model — the ladder's output did.
+    joined = "\n".join(asked)
+    assert "老捌麻辣食堂" not in joined, "A-2 was asked as its registered name, not its sign"
+    assert "悠旅測試股份有限公司" not in joined, "A-5 was asked as itself, not its brand"
+
     async with Session() as session:
         rows = (
             await session.execute(
                 text(
                     "select p.registry_no, p.category, p.category_model, "
-                    "p.category_prompt_version, p.category_generated_at "
+                    "p.category_prompt_version, p.category_generated_at, p.category_input "
                     "from place p where p.origin = 'reference' order by p.registry_no"
                 )
             )
@@ -121,45 +181,55 @@ async def scenario(test_url: str) -> None:
     # D76: the township was materialised — and only this township.
     assert set(by_registry) == set(NAMES), f"materialised the wrong set: {sorted(by_registry)}"
 
-    # D39: the value travels with its provenance, always both or neither.
+    # D39: the value travels with its provenance — and now with the asked string (0015).
     assert by_registry["A-1"].category == "早餐"
+    assert by_registry["A-1"].category_input == "啟祥早餐店"
     assert by_registry["A-2"].category == "火鍋"
+    assert by_registry["A-2"].category_input == "老捌麻辣鍋物"
+    assert by_registry["A-5"].category == "咖啡飲料"
+    assert by_registry["A-5"].category_input == "星巴克測試"
     assert by_registry["A-1"].category_model == "stub-model:test"
     # Against the constant, never a literal: a bumped version must not need a test edit,
     # or the test starts asserting history instead of behaviour.
     assert by_registry["A-1"].category_prompt_version == PROMPT_VERSION
     assert by_registry["A-1"].category_generated_at is not None
 
-    # D63: an answer outside D38's list is not written and not coerced.
+    # D63: an answer outside D38's list is not written and not coerced — a refusal is not
+    # a decision, so the row stays entirely undecided.
     assert by_registry["A-4"].category is None, "拉麵 was written despite being off the list"
     assert by_registry["A-4"].category_model is None
+    assert by_registry["A-4"].category_input is None
 
-    # Ruled 2026-08-14: a legal entity holds no category — the absence D58 states, never 其他.
+    # D79: a legal entity is a decided absence — no category, full provenance, the asked
+    # string recorded. The absence D58 states, never 其他.
     assert by_registry["A-3"].category is None, "a legal entity was given a category"
-    assert by_registry["A-3"].category_model is None
+    assert by_registry["A-3"].category_model == "stub-model:test"
+    assert by_registry["A-3"].category_prompt_version == PROMPT_VERSION
+    assert by_registry["A-3"].category_input == "旨王開發有限公司"
 
     # The prompt the model actually received carries the ladder, not just the name.
     assert any("判斷順序" in prompt for prompt in asked)
 
-    # A second run retries exactly what holds no category: the off-list answer and the
-    # legal entity. Both are re-asked because both are stored as absence — which is the
-    # cost of not recording the sentinel, and it is two rows rather than a table scan.
+    # D79's point: a second run retries exactly what holds no decision — the refused row and
+    # nothing else. The legal entity is recorded and skipped, which is the measured hour of
+    # re-asking this revision exists to stop.
     asked.clear()
     assert await runner.main("63000010") == 0
-    assert len(asked) == 2, f"a second pass re-asked {len(asked)} names instead of the two"
+    assert len(asked) == 1, f"a second pass re-asked {len(asked)} names instead of the one"
+    assert "一階堂" in asked[0]
 
-    # A prompt version change invalidates its own output: the rows written under the old
-    # version are cleared and re-done, because a column holding two versions answers a
-    # different question per row (D39).
+    # A prompt version change invalidates its own output — the decided absence included:
+    # rows written under the old version are cleared and re-done, because a column holding
+    # two versions answers a different question per row (D39).
     async with Session() as session:
         await session.execute(
             text("update place set category_prompt_version = 'v0-superseded' "
-                 "where category is not null")
+                 "where category_generated_at is not null")
         )
         await session.commit()
     asked.clear()
     assert await runner.main("63000010") == 0
-    assert len(asked) == 4, f"a superseded prompt version left {4 - len(asked)} rows unre-done"
+    assert len(asked) == 5, f"a superseded prompt version left {5 - len(asked)} rows unre-done"
 
     # The model being off is an ordinary outcome, distinct from a failure, and writes nothing.
     runner.available = lambda: False
@@ -167,8 +237,9 @@ async def scenario(test_url: str) -> None:
 
     await engine.dispose()
     print(
-        "classify: the township materialises inside its own scope, provenance travels with "
-        "every value, an off-list answer stays unwritten, and a second pass retries only it"
+        "classify: the ladder decides what the model is asked, a decided absence is skipped "
+        "while a refusal retries, provenance travels with every decision, and a version "
+        "bump re-does them all"
     )
 
 

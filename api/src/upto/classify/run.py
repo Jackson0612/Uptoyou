@@ -10,10 +10,14 @@ Two passes, in this order and for a reason:
 1. **Materialise (D76).** Every `reference_place` in the township that has no `place` row
    gets one — origin `reference`, the 登錄字號 and nothing else, which is D28's shape. The
    category then has one home, 0007's own columns.
-2. **Classify.** Every place in that township still carrying no category is sent to the
-   model one at a time, validated against D38's ten values, and written **with the prompt
-   version and the model name** (D39's condition 3). An answer outside the list is not
-   written and not coerced — it is counted and reported as pending, which is D63's rule.
+2. **Classify.** Every place in that township not yet decided is sent to the model one at a
+   time — asked about **the best name this project holds** (D80: storefront sign → single
+   brand → registered name), validated against D38's ten values, and written **with the
+   prompt version, the model name and the asked string** (D39's condition 3, plus 0015's
+   `category_input`). A legal-entity verdict is written as a **decided absence** (D79):
+   provenance present, category NULL, so the next pass skips it — the measured cost this
+   replaces was ~1,060 re-asks, an hour of inference per re-run. An answer outside the
+   list is still not written and not coerced — a refusal is not a decision.
 
 **The model's absence is ordinary, not an error.** The service is off unless a backfill is
 running, so this exits 3 and says so, having written nothing. Exit 0 means the pass ran —
@@ -32,6 +36,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
+from upto.api_common import SINGLE_BRAND, STOREFRONT
 from upto.classify.classify import Classified, NoSignal, classify_name
 from upto.classify.model import MODEL, available, ask
 from upto.classify.prompt import PROMPT_VERSION
@@ -52,7 +57,8 @@ async def clear_superseded(session, township_code: str) -> int:
         await session.execute(
             text(
                 "update place p set category = null, category_model = null, "
-                "category_prompt_version = null, category_generated_at = null "
+                "category_prompt_version = null, category_generated_at = null, "
+                "category_input = null "
                 "from reference_place rp "
                 "where rp.registry_no = p.registry_no and rp.township_code = :tc "
                 "and p.category_prompt_version is not null "
@@ -88,13 +94,29 @@ async def materialise(session, township_code: str) -> int:
 
 
 async def pending(session, township_code: str) -> list[tuple[int, str]]:
-    """Places in this township with no category yet, named from the latest publication."""
+    """Places in this township not yet decided, each under the best name this project holds.
+
+    **Undecided is `category_generated_at is null`, not `category is null`** — D79's decided
+    absence carries provenance and no category, and re-asking it every pass is the measured
+    hour this distinction exists to stop.
+
+    **The name is D80's ladder: storefront sign → single brand → registered name** — the
+    same precedence the screens read, because 悠旅生活事業股份有限公司 asked as itself is a
+    legal entity, and asked as STARBUCKS COFFEE is a place with a category. The asked string
+    goes into `category_input`, because the ladder's answer drifts as publications update
+    and a stored verdict must say what it was a verdict about.
+    """
     rows = (
         await session.execute(
             text(
-                "select p.id, rp.name from place p "
+                "select p.id, coalesce(storefront.name, brand.brand_name, rp.name) as name "
+                "from place p "
                 "join reference_place rp on rp.registry_no = p.registry_no "
-                "where p.origin = 'reference' and p.category is null "
+                "left join lateral ("
+                + STOREFRONT.format(registry="p.registry_no")
+                + ") storefront on true "
+                "left join lateral (" + SINGLE_BRAND.format(company="rp.name") + ") brand on true "
+                "where p.origin = 'reference' and p.category_generated_at is null "
                 "and rp.township_code = :tc "
                 "and rp.publication_id = ("
                 "  select id from place_publication order by detected_at desc limit 1"
@@ -133,31 +155,35 @@ async def main(township_code: str) -> int:
             for place_id, name in batch:
                 outcome = classify_name(name, ask)
                 if isinstance(outcome, Classified):
-                    results.append((place_id, outcome))
+                    results.append((place_id, name, outcome.category, outcome.prompt_version))
                 elif isinstance(outcome, NoSignal):
-                    # A legal entity, not a place. Stored as the absence D58 already rules,
-                    # and counted apart from a refusal because they mean opposite things.
+                    # A legal entity, not a place. D79: written as a decided absence —
+                    # provenance and the asked string, category NULL — so the next pass
+                    # skips it instead of paying for this answer again. Counted apart from
+                    # a refusal because they mean opposite things.
+                    results.append((place_id, name, None, outcome.prompt_version))
                     no_signal += 1
                 else:
                     refused += 1
             async with Session() as session:
-                for place_id, outcome in results:
+                for place_id, asked, category, version in results:
                     await session.execute(
                         text(
                             "update place set category = :c, category_model = :m, "
-                            "category_prompt_version = :v, category_generated_at = :t "
-                            "where id = :id"
+                            "category_prompt_version = :v, category_generated_at = :t, "
+                            "category_input = :i where id = :id"
                         ),
                         {
-                            "c": outcome.category,
+                            "c": category,
                             "m": MODEL,
-                            "v": outcome.prompt_version,
+                            "v": version,
                             "t": datetime.now(timezone.utc),
+                            "i": asked,
                             "id": place_id,
                         },
                     )
                 await session.commit()
-            done += len(results)
+            done += sum(1 for r in results if r[2] is not None)
             seen = done + no_signal + refused
             print(
                 f"  {seen}/{len(todo)}  written {done}  legal-entity {no_signal}  "
@@ -166,8 +192,8 @@ async def main(township_code: str) -> int:
             )
 
         print(
-            f"done: {done} classified, {no_signal} are legal entities and hold no category "
-            f"(D31's 40%), {refused} unusable answers left pending"
+            f"done: {done} classified, {no_signal} decided legal entities (recorded, not "
+            f"re-asked), {refused} unusable answers left pending"
         )
         return 0
     finally:
