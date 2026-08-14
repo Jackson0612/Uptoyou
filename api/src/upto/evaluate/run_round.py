@@ -1,12 +1,12 @@
 """D64's evaluation round: one candidate model, the 200 frozen names, one file of answers.
 
     docker compose --profile model up -d ollama
-    docker compose exec api python -m upto.evaluate.run_round qwen
+    docker compose exec api python -m upto.evaluate.run_round qwen   # or gemma, llama
     python3 -m upto.evaluate.run_round gemini          # host-side; the key never enters the stack
 
-Two candidates, and the pair is D64's ladder made runnable: `qwen` is the self-hostable model
-the pipeline would actually deploy (D63 — candidates must be self-hostable), `gemini` is the
-hosted baseline that enters the evaluation and nothing else (D84's last line). Both are asked
+Four candidates: D64's local slate — `qwen` · `gemma` · `llama`, three contenders from three
+makers, all self-hostable per D63 — plus `gemini`, the hosted baseline that enters the
+evaluation and nothing else (D84's last line). All are asked
 through `upto.classify.classify_name`, so a round measures **the shipped validation path**,
 not a second copy of it written for the evaluation — an answer this runner accepts is exactly
 an answer the backfill would have written, and an answer it refuses is a row the backfill
@@ -59,7 +59,14 @@ from upto.evaluate.score import TESTSET_PATH, load_testset
 
 SAVE_EVERY = 10
 
-QWEN_MODEL = "qwen2.5:3b-instruct-q4_K_M"
+# D64's local slate, owner-ruled 2026-08-14: three contenders, three makers, all under the
+# 4 GB EC2 class's ~2.5 GB resident line (gemma3:4b failed that gate and was replaced by
+# gemma2:2b). One CLI name per model; the string is pinned here and written into the round.
+LOCAL_MODELS = {
+    "qwen": "qwen2.5:3b-instruct-q4_K_M",
+    "gemma": "gemma2:2b",
+    "llama": "llama3.2:3b",
+}
 OLLAMA_URL = os.environ.get("UPTO_OLLAMA_URL", "http://ollama:11434").rstrip("/")
 OLLAMA_TIMEOUT_S = int(os.environ.get("UPTO_OLLAMA_TIMEOUT", "180"))
 
@@ -159,13 +166,12 @@ def resume_point(stored: list[dict], gold_rows: list[dict]) -> tuple[list[dict],
 # --- the candidates ---------------------------------------------------------------------
 
 
-class Qwen:
-    """The local model, asked over Ollama's HTTP API. Standard library, like everything here."""
+class Local:
+    """A local candidate, asked over Ollama's HTTP API. Standard library, like everything here."""
 
-    name = "qwen"
-
-    def __init__(self) -> None:
-        self.model = QWEN_MODEL
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.model = LOCAL_MODELS[name]
 
     def check(self) -> None:
         try:
@@ -291,11 +297,13 @@ def read_key(path: str = GEMINI_KEY_FILE) -> str:
 
 
 def build_candidate(name: str):
-    if name == "qwen":
-        return Qwen()
+    if name in LOCAL_MODELS:
+        return Local(name)
     if name == "gemini":
         return Gemini(read_key())
-    raise UsageError(f"unknown candidate {name!r} — it is `qwen` or `gemini`")
+    raise UsageError(
+        f"unknown candidate {name!r} — it is one of {', '.join(LOCAL_MODELS)}, or `gemini`"
+    )
 
 
 # --- one row --------------------------------------------------------------------------
@@ -335,7 +343,8 @@ def answer_row(index: int, gold_row: dict, ask) -> dict:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 1 or argv[0].startswith("-"):
-        print("usage: python -m upto.evaluate.run_round <qwen|gemini>", file=sys.stderr)
+        print("usage: python -m upto.evaluate.run_round <qwen|gemma|llama|gemini>",
+              file=sys.stderr)
         return 2
     name = argv[0]
     try:

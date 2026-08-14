@@ -294,6 +294,18 @@ def main(argv: list[str]) -> int:
     with open(destination, "w", encoding="utf-8") as handle:
         handle.write(text)
     print(f"\nwritten: {destination}", file=sys.stderr)
+    # D63, owner-ruled 2026-08-14: the report is the public half of a round and the raw round
+    # file is not. Writing the public copy here keeps "one public commit per round" mechanical
+    # rather than a hand-copy that gets forgotten. Four parents up from this file is `app/` in
+    # the private checkout and the repository root in the extracted public one — same place.
+    app_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                           "..", "..", "..", ".."))
+    public = os.path.join(app_dir, "evaluation",
+                          os.path.basename(round_path) + ".report.md")
+    os.makedirs(os.path.dirname(public), exist_ok=True)
+    with open(public, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    print(f"public copy: {public}", file=sys.stderr)
     return 0
 
 
