@@ -37,6 +37,7 @@ PUBLICATION_COLUMNS = {
     "F-D0047-061": "forecast_publication_id",
     "O-A0001-001": "observation_publication_id",
     "fda-97": PLACE_COLUMN,
+    "taipei-foodtracer": "brand_publication_id",
 }
 
 

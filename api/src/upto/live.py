@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from .api_common import place_names, resolve_member, result_body
+from .api_common import SINGLE_BRAND, place_names, resolve_member, result_body
 from .db import session_factory
 from .engine.table import allocate
 from .stream import subscribe
@@ -144,15 +144,25 @@ async def search_places(
         ).scalar_one_or_none()
         reference = []
         if latest_pub is not None:
+            # The brand patch runs here too (D77): the query matches the registered name OR
+            # the single brand it maps to, and shows the brand — typing 摩斯 must find the
+            # row whose FDA name is 安心食品服務股份有限公司, or the patch fixes the reveal
+            # and not the search.
             reference = (
                 await session.execute(
                     text(
-                        "select rp.registry_no, rp.name, p.id as place_id "
+                        "select rp.registry_no, "
+                        "coalesce(brand.brand_name, rp.name) as name, p.id as place_id "
                         "from reference_place rp "
                         "left join place p on p.registry_no = rp.registry_no "
                         "  and p.origin = 'reference' "
+                        "left join lateral ("
+                        + SINGLE_BRAND.format(company="rp.name")
+                        + ") brand on true "
                         "where rp.publication_id = :pub "
-                        "and rp.name ilike '%' || :q || '%' order by rp.name limit 10"
+                        "and (rp.name ilike '%' || :q || '%' "
+                        "  or brand.brand_name ilike '%' || :q || '%') "
+                        "order by 2 limit 10"
                     ),
                     {"pub": latest_pub, "q": q},
                 )

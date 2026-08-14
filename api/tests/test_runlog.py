@@ -17,7 +17,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from upto.ingest import fda, runlog  # noqa: E402
+from upto.ingest import fda, foodtracer, runlog  # noqa: E402
 
 
 def run(source, publication_id=7):
@@ -30,10 +30,11 @@ def run(source, publication_id=7):
 
 
 class EverySourceIsRegistered(unittest.TestCase):
-    def test_the_three_known_sources_each_get_their_own_column(self):
+    def test_the_four_known_sources_each_get_their_own_column(self):
         self.assertEqual(run("O-A0001-001").column(), "observation_publication_id")
         self.assertEqual(run("F-D0047-061").column(), "forecast_publication_id")
         self.assertEqual(run("fda-97").column(), runlog.PLACE_COLUMN)
+        self.assertEqual(run("taipei-foodtracer").column(), "brand_publication_id")
 
     def test_the_columns_are_distinct(self):
         """D24 gives each source its own nullable key. Two sources sharing one column would make
@@ -50,6 +51,14 @@ class EverySourceIsRegistered(unittest.TestCase):
             runlog.PUBLICATION_COLUMNS,
             "fda.SOURCE is {!r} and runlog does not register it — the duplicated literal has "
             "drifted, and an item 11 run would now be refused".format(fda.SOURCE),
+        )
+
+    def test_the_brand_sources_string_has_not_drifted(self):
+        """The same duplicate, one source over: `foodtracer.SOURCE` is written out in `runlog`."""
+        self.assertIn(
+            foodtracer.SOURCE,
+            runlog.PUBLICATION_COLUMNS,
+            "foodtracer.SOURCE is {!r} and runlog does not register it".format(foodtracer.SOURCE),
         )
 
 

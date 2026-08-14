@@ -28,21 +28,38 @@ async def resolve_member(session, request: Request, circle_id: int) -> int:
     return member
 
 
+# The single-brand join, D77's read rule: a company mapped to **exactly one** brand shows the
+# brand; a multi-brand company keeps its registered name, because nothing in either source
+# says which of its brands this site is (measured 2026-08-14: the rule patches 334 松山區
+# rows and forgoes 17). `having count(distinct brand_name) = 1` is the whole rule.
+SINGLE_BRAND = (
+    "select min(br.brand_name) as brand_name from brand_registration br"
+    "  where br.company_name = {company}"
+    "  and br.publication_id = ("
+    "    select id from brand_publication order by detected_at desc, id desc limit 1)"
+    "  having count(distinct br.brand_name) = 1"
+)
+
+
 async def place_names(session, place_ids) -> dict[int, str]:
-    """Display names: a circle-local row's own words, a reference row's latest publication."""
+    """Display names: a circle-local row's own words; a reference row's latest publication,
+    patched to its brand when the brand source names exactly one (D77)."""
     ids = list(place_ids)
     if not ids:
         return {}
     rows = (
         await session.execute(
             text(
-                "select p.id, coalesce(p.name, ("
+                "select p.id, coalesce(p.name, brand.brand_name, ref.name) as display_name "
+                "from place p "
+                "left join lateral ("
                 "  select rp.name from reference_place rp"
                 "  join place_publication pp on pp.id = rp.publication_id"
                 "  where rp.registry_no = p.registry_no"
                 "  order by pp.detected_at desc limit 1"
-                ")) as display_name "
-                "from place p where p.id in :ids"
+                ") ref on true "
+                "left join lateral (" + SINGLE_BRAND.format(company="ref.name") + ") brand on true "
+                "where p.id in :ids"
             ).bindparams(bindparam("ids", expanding=True)),
             {"ids": ids},
         )
