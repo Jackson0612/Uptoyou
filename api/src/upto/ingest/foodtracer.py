@@ -126,12 +126,18 @@ def fetch_sheet(
     now: Optional[Callable[[], datetime]] = None,
     opener: Optional[Callable[[str], bytes]] = None,
     source: str = SOURCE,
+    url: str = URL,
 ) -> Sheet:
-    """Fetch the CSV and identify it. Does not parse, and does not touch a database."""
+    """Fetch the CSV and identify it. Does not parse, and does not touch a database.
+
+    `url` and `source` are parameters because `gradelist` fetches from the same host with
+    the same TLS relaxation — the *mechanism* is one thing even though the datasets are two,
+    which is the opposite split from `fda_store`/`store` and for the opposite reason.
+    """
     clock = now or (lambda: datetime.now(timezone.utc))
     download = opener or _download
     try:
-        raw = download(URL)
+        raw = download(url)
     except Exception as failure:  # noqa: BLE001 — any transport failure is one failure here
         raise FoodtracerUnavailable(
             "{}: fetch failed — {}: {}".format(source, type(failure).__name__, failure)

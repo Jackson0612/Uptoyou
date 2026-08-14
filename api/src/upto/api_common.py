@@ -40,17 +40,30 @@ SINGLE_BRAND = (
     "  having count(distinct br.brand_name) = 1"
 )
 
+# The storefront join, D78's read rule: site-level, keyed by the registry number itself, and
+# it **outranks the brand join** — the brand says what the company calls its shops, this row
+# says what this shop's sign says, which is the only thing that can split a multi-brand
+# company's sites. No `having`: the source is one row per site (0014's key enforces it).
+STOREFRONT = (
+    "select sn.name from storefront_name sn"
+    "  where sn.registry_no = {registry}"
+    "  and sn.publication_id = ("
+    "    select id from storefront_publication order by detected_at desc, id desc limit 1)"
+)
+
 
 async def place_names(session, place_ids) -> dict[int, str]:
-    """Display names: a circle-local row's own words; a reference row's latest publication,
-    patched to its brand when the brand source names exactly one (D77)."""
+    """Display names, most specific source first: a circle-local row's own words; the
+    storefront sign for the site (D78); the brand when the company names exactly one (D77);
+    the registered name from the latest publication."""
     ids = list(place_ids)
     if not ids:
         return {}
     rows = (
         await session.execute(
             text(
-                "select p.id, coalesce(p.name, brand.brand_name, ref.name) as display_name "
+                "select p.id, "
+                "coalesce(p.name, storefront.name, brand.brand_name, ref.name) as display_name "
                 "from place p "
                 "left join lateral ("
                 "  select rp.name from reference_place rp"
@@ -58,6 +71,9 @@ async def place_names(session, place_ids) -> dict[int, str]:
                 "  where rp.registry_no = p.registry_no"
                 "  order by pp.detected_at desc limit 1"
                 ") ref on true "
+                "left join lateral ("
+                + STOREFRONT.format(registry="p.registry_no")
+                + ") storefront on true "
                 "left join lateral (" + SINGLE_BRAND.format(company="ref.name") + ") brand on true "
                 "where p.id in :ids"
             ).bindparams(bindparam("ids", expanding=True)),
