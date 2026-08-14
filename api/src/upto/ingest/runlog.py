@@ -40,6 +40,7 @@ PUBLICATION_COLUMNS = {
     "taipei-foodtracer": "brand_publication_id",
     "taipei-hygiene-grade": "storefront_publication_id",
     "gcis-restaurant-registry": "business_status_publication_id",
+    "fia-business-tax": "business_tax_publication_id",
 }
 
 
