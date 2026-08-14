@@ -264,7 +264,10 @@ class Gemini:
                 if error.code not in (429, 500, 503):
                     detail = error.read().decode("utf-8", "replace")[:300]
                     raise CandidateFailed(f"HTTP {error.code} from the Gemini API: {detail}")
-            except (urllib.error.URLError, TimeoutError, ValueError) as error:
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
+                # OSError is load-bearing on the host: its Python 3.9 raises socket.timeout,
+                # which is an OSError and NOT TimeoutError until 3.10 — without it a mid-round
+                # read timeout escaped the retry loop whole (measured: a round died at 40/200).
                 last = error
             else:
                 self._last_call = time.monotonic()
