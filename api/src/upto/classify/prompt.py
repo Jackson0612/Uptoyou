@@ -15,7 +15,12 @@ from __future__ import annotations
 
 from upto.classify.categories import CATEGORIES
 
-PROMPT_VERSION = "v3-2026-08-14"
+# v4 (owner-ruled 2026-08-14, after round 1): three additions aimed at the measured sign-layer
+# failures — branch/company-suffix noise is ignored before judging, drink-first shops get their
+# own rung (春水堂-shaped misses), and hotel/banquet dining is named as 其他's example (the
+# most-confused gold in the sign layer). Every in-prompt example was checked against the frozen
+# set and none appears in it — an example drawn from the exam would teach the exam (D82).
+PROMPT_VERSION = "v4-2026-08-14"
 
 # The sentinel is deliberately not one of D38's ten. **Widened in v3 (owner-ruled
 # 2026-08-14):** it is what the model says when the string is not a classifiable eatery —
@@ -32,12 +37,15 @@ INSTRUCTION = """你是分類器。輸入是食品業者登錄的登記名稱，
 類別（只能是下列其中一個）：
 {categories}、{no_signal}
 
+判斷之前，先忽略名稱裡的分店資訊（「-○○店」「○○分店」、地名加編號）和公司字尾（「股份有限公司」「(股)公司」「有限公司」），用剩下的招牌判斷。忽略之後若看得出是哪個品牌，就用那個品牌判斷，即使原字串帶著公司字尾。
+
 判斷順序，依序套用，第一個成立就停：
-0. 這個名稱不是可分類的餐飲店，就答「{no_signal}」。兩種情況都算：只是法人或控股公司、看不出是哪一家店（例如「安心食品服務股份有限公司」、「旨王開發有限公司」）；或看得出是一家店、但不是賣吃的店——便利商店、超市、零售店（例如「頂好超市」）。是賣吃的店就繼續往下。
+0. 忽略字尾之後仍然不是可分類的餐飲店，就答「{no_signal}」。兩種情況都算：只是法人或控股公司、看不出是哪一家店（例如「安心食品服務股份有限公司」、「旨王開發有限公司」）；或看得出是一家店、但不是賣吃的店——便利商店、超市、零售店（例如「頂好超市」）。是賣吃的店就繼續往下。
 1. 店名自稱哪一種店，就是哪一類（例如帶「早餐店」就是早餐，即使賣的是日式的）。
-2. 沒有自稱，看主食形式：麵食、飯食、火鍋、燒烤。
-3. 形式看不出來，看菜系：日式、西式。
-4. 看得出是賣吃的店、但不屬於上面任何一類，才是其他。
+2. 主要賣的是飲品——咖啡、茶、手搖飲——就是咖啡飲料（例如「50嵐」）。
+3. 沒有自稱，看主食形式：麵食、飯食、火鍋、燒烤。
+4. 形式看不出來，看菜系：日式、西式。
+5. 看得出是賣吃的店、但不屬於上面任何一類，才是其他——飯店、宴會館、俱樂部附設的餐飲也算這類（例如「晶華酒店」「漢來大飯店」）。
 
 店名：{name}
 類別："""
