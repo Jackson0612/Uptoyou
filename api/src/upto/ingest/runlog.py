@@ -39,6 +39,7 @@ PUBLICATION_COLUMNS = {
     "fda-97": PLACE_COLUMN,
     "taipei-foodtracer": "brand_publication_id",
     "taipei-hygiene-grade": "storefront_publication_id",
+    "gcis-restaurant-registry": "business_status_publication_id",
 }
 
 

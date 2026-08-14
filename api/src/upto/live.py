@@ -167,6 +167,25 @@ async def search_places(
                         "and (rp.name ilike '%' || :q || '%' "
                         "  or brand.brand_name ilike '%' || :q || '%' "
                         "  or storefront.name ilike '%' || :q || '%') "
+                        # D81: a 統編 the registry records as dead — an explicitly dead row
+                        # and no 核准設立 row anywhere under the number — is hidden from
+                        # this search and only this search. Proposals by hand (circle-local)
+                        # stay open: a person's knowledge outranks the roster's. The alive
+                        # exception is mandatory, not caution: 統編 reuse is measured real,
+                        # and an unrecognised status defaults to visible.
+                        "and not exists ("
+                        "  select 1 from business_status_row dead "
+                        "  where dead.business_no = rp.business_no "
+                        "  and dead.publication_id = ("
+                        "    select id from business_status_publication "
+                        "    order by detected_at desc, id desc limit 1) "
+                        "  and dead.status in ('歇業／撤銷', '停業', '廢止', '遷他縣市', "
+                        "    '撤銷設立登記') "
+                        "  and not exists ("
+                        "    select 1 from business_status_row alive "
+                        "    where alive.publication_id = dead.publication_id "
+                        "    and alive.business_no = dead.business_no "
+                        "    and alive.status = '核准設立')) "
                         "order by 2 limit 10"
                     ),
                     {"pub": latest_pub, "q": q},

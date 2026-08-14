@@ -17,7 +17,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from upto.ingest import fda, foodtracer, gradelist, runlog  # noqa: E402
+from upto.ingest import fda, foodtracer, gcis, gradelist, runlog  # noqa: E402
 
 
 def run(source, publication_id=7):
@@ -30,12 +30,15 @@ def run(source, publication_id=7):
 
 
 class EverySourceIsRegistered(unittest.TestCase):
-    def test_the_five_known_sources_each_get_their_own_column(self):
+    def test_the_six_known_sources_each_get_their_own_column(self):
         self.assertEqual(run("O-A0001-001").column(), "observation_publication_id")
         self.assertEqual(run("F-D0047-061").column(), "forecast_publication_id")
         self.assertEqual(run("fda-97").column(), runlog.PLACE_COLUMN)
         self.assertEqual(run("taipei-foodtracer").column(), "brand_publication_id")
         self.assertEqual(run("taipei-hygiene-grade").column(), "storefront_publication_id")
+        self.assertEqual(
+            run("gcis-restaurant-registry").column(), "business_status_publication_id"
+        )
 
     def test_the_columns_are_distinct(self):
         """D24 gives each source its own nullable key. Two sources sharing one column would make
@@ -67,6 +70,13 @@ class EverySourceIsRegistered(unittest.TestCase):
             gradelist.SOURCE,
             runlog.PUBLICATION_COLUMNS,
             "gradelist.SOURCE is {!r} and runlog does not register it".format(gradelist.SOURCE),
+        )
+
+    def test_the_registry_sources_string_has_not_drifted(self):
+        self.assertIn(
+            gcis.SOURCE,
+            runlog.PUBLICATION_COLUMNS,
+            "gcis.SOURCE is {!r} and runlog does not register it".format(gcis.SOURCE),
         )
 
 
