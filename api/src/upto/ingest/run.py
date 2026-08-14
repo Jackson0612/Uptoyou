@@ -30,7 +30,7 @@ def api_key() -> str:
         raise RuntimeError(
             "{} is not set. D33 rules this an Airflow Connection once the DAG exists; "
             "until then it is an environment variable, and the key itself lives at "
-            "~/.cwa_api_key outside every repository.".format(KEY_VAR)
+            "~/.keys/cwa_api_key outside every repository.".format(KEY_VAR)
         )
     return key
 
