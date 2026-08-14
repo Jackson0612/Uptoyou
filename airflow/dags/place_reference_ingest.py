@@ -69,11 +69,14 @@ def _database_url() -> str:
 @dag(
     dag_id="upto_place_reference_ingest",
     description="Item 11 — 食藥署 食品業者登錄 餐飲場所, daily, deduplicated by content hash",
-    # 03:00 Taipei. Away from the hourly weather ingest's own minute, and at an hour when a
-    # 17 MB download competes with nothing. The publisher has never been observed to publish at
-    # a particular time of day, so this is a quiet hour rather than an aligned one — and D34's
-    # whole point is that no alignment is being attempted.
-    schedule="0 3 * * *",
+    # 19:00 UTC = 03:00 Taipei the next morning. The cron is UTC — Airflow's
+    # `core.default_timezone` is `utc` in this stack — and written as `0 3 * * *` it landed
+    # 11:00 Taipei, in the middle of the working day; moved 2026-08-14. Away from the hourly
+    # weather ingest's own minute, and at an hour when a 17 MB download competes with nothing.
+    # The publisher has never been observed to publish at a particular time of day, so this is
+    # a quiet hour rather than an aligned one — and D34's whole point is that no alignment is
+    # being attempted.
+    schedule="0 19 * * *",
     start_date=datetime(2026, 8, 11),
     catchup=False,
     max_active_runs=1,

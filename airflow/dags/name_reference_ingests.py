@@ -27,8 +27,12 @@ Exit 0 is stored-or-no-change, exit 1 is the source failing.
 would be tempting: a local file in a DAG turns the operator's hand-run mistakes into pipeline
 history.
 
-**Schedules are staggered after the 03:00 FDA fetch** — quiet hours, one download at a time,
-no alignment attempted or claimed.
+**Schedules are staggered after item 11's FDA fetch, and every cron here is UTC.** Airflow's
+`core.default_timezone` is `utc` in this stack and nothing sets otherwise, so these read
+19:20 · 19:40 · 20:00 · 20:20 UTC — 03:20 · 03:40 · 04:00 · 04:20 the next morning in Taipei.
+Quiet hours, one download at a time, no alignment attempted or claimed. Written as if the cron
+were Taipei-local they landed 11:20–12:20 Taipei, in the middle of the working day; moved
+2026-08-14.
 
 Like every DAG in this repository: no backfill (the endpoints serve only the current file), so
 `catchup=False`; a new DAG arrives **paused** and a triggered run sits queued forever until
@@ -50,34 +54,34 @@ POSTGRES_CONNECTION = "upto_postgres"
 # can return it here; the others have one signal and nothing to disagree with.
 DISAGREEMENT = 2
 
-# (dag_id suffix, module, source label as printed by the runner, cron, tags)
+# (dag_id suffix, module, source label as printed by the runner, cron — UTC, see above, tags)
 SOURCES = (
     (
         "brand",
         "upto.ingest.run_brands",
         "foodtracer-brands",
-        "20 3 * * *",
+        "20 19 * * *",
         ["ingest", "d77", "brands", "reference"],
     ),
     (
         "storefront",
         "upto.ingest.run_storefronts",
         "gradelist-storefronts",
-        "40 3 * * *",
+        "40 19 * * *",
         ["ingest", "d78", "storefronts", "reference"],
     ),
     (
         "business_status",
         "upto.ingest.run_business_status",
         "gcis-status",
-        "0 4 * * *",
+        "0 20 * * *",
         ["ingest", "d81", "registry-status", "reference"],
     ),
     (
         "business_tax",
         "upto.ingest.run_business_tax",
         "fia-business-tax",
-        "20 4 * * *",
+        "20 20 * * *",
         ["ingest", "d85", "tax-registry", "reference"],
     ),
 )

@@ -19,14 +19,18 @@ lineage from any reading back to the run that wrote it.
 
 ## The pipeline
 
-| DAG | Schedule (UTC) | Source |
-|---|---|---|
-| `upto_weather_ingest` | hourly | CWA township forecast `F-D0047-061` + station observations `O-A0001-001` |
-| `upto_place_reference_ingest` | `0 3 * * *` | 食藥署 食品業者登錄 — the restaurant reference list |
-| `upto_brand_ingest` | `20 3 * * *` | 臺北市食材登錄平台 — company ↔ brand pairs |
-| `upto_storefront_ingest` | `40 3 * * *` | 臺北市餐飲衛生分級評核 — the sign an inspector saw |
-| `upto_business_status_ingest` | `0 4 * * *` | 商業登記-餐館業 — which registrations are dead |
-| `upto_business_tax_ingest` | `20 4 * * *` | 財政部 全國營業(稅籍)登記 — tax name + industry code |
+| DAG | Schedule (UTC) | Taipei | Source |
+|---|---|---|---|
+| `upto_weather_ingest` | hourly | hourly | CWA township forecast `F-D0047-061` + station observations `O-A0001-001` |
+| `upto_place_reference_ingest` | `0 19 * * *` | 03:00 next day | 食藥署 食品業者登錄 — the restaurant reference list |
+| `upto_brand_ingest` | `20 19 * * *` | 03:20 next day | 臺北市食材登錄平台 — company ↔ brand pairs |
+| `upto_storefront_ingest` | `40 19 * * *` | 03:40 next day | 臺北市餐飲衛生分級評核 — the sign an inspector saw |
+| `upto_business_status_ingest` | `0 20 * * *` | 04:00 next day | 商業登記-餐館業 — which registrations are dead |
+| `upto_business_tax_ingest` | `20 20 * * *` | 04:20 next day | 財政部 全國營業(稅籍)登記 — tax name + industry code |
+
+**The crons are UTC, and the quiet hours they aim at are Taipei's.** Airflow's
+`core.default_timezone` is `utc` here, so the two columns are the same instant read on two
+clocks — the daily sources fetch between 03:00 and 04:20 Taipei, one download at a time.
 
 **A publication is identified by the hash of its bytes, not by a timestamp.** A stamp can move
 while the data stands still, and stand still while the data moves. The content hash is the key;
