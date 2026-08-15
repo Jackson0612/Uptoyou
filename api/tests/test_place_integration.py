@@ -176,7 +176,10 @@ async def scenario(test_url: str) -> None:
         await session.execute(
             text(
                 "update place set category = '拉麵', category_model = 'claude-sonnet-5', "
-                "category_prompt_version = 'p1', category_generated_at = now() where id = :id"
+                "category_prompt_version = 'p1', category_generated_at = now(), "
+                # 0015 widened DECIDED: the asked string is provenance too (D80), so the
+                # complete-provenance example must carry it or it shows an outdated rule.
+                "category_input = '拉麵店' where id = :id"
             ),
             {"id": ref_id},
         )
