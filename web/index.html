@@ -93,6 +93,53 @@
   }
   main { width: 100%; max-width: 26rem; }
 
+  /* ================================================================================
+     RWD — direction B「對折牌桌」, owner-ruled 2026-08-15 from rendered pages at
+     390 / 820 / 1440 / 2560px (the loop in CLAUDE.md; the losing option was A「單欄放大」,
+     one column at every width — cheap and honest, but a desktop got a magnified phone).
+
+     **The widening is scoped to the open-round screen and nothing else.** `main` keeps its
+     26rem column on the home, device and reveal screens: their width has not been ruled, and
+     a 1344px-wide weather card is a change nobody asked for. The visible cost is a seam —
+     on a wide screen the header shifts left when you switch to 這一餐, and shifts back when
+     the roll lands and the reveal panel replaces the round. That seam is the argument for
+     ruling those screens next, and it is recorded rather than hidden.
+
+     Tokens live on `main`, deliberately NOT on `:root` — `test_web_contrast.py` parses the
+     palette out of the `:root` blocks above, and layout tokens have no business in its way.
+
+     Large screens get width AND type together: two columns pushed further apart cost eye
+     travel, and past ~38 全形字 a line reads worse, so past 1600px the pending column stops
+     growing (a 600px text input is not a better text input) and the pool takes the rest.
+     Measured on the owner's 27" at 2560px: the sheet was 37% of the screen before, 52% after.
+     ================================================================================ */
+  main { --col: 26rem; --pad: 1.35rem; --fold: 1.6rem; }
+  @media (min-width: 760px)  { main { --col: 46rem; --pad: 1.8rem; --fold: 1.8rem; } }
+  @media (min-width: 1200px) { main { --col: 60rem; --pad: 2.3rem; --fold: 2.6rem; } }
+  @media (min-width: 1600px) { main { --col: 72rem; --pad: 2.8rem; --fold: 3.2rem; } }
+  @media (min-width: 2100px) { main { --col: 84rem; --pad: 3.4rem; --fold: 3.8rem; } }
+
+  /* **`:has()`, not a Vue class binding, and that is a measured failure rather than a
+     preference.** The main element carrying `id="app"` is the mount CONTAINER —
+     `createApp(...).mount('#app')` compiles that element's *innerHTML*, so a `:class`
+     written on the container itself is never compiled at all. It sat inert in the DOM as a
+     literal attribute while the fold's media query fired anyway, and the two columns crammed
+     into the 416px phone column: measured `.side-settled` at 95px wide. Driving the width and
+     the fold off the same `:has(.sheet)` makes them unable to disagree — where `:has()` is
+     unsupported both selectors are dropped and the phone stack is served at every width,
+     which is the safe way to fail.
+
+     (This comment names no element in angle brackets on purpose: H29's scanner finds the
+     document's main element by that literal text, and spelling it out here moved the scan's
+     starting point into the stylesheet and failed the boundary test.) */
+  main:has(.sheet) { max-width: var(--col); }
+  /* Only the sheet's own text scales. Everything in the header is sized in rem — root-relative,
+     not main-relative — so the title and the tabs are the same size on every screen, and the
+     seam above stays a shift rather than a resize. */
+  @media (min-width: 760px)  { main:has(.sheet) { font-size: 17px; margin-top: 1rem; } }
+  @media (min-width: 1600px) { main:has(.sheet) { font-size: 18px; margin-top: 2rem; } }
+  @media (min-width: 2100px) { main:has(.sheet) { font-size: 20px; } }
+
   header { margin-bottom: 1.75rem; }
   h1 { font-family: var(--serif); font-size: 1.4rem; margin: 0 0 .2rem;
        letter-spacing: .02em; font-weight: 700; }
@@ -163,13 +210,62 @@
   .act:disabled { opacity: .45; cursor: default; }
   .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
 
+  /* The round sheet. Its padding is a token so the fold's gutter and the sheet's margin
+     grow together; every other `.card` on the surface keeps the padding it was ruled with. */
+  .card.sheet { padding: var(--pad); }
+
+  /* The round head always spans the whole sheet: the hour is true of both halves. */
   .roundhead { display: flex; flex-wrap: wrap; gap: .4rem; align-items: baseline;
-               font-variant-numeric: tabular-nums; }
+               font-variant-numeric: tabular-nums;
+               font-size: clamp(1rem, .95rem + .3vw, 1.45rem); }
   .hint { color: var(--muted); font-size: .85rem; }
+
+  /* THE FOLD. Below 760px none of this exists and the screen is the stack that ships today:
+     one column, one reading order, phone unchanged. Above it the sheet folds once — left is
+     what the table has settled (the pool), right is what you do next (propose, then roll). */
+  .split { display: block; }
+  .colhead { display: none; }
+  /* Every rule below carries the same `main:has(.sheet)` guard as the width above, so the
+     fold and the room to hold it arrive together or not at all. */
+  @media (min-width: 760px) {
+    main:has(.sheet) .split { display: grid; grid-template-columns: 1fr 1fr;
+             margin-top: 1.5rem; padding-top: 1.4rem; border-top: 1px solid var(--line); }
+    main:has(.sheet) .side-settled { padding-right: var(--fold); }
+    main:has(.sheet) .side-pending { padding-left: var(--fold); border-left: 1px solid var(--line);
+                    display: flex; flex-direction: column; }
+    /* The roll stays at the foot of the pending half instead of floating up beside the
+       candidates. Pinned by class, not `:last-child` — the error line follows it. */
+    main:has(.sheet) .side-pending .act.roll { margin-top: auto; }
+    /* A column needs a label; a stack does not, which is why these appear with the columns. */
+    main:has(.sheet) .colhead { display: flex; align-items: baseline; justify-content: space-between;
+               gap: .5rem; margin: 0 0 .5rem; font-size: .8rem; font-weight: 500;
+               color: var(--muted); letter-spacing: .04em; }
+    main:has(.sheet) .colhead .count { font-variant-numeric: tabular-nums; }
+    /* Once the column carries the heading 提案, the field label would say it a second time.
+       One visible word, one job — so the label goes to screen readers only and the input
+       keeps its accessible name. */
+    main:has(.sheet) .side-pending .fieldlabel {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+      overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    main:has(.sheet) .pool { margin-top: 0; }
+  }
+  @media (min-width: 1200px) { main:has(.sheet) .split { grid-template-columns: 1.15fr .85fr; } }
+  /* Past here the controls stop growing and the pool takes every extra pixel. */
+  @media (min-width: 1600px) { main:has(.sheet) .split { grid-template-columns: 1fr minmax(20rem, 25rem); } }
 
   .pool { list-style: none; margin: .9rem 0 0; padding: 0; }
   .pool li { padding: .5rem 0; border-bottom: 1px solid var(--line); }
   .pool li:last-child { border-bottom: 0; }
+  @media (min-width: 760px)  { main:has(.sheet) .pool li { padding: .65rem 0; } }
+  @media (min-width: 1600px) { main:has(.sheet) .pool li { padding: .85rem 0; } }
+
+  /* Controls grow with the sheet, and only inside it — the device screen's inputs were
+     ruled at their own size and this is not their ruling. */
+  @media (min-width: 760px) {
+    main:has(.sheet) input { padding: .7rem .8rem; }
+    main:has(.sheet) .act { padding: .8rem; }
+  }
 
   .candidates { list-style: none; margin: .4rem 0 0; padding: 0; }
   .candidates .pick {
@@ -331,31 +427,44 @@
   <!-- The open round: the pool, the propose box, the dice. D20 governs every word here —
        the hour is shown and nothing else about the sky (D16's confirmation shows the hour,
        not the forecast). The full list stays visible with nothing removed (§3.0). -->
-  <div v-if="view === 'round' && openRound" class="card">
+  <div v-if="view === 'round' && openRound" class="card sheet">
     <div class="roundhead">
       <span>用餐時間 {{ roundHourLabel }}</span>
       <span v-if="!openRound.target_hour_typed" class="hint">（未指定，擲骰當下為準）</span>
     </div>
 
-    <ul class="pool">
-      <li v-for="entry in openRound.pool" :key="entry.place_id">{{ entry.name }}</li>
-      <li v-if="!openRound.pool.length" class="hint">池子還是空的——先提一家。</li>
-    </ul>
+    <!-- The fold (ruled 2026-08-15, direction B). On a phone this div is a plain block and
+         the order below is the order that ships today. From 760px it is a two-column grid:
+         settled on the left, pending on the right. The split is structural rather than
+         decorative — it separates what the round has already recorded from what you can
+         still do to it, which is the round's own state and not a visual flourish. -->
+    <div class="split">
+      <section class="side-settled">
+        <p class="colhead"><span>池子</span><span class="count">{{ openRound.pool.length }} 家</span></p>
+        <ul class="pool">
+          <li v-for="entry in openRound.pool" :key="entry.place_id">{{ entry.name }}</li>
+          <li v-if="!openRound.pool.length" class="hint">池子還是空的——先提一家。</li>
+        </ul>
+      </section>
 
-    <label class="fieldlabel" for="place-query">提案</label>
-    <input id="place-query" v-model="query" placeholder="店名" autocomplete="off">
-    <ul class="candidates" v-if="candidates.length">
-      <li v-for="candidate in candidates"
-          :key="candidate.kind + (candidate.registry_no || candidate.place_id)">
-        <button class="pick" @click="pickCandidate(candidate)">{{ candidate.name }}</button>
-      </li>
-    </ul>
-    <button v-if="query.trim() && !exactMatch" class="act ghost" @click="proposeTyped">
-      以「{{ query.trim() }}」提案
-    </button>
+      <section class="side-pending">
+        <p class="colhead"><span>提案</span></p>
+        <label class="fieldlabel" for="place-query">提案</label>
+        <input id="place-query" v-model="query" placeholder="店名" autocomplete="off">
+        <ul class="candidates" v-if="candidates.length">
+          <li v-for="candidate in candidates"
+              :key="candidate.kind + (candidate.registry_no || candidate.place_id)">
+            <button class="pick" @click="pickCandidate(candidate)">{{ candidate.name }}</button>
+          </li>
+        </ul>
+        <button v-if="query.trim() && !exactMatch" class="act ghost" @click="proposeTyped">
+          以「{{ query.trim() }}」提案
+        </button>
 
-    <button class="act" :disabled="!openRound.pool.length" @click="rollDice">擲骰</button>
-    <p v-if="actionError" class="state bad">{{ actionError }}</p>
+        <button class="act roll" :disabled="!openRound.pool.length" @click="rollDice">擲骰</button>
+        <p v-if="actionError" class="state bad">{{ actionError }}</p>
+      </section>
+    </div>
   </div>
   <!-- /screen -->
 
