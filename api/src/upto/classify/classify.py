@@ -17,7 +17,13 @@ from dataclasses import dataclass
 from typing import Callable
 
 from upto.classify.categories import CATEGORIES, is_valid
-from upto.classify.prompt import NO_SIGNAL, PROMPT_VERSION, build
+from upto.classify.prompt import (
+    NO_SIGNAL,
+    PROMPT_VERSION,
+    RAG_PROMPT_VERSION,
+    build,
+    build_rag,
+)
 
 # Noise the model wraps an answer in. Anything beyond this list is a different answer,
 # not a dirtier one.
@@ -63,19 +69,47 @@ def _clean(raw: str) -> str:
     return answer.splitlines()[0].strip() if answer else answer
 
 
-def classify_name(name: str, ask: Callable[[str], str]) -> Classified | NoSignal | Refused:
-    """Ask the model about one name. `ask` takes the prompt text and returns the raw answer."""
+def _asked(name: str, prompt: str, ask: Callable[[str], str],
+           version: str) -> Classified | NoSignal | Refused:
+    """Everything after the prompt is built: ask, strip the noise, decide the outcome.
+
+    Shared by both entry points rather than copied into the retrieval one, because the three
+    outcomes *are* D39's condition 2 — a second copy of this would be a second place for the
+    refusal to be softened, and the whole value of the check is that there is one.
+    """
     if not name.strip():
-        return Refused(name=name, raw="", reason="empty name", prompt_version=PROMPT_VERSION)
-    raw = ask(build(name))
+        return Refused(name=name, raw="", reason="empty name", prompt_version=version)
+    raw = ask(prompt)
     answer = _clean(raw)
     if answer == NO_SIGNAL:
-        return NoSignal(name=name, prompt_version=PROMPT_VERSION)
+        return NoSignal(name=name, prompt_version=version)
     if not is_valid(answer):
         return Refused(
             name=name,
             raw=raw,
             reason=f"answer is not one of D38's {len(CATEGORIES)} values",
-            prompt_version=PROMPT_VERSION,
+            prompt_version=version,
         )
-    return Classified(name=name, category=answer, prompt_version=PROMPT_VERSION)
+    return Classified(name=name, category=answer, prompt_version=version)
+
+
+def classify_name(name: str, ask: Callable[[str], str]) -> Classified | NoSignal | Refused:
+    """Ask the model about one name. `ask` takes the prompt text and returns the raw answer."""
+    return _asked(name, build(name), ask, PROMPT_VERSION)
+
+
+def classify_name_rag(
+    name: str, ask: Callable[[str], str], examples: list[tuple[str, str]]
+) -> Classified | NoSignal | Refused:
+    """D88: the same ask, with retrieved neighbours in the prompt and its own version stamped.
+
+    **Validation is the shipped one, unchanged.** Retrieval is the only variable under test,
+    so an answer this accepts is exactly an answer the backfill would have written and an
+    answer it refuses is a row the backfill would have left pending — the property that makes
+    an evaluation round mean anything about deployment.
+
+    The caller supplies the examples. This function never queries: `upto.classify.examples`
+    owns the store and the leave-one-out exclusion, and a prompt builder that reached a
+    database would make the pure half of this package impure for one experiment.
+    """
+    return _asked(name, build_rag(name, examples), ask, RAG_PROMPT_VERSION)

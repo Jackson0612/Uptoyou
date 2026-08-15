@@ -10,17 +10,35 @@ the same reason D43 keeps contributors pure: what can be replayed can be audited
 """
 
 from upto.classify.categories import CATEGORIES, is_valid
-from upto.classify.classify import Classified, NoSignal, Refused, classify_name
-from upto.classify.prompt import NO_SIGNAL, PROMPT_VERSION, build
+from upto.classify.classify import (
+    Classified,
+    NoSignal,
+    Refused,
+    classify_name,
+    classify_name_rag,
+)
+from upto.classify.prompt import (
+    NO_SIGNAL,
+    PROMPT_VERSION,
+    RAG_PROMPT_VERSION,
+    build,
+    build_rag,
+)
 
+# `embed` and `examples` are deliberately absent. The second reaches SQLAlchemy and the host
+# Python that runs the score tests has none, so importing this package must stay free of it;
+# D88's retrieval path imports those two modules by name, where it needs them.
 __all__ = [
     "CATEGORIES",
     "Classified",
     "NO_SIGNAL",
     "NoSignal",
     "PROMPT_VERSION",
+    "RAG_PROMPT_VERSION",
     "Refused",
     "build",
+    "build_rag",
     "classify_name",
+    "classify_name_rag",
     "is_valid",
 ]

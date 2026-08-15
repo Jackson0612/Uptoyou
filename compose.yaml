@@ -13,7 +13,11 @@ name: upto
 
 services:
   db:
-    image: postgres:17-alpine
+    # pgvector's own build of PostgreSQL 17, and it is here for the `vector` extension alone
+    # (D88) — same major version, same settings. The collation is C (verified 2026-08-15
+    # against pg_database), so the alpine→debian move leaves the existing volume
+    # byte-compatible and nothing needs reindexing.
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

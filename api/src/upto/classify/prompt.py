@@ -56,3 +56,73 @@ def build(name: str) -> str:
     return INSTRUCTION.format(
         categories="、".join(CATEGORIES), no_signal=NO_SIGNAL, name=name
     )
+
+
+# --- D88: the same instruction, plus retrieved examples ----------------------------------
+#
+# The version string is data here for the reason the header gives: a row generated under
+# retrieval must be traceable to the instruction *and* to the fact that it had cribs, and
+# `round_<name>_v5-rag-2026-08-15.json` is a different file from the plain round's by
+# construction. Changing any text below changes this version, in the same commit.
+#
+# **Based on v3, not on v4, and that is the ruling rather than an oversight.** v4 added three
+# hand-written rules and measurably lost: qwen 51.0→50.0, gemma 51.5→49.5 on the frozen set.
+# The champion criterion is absolute accuracy, so retrieval is stacked on the best-measured
+# base — otherwise a v5-rag that beat v4 would still be worse than doing nothing, and the
+# experiment would have measured retrieval against a handicap it chose itself.
+#
+# **Every crib comes from the frozen set, and leave-one-out is what makes that legitimate.**
+# D82's rule is that an example drawn from the exam teaches the exam; `examples.nearest`
+# excludes the asked name (and, through 0018's UNIQUE, every copy of it), so no row ever sees
+# its own gold. Without that exclusion this prompt would score the lookup, not the model.
+RAG_PROMPT_VERSION = "v5-rag-2026-08-15"
+
+RAG_INSTRUCTION = """你是分類器。輸入是食品業者登錄的登記名稱，可能是店名，也可能只是公司的法人名稱。只輸出一個答案，不要解釋、不要標點。
+
+類別（只能是下列其中一個）：
+{categories}、{no_signal}
+
+參考例（人工判定過的類似店名）：
+{examples}
+
+判斷順序，依序套用，第一個成立就停：
+0. 這個名稱不是可分類的餐飲店，就答「{no_signal}」。兩種情況都算：只是法人或控股公司、看不出是哪一家店（例如「安心食品服務股份有限公司」、「旨王開發有限公司」）；或看得出是一家店、但不是賣吃的店——便利商店、超市、零售店（例如「頂好超市」）。是賣吃的店就繼續往下。
+1. 店名自稱哪一種店，就是哪一類（例如帶「早餐店」就是早餐，即使賣的是日式的）。
+2. 沒有自稱，看主食形式：麵食、飯食、火鍋、燒烤。
+3. 形式看不出來，看菜系：日式、西式。
+4. 看得出是賣吃的店、但不屬於上面任何一類，才是其他。
+
+店名：{name}
+類別："""
+
+
+def _example_line(example) -> str:
+    """One crib: 「名稱：類別」, or 「名稱：類別（細分類）」 when the store holds a subtype.
+
+    **The subtype is printed and the layer is not**, and the asymmetry is the ruling. A
+    subtype (手搖飲 under 咖啡飲料) is a fact about the shop, which is what the model is being
+    taught; the layer is how the *score* is read, and telling the model which layer an example
+    came from would teach it the evaluation's own bookkeeping. No distance either — a printed
+    distance invites the model to weigh the examples, and the ranking is already the order.
+
+    A two-element example is the frozen set's shape today (0018: `subtype` is NULL there);
+    the third slot is where a case book's finer tag arrives, so that arrival needs no change
+    here.
+    """
+    label = example[1]
+    subtype = example[2] if len(example) > 2 else None
+    return f"{example[0]}：{label}（{subtype}）" if subtype else f"{example[0]}：{label}"
+
+
+def build_rag(name: str, examples: list[tuple[str, str]]) -> str:
+    """The exact text sent to the model for one place, with its retrieved neighbours.
+
+    Nearest first, one line each, and nothing the model has to interpret. `_example_line`
+    owns what a line says.
+    """
+    return RAG_INSTRUCTION.format(
+        categories="、".join(CATEGORIES),
+        no_signal=NO_SIGNAL,
+        examples="\n".join(_example_line(example) for example in examples),
+        name=name,
+    )

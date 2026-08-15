@@ -3,6 +3,19 @@
     docker compose --profile model up -d ollama
     docker compose exec api python -m upto.evaluate.run_round qwen   # or gemma, llama
     python3 -m upto.evaluate.run_round gemini          # host-side; the key never enters the stack
+    docker compose exec api python -m upto.evaluate.run_round qwen --rag   # D88
+
+**`--rag` is a second prompt, not a second runner.** It asks through
+`classify_name_rag` with five retrieved neighbours from `example_embedding` (D88), stamps
+`RAG_PROMPT_VERSION`, and therefore writes `round_<name>_v5-rag-2026-08-15.json` — a
+different file, so resume, model-pinning and the scorer all work unchanged and no round is
+ever mixed with a plain one.
+
+**`gemini --rag` is refused, and it is a rule rather than a limitation.** The crib carries
+the owner's gold labels, and gold does not leave this machine; the hosted baseline stays at
+the plain prompt permanently. (It is also true that the database publishes no host port, so
+a host-side round could not reach the store anyway — but the rule stands on the first
+reason, which would survive someone publishing the port.)
 
 Four candidates: D64's local slate — `qwen` · `gemma` · `llama`, three contenders from three
 makers, all self-hostable per D63 — plus `gemini`, the hosted baseline that enters the
@@ -53,11 +66,15 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-from upto.classify.classify import Classified, NoSignal, classify_name
-from upto.classify.prompt import NO_SIGNAL, PROMPT_VERSION
+from upto.classify.classify import Classified, NoSignal, classify_name, classify_name_rag
+from upto.classify.prompt import NO_SIGNAL, PROMPT_VERSION, RAG_PROMPT_VERSION
 from upto.evaluate.score import TESTSET_PATH, load_testset
 
 SAVE_EVERY = 10
+
+# D88's k, recorded in every round file it produces. Changing it is a different round, not a
+# tweak — which is why the number is written into the document rather than only living here.
+RAG_K = 5
 
 # D64's local slate, owner-ruled 2026-08-14: three contenders, three makers, all under the
 # 4 GB EC2 class's ~2.5 GB resident line (gemma3:4b failed that gate and was replaced by
@@ -312,15 +329,25 @@ def build_candidate(name: str):
 # --- one row --------------------------------------------------------------------------
 
 
-def answer_row(index: int, gold_row: dict, ask) -> dict:
+def answer_row(index: int, gold_row: dict, ask, examples_for=None) -> dict:
     """Ask one name through the shipped validation path and record what came back.
 
     The three outcomes are the three `classify_name` returns and they are kept apart for the
     reason D79 keeps them apart in the database: a legal-entity verdict is a decision the
     model reached, a refusal is an answer nobody can use, and collapsing them would make the
     score unable to tell a confident wrong answer from a broken one.
+
+    `examples_for` is D88's retrieval, absent by default. Given, it returns this name's
+    neighbours and the row records **which names were offered** — labels are already in the
+    store, and keeping the asked names is what lets a wrong answer be traced to a misleading
+    crib rather than only to the model.
     """
-    outcome = classify_name(gold_row["name"], ask)
+    examples: list[tuple] = []
+    if examples_for is None:
+        outcome = classify_name(gold_row["name"], ask)
+    else:
+        examples = examples_for(gold_row["name"])
+        outcome = classify_name_rag(gold_row["name"], ask, examples)
     row = {
         "i": index,
         "name": gold_row["name"],
@@ -329,6 +356,10 @@ def answer_row(index: int, gold_row: dict, ask) -> dict:
         "answer": None,
         "outcome": "refused",
     }
+    if examples_for is not None:
+        # Names only. The labels and subtypes are in the store under those names, so keeping
+        # them here would duplicate a table into 200 round rows to say nothing new.
+        row["examples"] = [example[0] for example in examples]
     if isinstance(outcome, Classified):
         row["answer"] = outcome.category
         row["outcome"] = "category"
@@ -344,12 +375,74 @@ def answer_row(index: int, gold_row: dict, ask) -> dict:
     return row
 
 
+def rag_examples(digest: str):
+    """D88's per-name crib lookup, or a UsageError if the store cannot honestly supply one.
+
+    **Imported here rather than at module level, and that is load-bearing.** The example
+    store reaches SQLAlchemy; the host Python that runs `test_evaluate_score.py` has none,
+    and that test asserts this module imports nothing beyond the standard library and
+    `upto.classify`. A plain round must stay runnable there.
+
+    The digest check is the stale-cache refusal: the table is a derived copy of
+    `testset_v1.json` (0018), D82 freezes that file against re-drawing but not against the
+    owner's corrections, and a round asked with cribs built from amended-away labels would
+    report a number about neither set.
+    """
+    from upto.classify import embed as embedding
+    from upto.classify import examples as example_store
+
+    stored = example_store.stored_sha_sync()
+    if stored is None:
+        raise UsageError(
+            "example_embedding is empty — D88's crib has never been loaded. Run "
+            "`docker compose exec api python -m upto.classify.examples load` first."
+        )
+    if stored != digest:
+        raise UsageError(
+            f"example_embedding was built from test set {stored} and the file now hashes to "
+            f"{digest} — the owner amended a label under the crib. Re-run "
+            "`docker compose exec api python -m upto.classify.examples load`."
+        )
+
+    def examples_for(name: str) -> list[tuple[str, str]]:
+        try:
+            vector = embedding.embed([name])[0]
+        except embedding.EmbedUnavailable as error:
+            raise ComeBackLater(
+                f"{error} — the embedding model sits behind the same compose profile as the "
+                "candidate: `docker compose --profile model up -d ollama`."
+            ) from None
+        # Leave-one-out: the asked name is itself in the store, and retrieving its own gold
+        # row would hand the model the exam answer (D82, D88).
+        neighbours = example_store.nearest_sync(vector, k=RAG_K, exclude_name=name)
+        # Three-element cribs: the prompt prints the subtype when the store holds one, and
+        # NULL everywhere is what the frozen set gives today (0018).
+        return [(row["name"], row["label"], row["subtype"]) for row in neighbours]
+
+    return examples_for, embedding.EMBED_MODEL
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 1 or argv[0].startswith("-"):
-        print("usage: python -m upto.evaluate.run_round <qwen|gemma|llama|gemini>",
+    arguments = list(argv)
+    rag = "--rag" in arguments
+    if rag:
+        arguments.remove("--rag")
+    if len(arguments) != 1 or arguments[0].startswith("-"):
+        print("usage: python -m upto.evaluate.run_round <qwen|gemma|llama|gemini> [--rag]",
               file=sys.stderr)
         return 2
-    name = argv[0]
+    name = arguments[0]
+    if rag and name == "gemini":
+        # Refused before the key is even read. The crib is the owner's gold labels and gold
+        # never leaves this machine (D88), so the hosted baseline is a plain-prompt candidate
+        # permanently. It is separately true that the database publishes no host port.
+        print(
+            "gemini does not run with --rag: the retrieved examples are the owner's own gold "
+            "labels, and gold does not leave this machine (D88). The hosted baseline stays at "
+            "the plain prompt.",
+            file=sys.stderr,
+        )
+        return 2
     try:
         candidate = build_candidate(name)
     except UsageError as error:
@@ -357,25 +450,34 @@ def main(argv: list[str]) -> int:
         return 2
 
     gold_rows, digest = load_testset()
-    path = round_path(name)
+    prompt_version = RAG_PROMPT_VERSION if rag else PROMPT_VERSION
+    path = round_path(name, prompt_version)
 
+    examples_for = None
     document = {
         "candidate": name,
         "model": getattr(candidate, "model", None),
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": prompt_version,
         "testset": os.path.basename(TESTSET_PATH),
         "testset_sha256_at_run": digest,
         "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "finished_at": None,
         "rows": [],
     }
+    if rag:
+        try:
+            examples_for, embed_model = rag_examples(digest)
+        except UsageError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        document["rag"] = {"embed_model": embed_model, "k": RAG_K}
     if os.path.exists(path):
         with open(path, encoding="utf-8") as handle:
             existing = json.load(handle)
-        if existing.get("candidate") != name or existing.get("prompt_version") != PROMPT_VERSION:
+        if existing.get("candidate") != name or existing.get("prompt_version") != prompt_version:
             print(
                 f"{path} holds a {existing.get('candidate')} round at prompt "
-                f"{existing.get('prompt_version')}, and this is {name} at {PROMPT_VERSION}. "
+                f"{existing.get('prompt_version')}, and this is {name} at {prompt_version}. "
                 "Move it aside rather than mixing two rounds in one file.",
                 file=sys.stderr,
             )
@@ -390,8 +492,14 @@ def main(argv: list[str]) -> int:
             )
             return 2
         kept, start = resume_point(existing.get("rows", []), gold_rows)
+        # The stored document wins, then this run's own facts are written back over it — the
+        # model it will actually answer with, and D88's retrieval settings, which describe
+        # this run rather than the one that wrote the file.
+        rag_settings = document.get("rag")
         document = dict(existing, rows=kept, finished_at=None)
         document["model"] = candidate.model
+        if rag_settings is not None:
+            document["rag"] = rag_settings
         dropped = len(existing.get("rows", [])) - len(kept)
         print(f"resuming {path}: {start} answers kept"
               + (f", {dropped} dropped (a gap, or the set was amended under them)"
@@ -399,7 +507,8 @@ def main(argv: list[str]) -> int:
               + f", {len(gold_rows) - start} to ask")
     else:
         start = 0
-        print(f"new round: {name} against {len(gold_rows)} names, prompt {PROMPT_VERSION}")
+        print(f"new round: {name} against {len(gold_rows)} names, prompt {prompt_version}"
+              + (f", {RAG_K} retrieved examples each" if rag else ""))
 
     try:
         candidate.check()
@@ -411,7 +520,7 @@ def main(argv: list[str]) -> int:
     status = 0
     try:
         for index in range(start, len(gold_rows)):
-            rows.append(answer_row(index, gold_rows[index], candidate.ask))
+            rows.append(answer_row(index, gold_rows[index], candidate.ask, examples_for))
             document["model"] = candidate.model
             if len(rows) % SAVE_EVERY == 0:
                 save(path, document)
