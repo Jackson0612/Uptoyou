@@ -64,6 +64,10 @@
     --ink: #241F1A; --paper: #FAF7F1; --muted: #746C60;
     --line: #E7E1D6; --edge: #8F887B;
     --raised: #ffffff; --accent: #BE3E28;
+    /* The die is an object, not a surface: it stays bone-coloured with dark pips in both
+       modes, because that is what a die is. Inverting it in dark mode would produce a black
+       die with white pips, which is a different object. */
+    --pip: #241F1A; --diefill: #FCFAF6; --dieedge: #E2DACB;
     --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
   }
   @media (prefers-color-scheme: dark) {
@@ -71,6 +75,7 @@
       --ink: #ECE6DC; --paper: #1B1815; --muted: #A69D90;
       --line: #322E28; --edge: #6F6A60;
       --raised: #232019; --accent: #E06A50;
+      --pip: #1B1815; --diefill: #EFE9DD; --dieedge: #C9C0AE;
     }
   }
   * { box-sizing: border-box; }
@@ -275,11 +280,90 @@
   }
   .candidates .pick:hover { border-color: var(--muted); }
 
-  .dicebox { display: flex; align-items: center; justify-content: center; gap: .6rem;
-             font-variant-numeric: tabular-nums; }
-  .die { font-size: 3.2rem; line-height: 1; }
-  /* 台灣骰子的一與四是紅的 — direction A's signature, carried by the real dice. */
-  .die.red14 { color: var(--accent); }
+  /* ---- the dice, and the roll's own moment (D91, ruled 2026-08-15) -----------------
+     Each die is a cube of six faces built from real pips, replacing the Unicode faces
+     ⚀⚁⚂ that shipped before. **台灣骰子的一與四是紅的** — direction A's signature — and
+     with pips as elements only the 1-pip and the four 4-pips are red, where the glyph
+     could only be tinted whole.
+
+     A face is brought to the front by rotating the CUBE, never the face, so the pips stay
+     square to the viewer when it lands. No library, no image, no build step: transforms
+     and elements are all this costs, which is what lets it live under D3 and §6.
+
+     **The animation reveals a result, it never produces one.** The dice arrive from the
+     server already recorded (D69) and reach every device in the circle over the stream
+     (D53's one close); the tumble is started by that arrival, not by the button, so
+     everyone at the table sees the same roll and nobody's browser is deciding anything.
+     A reconnect's snapshot deliberately does NOT tumble — replaying an hour-old roll as
+     drama would be the surface asserting an event that is not happening. */
+  .dicebox { display: flex; align-items: center; justify-content: center; gap: 1.1rem;
+             font-variant-numeric: tabular-nums; padding: .4rem 0 .2rem; perspective: 900px; }
+  .stage { width: 62px; height: 62px; }
+  @media (min-width: 760px) { .stage { width: 74px; height: 74px; } }
+  .cube { position: relative; width: 100%; height: 100%;
+          transform-style: preserve-3d; transform: var(--land); }
+  .face {
+    position: absolute; inset: 0; border-radius: 12px;
+    background: var(--diefill); border: 1px solid var(--dieedge);
+    display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+    padding: 15%; gap: 6%; backface-visibility: hidden;
+  }
+  /* translateZ is half the die's width, so the six faces close into a cube. */
+  .f1 { transform: translateZ(31px); }
+  .f6 { transform: rotateY(180deg) translateZ(31px); }
+  .f3 { transform: rotateY(90deg)  translateZ(31px); }
+  .f4 { transform: rotateY(-90deg) translateZ(31px); }
+  .f5 { transform: rotateX(90deg)  translateZ(31px); }
+  .f2 { transform: rotateX(-90deg) translateZ(31px); }
+  @media (min-width: 760px) {
+    .f1 { transform: translateZ(37px); }
+    .f6 { transform: rotateY(180deg) translateZ(37px); }
+    .f3 { transform: rotateY(90deg)  translateZ(37px); }
+    .f4 { transform: rotateY(-90deg) translateZ(37px); }
+    .f5 { transform: rotateX(90deg)  translateZ(37px); }
+    .f2 { transform: rotateX(-90deg) translateZ(37px); }
+  }
+  .pip { border-radius: 50%; background: var(--pip); width: 74%; aspect-ratio: 1;
+         align-self: center; justify-self: center; }
+  .pip.red { background: var(--accent); }
+
+  @keyframes tumble {
+    from { transform: rotateX(-540deg) rotateY(540deg); }
+    to   { transform: var(--land); }
+  }
+  @keyframes namein { from { opacity: 0; } to { opacity: 1; } }
+  /* ease-out: fast off the hand, slow into the rest. An ease-in-out reads as a machine
+     spinning up, which is the one thing this must not look like. The two dice are given
+     different durations so they do not tumble in lockstep. */
+  .dicebox.tumble .cube { animation: tumble 900ms cubic-bezier(.16, .84, .28, 1) both; }
+  .dicebox.tumble .stage:nth-child(2) .cube { animation-duration: 1000ms; }
+  /* **Everything that IS the answer waits for the dice.** The roll is the question, and an
+     answer that appears first is not an answer. Caught by a mid-flight screenshot: the dice
+     were still tumbling while the sum read ＝ 11 and the winning row was already ink-red,
+     which gave the result away and left the animation performing to an audience that had
+     already read the ending.
+
+     Three things are held back, and only three: the sum, the winner's name, and the hit
+     row's emphasis. The rest of the table is NOT hidden — each place's weight and share are
+     facts of the round that were true before the roll and stay true after it. Only which
+     one was hit is news. */
+  .dicebox.tumble ~ .winner,
+  .dicebox.tumble .dicesum { animation: namein 300ms ease-out 980ms both; }
+  /* `both` matters here: the backwards fill holds the un-hit styling through the delay, so
+     the row stays a normal row until the dice stop rather than blinking out and back. */
+  .dicebox.tumble ~ .alloc tr.hit td { animation: hitin 300ms ease-out 980ms both; }
+  @keyframes hitin {
+    from { color: var(--ink); font-weight: 400; }
+    to   { color: var(--accent); font-weight: 650; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dicebox.tumble .cube,
+    .dicebox.tumble .stage:nth-child(2) .cube { animation-duration: 1ms; }
+    .dicebox.tumble ~ .winner,
+    .dicebox.tumble .dicesum,
+    .dicebox.tumble ~ .alloc tr.hit td { animation-duration: 1ms; animation-delay: 0ms; }
+  }
+
   .dicesum { color: var(--muted); font-size: 1.2rem; }
   .winner { font-family: var(--serif); text-align: center; font-size: 1.35rem;
             font-weight: 700; margin: .6rem 0 1rem; }
@@ -478,9 +562,16 @@
        channel (D21: the nudge is carried silently; D20: no weather word off the home screen). -->
   <div v-if="view === 'round' && !openRound">
     <div v-if="lastResult" class="card">
-      <div class="dicebox">
-        <span class="die" :class="{ red14: isRedFace(lastResult.dice && lastResult.dice[0]) }">{{ dieGlyph(lastResult.dice && lastResult.dice[0]) }}</span>
-        <span class="die" :class="{ red14: isRedFace(lastResult.dice && lastResult.dice[1]) }">{{ dieGlyph(lastResult.dice && lastResult.dice[1]) }}</span>
+      <div class="dicebox" :class="{ tumble: tumble }">
+        <div class="stage" v-for="(face, i) in diceFaces" :key="i">
+          <div class="cube" :style="{ '--land': landing(face) }">
+            <div v-for="f in 6" :key="f" class="face" :class="'f' + f">
+              <span v-for="(cell, k) in pipCells(f)" :key="k"
+                    class="pip" :class="{ red: isRedFace(f) }"
+                    :style="{ gridArea: cell }"></span>
+            </div>
+          </div>
+        </div>
         <span class="dicesum" v-if="lastResult.sum">＝ {{ lastResult.sum }}</span>
       </div>
       <p class="winner">{{ winnerName }}</p>
@@ -639,6 +730,8 @@ createApp({
     const deviceForm = ref({ token: '', circle: '' });
     const openRound = ref(null);
     const lastResult = ref(null);
+    // D91: true only while the result being shown arrived as a live close.
+    const tumble = ref(false);
     const actionError = ref('');
     const query = ref('');
     const candidates = ref([]);
@@ -698,10 +791,15 @@ createApp({
       if (event.type === 'snapshot') {
         openRound.value = event.open_round;
         lastResult.value = event.last_result;
+        // D91: a snapshot is a reconnect, not a roll. Landing the dice without the tumble
+        // is the difference between showing a record and staging an event that already
+        // happened — and D56 sends a snapshot on every reconnect, so this is the common path.
+        tumble.value = false;
       } else if (event.type === 'round_opened') {
         openRound.value = event.round;
         // D54: the last result is superseded by the next round opening, not by a clock.
         lastResult.value = null;
+        tumble.value = false;
       } else if (event.type === 'pooled') {
         if (openRound.value && event.round_id === openRound.value.round_id
             && !openRound.value.pool.some((p) => p.place_id === event.place.place_id)) {
@@ -710,6 +808,10 @@ createApp({
       } else if (event.type === 'closed') {
         openRound.value = null;
         lastResult.value = event.result;
+        // D91: the tumble is started by the close arriving, not by the button being pressed,
+        // so every device in the circle sees the same roll — D53 closes a round exactly once
+        // and this is the surface's half of that promise.
+        tumble.value = true;
       }
     }
 
@@ -826,7 +928,31 @@ createApp({
     const channelLabel = (channel) => (
       { private: '私人', contextual: '情境', commercial: '商業' }[channel] || channel
     );
-    const dieGlyph = (n) => (n >= 1 && n <= 6 ? '⚀⚁⚂⚃⚄⚅'[n - 1] : '？');
+    // D91's dice. Pip positions on the face's 3x3 grid, as `row / column`; the rotation
+    // that brings each face to the front, derived from the `.f*` transforms in the
+    // stylesheet. Both are data rather than six hand-written blocks so a wrong face is a
+    // wrong number here, not a wrong transform somewhere in the CSS.
+    const PIP_CELLS = {
+      1: ['2 / 2'],
+      2: ['1 / 1', '3 / 3'],
+      3: ['1 / 1', '2 / 2', '3 / 3'],
+      4: ['1 / 1', '1 / 3', '3 / 1', '3 / 3'],
+      5: ['1 / 1', '1 / 3', '2 / 2', '3 / 1', '3 / 3'],
+      6: ['1 / 1', '1 / 3', '2 / 1', '2 / 3', '3 / 1', '3 / 3'],
+    };
+    const LANDING = { 1: [0, 0], 2: [90, 0], 3: [0, -90], 4: [0, 90], 5: [-90, 0], 6: [0, 180] };
+    const pipCells = (face) => PIP_CELLS[face] || [];
+    // Extra whole turns are added per die so the tumble ends where the result says and the
+    // two dice do not spin as one object.
+    const landing = (face) => {
+      const [x, y] = LANDING[face] || LANDING[1];
+      return `rotateX(${720 + x}deg) rotateY(${720 + y}deg)`;
+    };
+    // A die with no result yet rests on 1 rather than disappearing.
+    const diceFaces = computed(() => {
+      const d = lastResult.value && lastResult.value.dice;
+      return [(d && d[0]) || 1, (d && d[1]) || 1];
+    });
     // Taiwanese dice paint the 1 and the 4 red; every other face stays ink.
     const isRedFace = (n) => n === 1 || n === 4;
 
@@ -836,7 +962,8 @@ createApp({
       townships, selected, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel,
       hasDevice, view, deviceForm, openRound, lastResult, actionError, query, candidates,
       saveDevice, openNewRound, pickCandidate, proposeTyped, rollDice, exactMatch,
-      roundHourLabel, winnerName, resultRows, factorRows, channelLabel, dieGlyph, isRedFace,
+      roundHourLabel, winnerName, resultRows, factorRows, channelLabel,
+      tumble, diceFaces, pipCells, landing, isRedFace,
     };
   }
 }).mount('#app');
