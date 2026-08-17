@@ -462,7 +462,11 @@
      per-mode colour — and `max-height` is gone because the JS cap now decides how many rows
      exist, which means one number governs the count instead of two that can disagree. */
   .candidates.faded {
-    max-height: 12.5rem; overflow-y: auto;
+    /* **item 8: the label existed to be honest and was the thing lying** — the box claimed four
+       rows and fitted three. Two-line rows measure ~71px since R-9, so three rows is what clears
+       the 430 fold with the fade visible. Height and count are set together and the label reads
+       from the count, so they cannot drift apart again. */
+    max-height: 13.5rem; overflow-y: auto;
     mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
   }
   .candidates li { border-bottom: 1px solid var(--line); }
@@ -610,7 +614,8 @@
   }
 
   /* The sum is a fact of the roll, not a caption about it — out of `--muted`, up a step. */
-  .dicesum { color: var(--ink); font-size: 1.35rem; }
+  /* items 6/7: 21.6px beside a 160px die read as a footnote to the dice rather than part of them. */
+  .dicesum { color: var(--ink); font-size: clamp(1.35rem, .95rem + 1.2vw, 2.6rem); }
   /* **A18: the answer was set smaller than the outdoor temperature on another screen.** The
      winner is the one thing this product exists to produce, and 1.35rem left it quieter than
      the evidence table 40px beneath it. Colour is B5's decision and is not touched here. */
@@ -630,7 +635,7 @@
             margin: .9rem 0 1.1rem; }
 
   .alloc { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  .alloc caption { caption-side: bottom; color: var(--muted); font-size: .78rem;
+  .alloc caption { caption-side: bottom; color: var(--muted); font-size: clamp(.78rem, .7rem + .3vw, 1.05rem);
                    padding-top: .6rem; text-align: left; line-height: 1.5; }
   /* 1.61:1 is not structure at 1297px — A16's reasoning, one step further. */
   .alloc th { color: var(--muted); font-size: .8rem; font-weight: 500; text-align: left;
@@ -678,10 +683,9 @@
      control itself gaining a line of consequence above it. */
   /* item 19: it swapped at 0ms while `.swap` already established the idiom. */
   .confirm { margin-top: 1.1rem; animation: swapin 140ms ease-out; }
-  .confirm .confirmnote {
-    margin: 0 0 .6rem; font-size: .87rem; color: var(--ink);
-    padding-left: .7rem; border-left: 2px solid var(--accent);
-  }
+  /* item 5: 13.9px for the sentence naming an irreversible consequence was the wrong size, and a
+     seal-red rule spent the accent on decoration. Weight carries it; D87 spends red elsewhere. */
+  .confirm .confirmnote { margin: 0 0 .7rem; font-size: 1rem; color: var(--ink); font-weight: 550; }
   /* Inside the confirmation the roll takes the ink fill: there it IS the thing being confirmed.
      **And the propose button gives the fill back while armed** — measured after the first attempt,
      the armed state had TWO filled buttons, which is the defect R-2 exists to remove, just moved
@@ -854,6 +858,12 @@
   <div v-if="view === 'device'" class="card deviceband">
     <!-- item 21: the paste instruction was wearing a field label's clothes and the screen had no
          heading at all. A heading names where you are; an instruction says what to do. -->
+    <!-- item 21's other half — printing the circle's NAME here — is not implemented, and not for
+         want of trying: this screen renders BEFORE any key exists, so no authenticated call has
+         been made and the circle's name has never been fetched. The stream is the only place the
+         surface learns anything about a circle, and it needs the key this screen exists to collect.
+         A name shown here would have to come from an unauthenticated lookup by circle id, which is
+         a payload/product question, not presentation. -->
     <h2 class="devicehead">這台裝置還沒有鑰匙</h2>
     <p class="devicenote">把管理者給你的兩個值貼進來，之後這台裝置就記得了。只需要做一次。</p>
     <label class="fieldlabel" for="device-token">裝置金鑰</label>
@@ -1411,7 +1421,7 @@ createApp({
     // BELOW the fold (item 8), so the truncation the fade announces was itself cut off. Four rows
     // clears it. Because R-7 made this the single constant governing how many rows exist, the fix
     // is one number — a CSS cap and a JS count would have needed two, and could disagree.
-    const CANDIDATE_ROWS = 4;
+    const CANDIDATE_ROWS = 3;
     const shownCandidates = computed(() => candidates.value.slice(0, CANDIDATE_ROWS));
 
     const exactMatch = computed(
