@@ -67,7 +67,15 @@
     /* The die is an object, not a surface: it stays bone-coloured with dark pips in both
        modes, because that is what a die is. Inverting it in dark mode would produce a black
        die with white pips, which is a different object. */
-    --pip: #241F1A; --diefill: #FCFAF6; --dieedge: #E2DACB;
+    /* **`--pipred` is a fourth die token rather than a reuse of `--accent`, and the reason is
+       a measured failure.** The accent flips lighter in dark mode, as a UI accent on a dark
+       page must; the die face does not flip, because a die is an object rather than a surface.
+       Reusing the accent therefore put a light coral on a bone face at **2.74:1** in dark —
+       under the 3:1 floor for a graphical object, and H30's mistake a second time. Its own
+       token holds the same red in both modes, which is also what a physical die does: the
+       paint on the pips is the same paint when the room lights go off. Measured 5.15:1 in
+       light and 4.44:1 in dark, both clear of the floor with margin rather than pinned to it. */
+    --pip: #241F1A; --pipred: #BE3E28; --diefill: #FCFAF6; --dieedge: #E2DACB;
     --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
   }
   @media (prefers-color-scheme: dark) {
@@ -75,7 +83,7 @@
       --ink: #ECE6DC; --paper: #1B1815; --muted: #A69D90;
       --line: #322E28; --edge: #6F6A60;
       --raised: #232019; --accent: #E06A50;
-      --pip: #1B1815; --diefill: #EFE9DD; --dieedge: #C9C0AE;
+      --pip: #1B1815; --pipred: #BE3E28; --diefill: #EFE9DD; --dieedge: #C9C0AE;
     }
   }
   * { box-sizing: border-box; }
@@ -325,7 +333,7 @@
   }
   .pip { border-radius: 50%; background: var(--pip); width: 74%; aspect-ratio: 1;
          align-self: center; justify-self: center; }
-  .pip.red { background: var(--accent); }
+  .pip.red { background: var(--pipred); }
 
   @keyframes tumble {
     from { transform: rotateX(-540deg) rotateY(540deg); }
