@@ -280,14 +280,18 @@
 
   /* R-1's tile. Capped at 40rem even where `--col` is wider: the grid gains nothing from 1344px,
      and inheriting that width would make an illustration the widest thing on the screen. */
-  .mech { margin-top: 1.75rem; max-width: 40rem; }
+  /* M-7: card 1344 / tile 640 / grid 352, three left-aligned widths in a descending stair with
+     704px of empty paper beside the diagram. Centring the tile and its grid removes the stair
+     without touching the drawing, which round 4 says is fixed. */
+  .mech { margin-top: 1.75rem; max-width: 40rem; margin-inline: auto; }
   .mechhead { margin: 0 0 .7rem; font-size: .95rem; font-weight: 600; }
   /* **R-10: 6×6, because the caption says 36 and a 9×4 grid does not show 6×6.** And the accent
      stops being a fill: 14 solid red cells were the largest painted red area in the product, and
      D87 spends red on the dice, the winner and the hit row — never on walls. Red is now an
      outline, so the share is still readable and the page is not. The other two tones are
      separable by lightness rather than by hue, and the key names them. */
-  .mechgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 22rem; }
+  .mechgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 22rem;
+               margin-inline: auto; }
   .mechgrid i { aspect-ratio: 1; border-radius: 2px; background: transparent;
                 border: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
   .mechgrid i.a { border: 1.5px solid var(--accent); background: transparent; }
@@ -1225,7 +1229,10 @@ createApp({
       // The kind (預報/觀測) is already printed on the line above, so repeating it here produced
       // 「預報 … 01:00 的預報」. What was missing is the RELATION between the two times: which hour
       // the reading is for, versus when we got it.
-      return `${hourLabel.value} 這一小時，${word}於 ${when.toLocaleString('zh-TW', { hour12: false })} · 資料版本 ${source.publication_id}`;
+      // M-9: two timestamps side by side left the reader to relate them. The sentence now says
+      // which hour the reading is FOR and when it was obtained, in that order, as one clause.
+      // D42 is why the second verb is 偵測 and not 發布 for a forecast.
+      return `${hourLabel.value} 這一小時的數字，${word}於 ${when.toLocaleString('zh-TW', { hour12: false })} · 資料版本 ${source.publication_id}`;
     });
 
     // ---------------- the circle half: device, round, reveal (tickets 19/20) ----------------
