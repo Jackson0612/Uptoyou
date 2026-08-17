@@ -255,6 +255,7 @@
     box-shadow: none; opacity: 1; cursor: not-allowed;
   }
   .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
+  .act.ghost.typed { margin-top: .55rem; }
 
   /* The round sheet. Its padding is a token so the fold's gutter and the sheet's margin
      grow together; every other `.card` on the surface keeps the padding it was ruled with. */
@@ -270,7 +271,16 @@
      one column, one reading order, phone unchanged. Above it the sheet folds once — left is
      what the table has settled (the pool), right is what you do next (propose, then roll). */
   .split { display: block; }
-  .colhead { display: none; }
+  /* **A9: the count was only visible above 760px, and at 2560 it sat 721px from the word it
+     counts.** A phone got a bare list with no heading; a desktop got a heading whose number had
+     drifted to the far edge. The label and its count are now one group at every width — the
+     heading is what tells you the list is 池子 rather than something else. */
+  .colhead {
+    display: flex; align-items: baseline; gap: .55rem;
+    margin: 0 0 .5rem; font-size: .8rem; font-weight: 500;
+    color: var(--muted); letter-spacing: .04em;
+  }
+  .colhead .count { font-variant-numeric: tabular-nums; }
   /* Every rule below carries the same `main:has(.sheet)` guard as the width above, so the
      fold and the room to hold it arrive together or not at all. */
   @media (min-width: 760px) {
@@ -279,14 +289,13 @@
     main:has(.sheet) .side-settled { padding-right: var(--fold); }
     main:has(.sheet) .side-pending { padding-left: var(--fold); border-left: 1px solid var(--line);
                     display: flex; flex-direction: column; }
-    /* The roll stays at the foot of the pending half instead of floating up beside the
-       candidates. Pinned by class, not `:last-child` — the error line follows it. */
-    main:has(.sheet) .side-pending .act.roll { margin-top: auto; }
+    /* **A15: the void.** Bottom-aligning 擲骰 to the pool column's height opened 40px of
+       nothing at three places and ~197px at six — the roll floated away from the form it
+       belongs to, and the gap grew as the pool grew. The propose group now top-aligns and the
+       roll sits under it. What was bought by the old rule was a stable button position; what it
+       cost was a hole in the middle of the screen, and the hole is worse. */
+    main:has(.sheet) .side-pending { justify-content: flex-start; }
     /* A column needs a label; a stack does not, which is why these appear with the columns. */
-    main:has(.sheet) .colhead { display: flex; align-items: baseline; justify-content: space-between;
-               gap: .5rem; margin: 0 0 .5rem; font-size: .8rem; font-weight: 500;
-               color: var(--muted); letter-spacing: .04em; }
-    main:has(.sheet) .colhead .count { font-variant-numeric: tabular-nums; }
     /* Once the column carries the heading 提案, the field label would say it a second time.
        One visible word, one job — so the label goes to screen readers only and the input
        keeps its accessible name. */
@@ -301,7 +310,11 @@
   @media (min-width: 1600px) { main:has(.sheet) .split { grid-template-columns: 1fr minmax(20rem, 25rem); } }
 
   .pool { list-style: none; margin: .9rem 0 0; padding: 0; }
-  .pool li { padding: .5rem 0; border-bottom: 1px solid var(--line); }
+  /* A16: `--line` measured 1.22:1 against the card. WCAG says nothing about decoration, but a
+     rule nobody can see is not decoration either — it is absence. `--edge` at low alpha keeps
+     the sheet reading as paper rather than as a framed box (the reason D-line/edge split
+     exists) while giving the round visible structure at 2560. */
+  .pool li { padding: .5rem 0; border-bottom: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
   .pool li:last-child { border-bottom: 0; }
   @media (min-width: 760px)  { main:has(.sheet) .pool li { padding: .65rem 0; } }
   @media (min-width: 1600px) { main:has(.sheet) .pool li { padding: .85rem 0; } }
@@ -313,14 +326,27 @@
     main:has(.sheet) .act { padding: .8rem; }
   }
 
-  .candidates { list-style: none; margin: .4rem 0 0; padding: 0; }
+  /* **A11: the list was unbounded, and typing grew the page by 285px** — which pushed the
+     free-text propose button 98px below the fold, so the one control that handles "my shop
+     isn't in this list" disappeared exactly when it was needed. Five rows and then it scrolls;
+     `overscroll-behavior: contain` so reaching the end of the list does not drag the page.
+
+     **A13: eleven identical outlined rectangles competed with the field that produced them.**
+     A result is a row in a list, not eleven buttons — chrome dropped, separated by rules, with
+     hover and focus doing the work the borders were doing badly. */
+  .candidates {
+    list-style: none; margin: .5rem 0 0; padding: 0;
+    max-height: 15.5rem; overflow-y: auto; overscroll-behavior: contain;
+    border-top: 1px solid var(--line);
+  }
+  .candidates li { border-bottom: 1px solid var(--line); }
   .candidates .pick {
-    font: inherit; width: 100%; text-align: left; padding: .45rem .6rem; margin-top: .25rem;
-    border-radius: .5rem; border: 1px solid var(--edge); background: transparent;
+    font: inherit; width: 100%; text-align: left; padding: .6rem .2rem;
+    border: 0; border-radius: .2rem; background: transparent;
     color: var(--ink); cursor: pointer;
   }
-  .candidates .pick:hover { border-color: var(--muted); }
-  .candidates .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .candidates .pick:hover { background: var(--paper); }
+  .candidates .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
   /* ---- the dice, and the roll's own moment (D91, ruled 2026-08-15) -----------------
      Each die is a cube of six faces built from real pips, replacing the Unicode faces
@@ -580,15 +606,18 @@
         <p class="colhead"><span>提案</span></p>
         <label class="fieldlabel" for="place-query">提案</label>
         <input id="place-query" v-model="query" placeholder="店名" autocomplete="off">
+        <!-- A12: this sits ABOVE the results, not below them. It answers "what I want is not
+             in this list", and that thought arrives while reading the list rather than after
+             scrolling past all of it — and below a capped, scrolling list it was unreachable. -->
+        <button v-if="query.trim() && !exactMatch" class="act ghost typed" @click="proposeTyped">
+          以「{{ query.trim() }}」提案
+        </button>
         <ul class="candidates" v-if="candidates.length">
           <li v-for="candidate in candidates"
               :key="candidate.kind + (candidate.registry_no || candidate.place_id)">
             <button class="pick" @click="pickCandidate(candidate)">{{ candidate.name }}</button>
           </li>
         </ul>
-        <button v-if="query.trim() && !exactMatch" class="act ghost" @click="proposeTyped">
-          以「{{ query.trim() }}」提案
-        </button>
 
         <button class="act roll" :disabled="!openRound.pool.length" @click="rollDice">擲骰</button>
         <p v-if="actionError" class="state bad">{{ actionError }}</p>
