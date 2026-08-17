@@ -11,10 +11,10 @@ lineage from any reading back to the run that wrote it.
 
 ## Stack
 
-- **API** — Python, FastAPI, SQLAlchemy 2.0, async end to end, 17 hand-written Alembic migrations
-- **Database** — PostgreSQL 17; Airflow's metadata is a second database in the same instance
+- **API** — Python, FastAPI, SQLAlchemy 2.0, async end to end, 19 hand-written Alembic migrations
+- **Database** — PostgreSQL 17 with the pgvector extension; Airflow's metadata is a second database in the same instance
 - **Orchestrator** — Apache Airflow 3, LocalExecutor, same compose stack
-- **Model** — Ollama serving `qwen2.5:3b-instruct-q4_K_M`, behind a compose profile
+- **Models** — Ollama behind a compose profile: three 3B-class generators under comparison (`gemma2:2b`, `qwen2.5:3b-instruct-q4_K_M`, `llama3.2:3b`) and three embedders for the retrieval crib (`bge-m3`, `qwen3-embedding:0.6b`, `snowflake-arctic-embed2`)
 - **Front end** — Vue 3 global build; no build step, no node, no CDN. nginx serves the files.
 
 ## The pipeline
@@ -96,10 +96,71 @@ name, and the exact string that was asked.** A legal-entity verdict is written a
 provenance present, category null, so re-runs never re-ask it. Batches commit as they go, so an
 interrupted seven-hour pass resumes where it stopped.
 
-**Set up to be measured, not asserted.** `evaluate/testset_v1.json` is a frozen, hand-labeled set of
-**200 names**, drawn deterministically — fixed seed, stratified by which layer of the ladder supplied
+**Set up to be measured, not asserted.** `evaluate/testset_v1.json` is a frozen, teacher-labeled set of
+**200 names** — labels drafted by a frontier model and cross-checked by a second, so a score reads
+"agreement with the teacher", never ground truth —, drawn deterministically — fixed seed, stratified by which layer of the ladder supplied
 the name, floor of 30 per layer so the small sign and brand strata stay scorable. Frozen so scores
 stay comparable across prompt versions, which carry a version string that changes with the text.
+
+## Key technical decisions
+
+Eight choices, each with what was rejected and the number that decided it. The full argument for
+every one — and for the eighty-odd smaller ones — lives in the private design log; this is the
+digest a reader of the code should have.
+
+**1. Classification runs on a local 3B model; the cloud model is a yardstick, not a worker.**
+*Chosen:* a quantized 3B generator on the same box as the database, batch-only, off unless a
+backfill runs. *Rejected:* a hosted model as the classifier. *The number:* the free hosted tier
+allows 500 calls a day, so 3,300 places take seven days; the local model does them in one night —
+and the hosted model's score is kept, as the line the local ones are measured against.
+
+**2. Missing knowledge is added as data, not as prompt text or weights.**
+*Chosen:* a retrieval crib — labeled example names embedded into pgvector, the five nearest handed
+to the model as worked examples. *Rejected:* another prompt revision; fine-tuning. *The number:*
+the prompt revision (v4) *lost* points on the frozen set (gemma 51.5→49.5); retrieval on the same
+set moved gemma2:2b 51.5→61.0 and llama3.2:3b 37.0→58.0, and qwen2.5:3b 51.0→48.5 — the same crib
+reads as noise to one model, which is why the pairing is measured rather than assumed.
+
+**3. Vector search is a Postgres extension, not a second service.**
+*Chosen:* `pgvector` on the database already in the stack. *Rejected:* a dedicated vector store
+(Pinecone, Milvus, Qdrant). *The number:* the crib is 537 rows across three embedders — thousands
+at most — and the deployment target is a 2 GB-class instance; one image tag against one more
+stateful service to run, back up and monitor.
+
+**4. The evaluation set is frozen, stratified, and its authorship is stated.**
+*Chosen:* 200 names, fixed seed, stratified over the three name layers with a floor of 30, labels
+by a teacher model with a second model's cross-check, provenance recorded per row. *Rejected:*
+scoring against live rows; owner-only labeling (planned, not executed — recorded as such). *The
+number:* the frozen set caught a prompt that read better and scored worse, which is the only thing
+a fixed set exists to do; every report carries the set's sha256 so two scores compare only when it
+matches.
+
+**5. A shop's name is resolved down a ladder — sign, then brand, then registered name.**
+*Chosen:* three sources joined by registry number, precedence fixed, no fuzzy name matching.
+*Rejected:* the registered name alone; string similarity across sources. *The number:* 40.2% of
+registered names are legal-entity strings that name no shop at all; the sign join needs no matching
+(1,686 rows, 1,379 joining the current publication); a trial of an outside geodata source
+false-joined 46% on address alone and was dropped.
+
+**6. Official industry codes decide only what they can, and that is one row in ten.**
+*Chosen:* the tax registry's codes rule where unambiguous, the model takes the rest. *Rejected:*
+codes as the classifier; ignoring codes entirely. *The number:* codes settle 10.9% of city rows;
+a coffee chain's 245 branches register under a wholesale code, so a code alone would mislabel every
+one of them.
+
+**7. Every source is content-addressed and its no-change days are recorded.**
+*Chosen:* a publication row per fetched file (hashed, deduplicated), a data row per record, and a
+run ledger where a no-change day writes a heartbeat. *Rejected:* overwrite-in-place; schedules
+guessed to match each file's cadence. *The number:* six daily DAGs, most days storing nothing and
+recording that — a silently broken source and a quiet one become distinguishable, which is the
+absence-vs-failure problem the ledger exists to solve.
+
+**8. The cloud serves; the home box computes; the ledger is the clock.**
+*Chosen:* a small EC2 instance runs the API and database; model batches run overnight on a home
+server and land through the same ingest ledger. *Rejected:* a resident model on EC2; all-cloud
+batches. *The number:* the API stack sits at ~1.6 GB resident without the model; the home box —
+4 cores / 8 threads, once its VM stopped masking AVX2 — takes a RAG-shaped batch at 12–19 s a name,
+one night for the whole city.
 
 ## Privacy
 
