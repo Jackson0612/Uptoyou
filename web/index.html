@@ -514,6 +514,15 @@
   .swap { animation: swapin 140ms ease-out; }
   @media (prefers-reduced-motion: reduce) { .swap { animation-duration: 1ms; } }
 
+  /* B2's confirmation sits where the button was, so nothing moves under the cursor except the
+     control itself gaining a line of consequence above it. */
+  .confirm { margin-top: 1.1rem; }
+  .confirm .confirmnote {
+    margin: 0 0 .6rem; font-size: .87rem; color: var(--ink);
+    padding-left: .7rem; border-left: 2px solid var(--accent);
+  }
+  .confirm .act.roll { margin-top: 0; }
+
   .stacked { margin-top: 1rem; }
 </style>
 </head>
@@ -683,7 +692,18 @@
           </li>
         </ul>
 
-        <button class="act roll" :disabled="!openRound.pool.length" @click="rollDice">擲骰</button>
+        <!-- B2: the roll is irreversible — it closes the round for every device in the circle and
+             nulls `proposal.member_id` in the same transaction (D14). Today it is a filled button
+             18px under a text input, which is what a propose form's submit key looks like. The
+             control replaces itself with its own confirmation rather than opening a modal: no
+             overlay, no focus trap, and the thing you are confirming stays on screen. -->
+        <button v-if="!rollArmed" class="act roll" :disabled="!openRound.pool.length"
+                @click="rollArmed = true">擲骰</button>
+        <div v-else class="confirm">
+          <p class="confirmnote">擲下去就定案。池子裡 {{ openRound.pool.length }} 家。</p>
+          <button class="act roll" @click="rollDice">擲骰</button>
+          <button class="act ghost" @click="rollArmed = false">再等等</button>
+        </div>
         <p v-if="actionError" class="state bad">{{ actionError }}</p>
       </section>
     </div>
@@ -873,6 +893,9 @@ createApp({
     const lastResult = ref(null);
     // D91: true only while the result being shown arrived as a live close.
     const tumble = ref(false);
+    // B2: the roll is armed, not fired. Cleared by every event that leaves this round, so a new
+    // round never opens already-armed from the last one.
+    const rollArmed = ref(false);
     const actionError = ref('');
     const query = ref('');
     const candidates = ref([]);
@@ -936,11 +959,13 @@ createApp({
         // is the difference between showing a record and staging an event that already
         // happened — and D56 sends a snapshot on every reconnect, so this is the common path.
         tumble.value = false;
+        rollArmed.value = false;
       } else if (event.type === 'round_opened') {
         openRound.value = event.round;
         // D54: the last result is superseded by the next round opening, not by a clock.
         lastResult.value = null;
         tumble.value = false;
+        rollArmed.value = false;
       } else if (event.type === 'pooled') {
         if (openRound.value && event.round_id === openRound.value.round_id
             && !openRound.value.pool.some((p) => p.place_id === event.place.place_id)) {
@@ -953,6 +978,7 @@ createApp({
         // so every device in the circle sees the same roll — D53 closes a round exactly once
         // and this is the surface's half of that promise.
         tumble.value = true;
+        rollArmed.value = false;
       }
     }
 
@@ -1104,7 +1130,7 @@ createApp({
       hasDevice, view, deviceForm, openRound, lastResult, actionError, query, candidates,
       saveDevice, openNewRound, pickCandidate, proposeTyped, rollDice, exactMatch,
       roundHourLabel, winnerName, resultRows, factorRows, channelLabel,
-      tumble, diceFaces, pipCells, landing, isRedFace,
+      tumble, rollArmed, diceFaces, pipCells, landing, isRedFace,
     };
   }
 }).mount('#app');
