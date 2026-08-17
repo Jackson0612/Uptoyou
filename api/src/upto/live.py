@@ -27,7 +27,14 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from .api_common import SINGLE_BRAND, STOREFRONT, place_names, resolve_member, result_body
+from .api_common import (
+    SINGLE_BRAND,
+    STOREFRONT,
+    compose_names,
+    place_names,
+    resolve_member,
+    result_body,
+)
 from .db import session_factory
 from .engine.table import allocate
 from .stream import subscribe
@@ -153,6 +160,8 @@ async def search_places(
                     text(
                         "select rp.registry_no, "
                         "coalesce(storefront.name, brand.brand_name, rp.name) as name, "
+                        "storefront.name as sign, brand.brand_name as brand, "
+                        "rp.name as registered, rp.address, "
                         "p.id as place_id "
                         "from reference_place rp "
                         "left join place p on p.registry_no = rp.registry_no "
@@ -191,16 +200,46 @@ async def search_places(
                     {"pub": latest_pub, "q": q},
                 )
             ).all()
+        # D92, composed here and nowhere else (owner-ruled 2026-08-18): the bracket says the
+        # name was derived from the registered address, and the collision that earns a
+        # bracket is judged against the whole publication, so the same site reads the same in
+        # this list, the pool and the reveal. `district` is B6's second line.
+        composed = await compose_names(
+            session,
+            [{"key": ("local", row.id), "own": row.name} for row in local]
+            + [
+                {
+                    "key": ("ref", row.registry_no),
+                    "own": None,
+                    "registry_no": row.registry_no,
+                    "sign": row.sign,
+                    "brand": row.brand,
+                    "registered": row.registered,
+                    "company": row.registered,
+                    "address": row.address,
+                }
+                for row in reference
+            ],
+        )
     return {
         "candidates": [
-            {"kind": "circle-local", "place_id": row.id, "name": row.name} for row in local
+            {
+                "kind": "circle-local",
+                "place_id": row.id,
+                "name": composed[("local", row.id)]["name"],
+                "name_source": "circle-local",
+                "district": None,
+            }
+            for row in local
         ]
         + [
             {
                 "kind": "reference",
                 "place_id": row.place_id,
                 "registry_no": row.registry_no,
-                "name": row.name,
+                "name": composed[("ref", row.registry_no)]["name"],
+                "name_source": composed[("ref", row.registry_no)]["name_source"],
+                "district": composed[("ref", row.registry_no)]["district"],
             }
             for row in reference
         ]

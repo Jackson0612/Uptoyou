@@ -52,21 +52,92 @@ STOREFRONT = (
 )
 
 
+LATEST_PLACE_PUBLICATION = (
+    "select id from place_publication order by detected_at desc, id desc limit 1"
+)
+
+
+async def compose_names(session, rows) -> dict[str, dict]:
+    """D92, executed once for every screen. `rows` is an iterable of mappings carrying
+    `key` (whatever the caller indexes by), `own` (a circle-local row's own words, or None),
+    `sign`, `brand`, `registered`, `company` (the registered company name — the collision
+    key), `address`. Returns, per key: `name` (what a person reads), `name_source`
+    (`circle-local` · `sign` · `brand` · `registered`), `district` (B6's second line, or None).
+
+    The collision is judged against the whole latest publication, not against the rows on
+    screen — so a name is the same in the search, the pool and the reveal (the frontend
+    session's "stable per brand"), and a branch does not gain a bracket because a sibling
+    happened to be searched for. The key is the registered company name among sign-less
+    sites: a signed site never collides (its sign is its name), and the brand is a function
+    of the company (D77's single-brand rule), so two sign-less sites of one company always
+    share their base name.
+    """
+    from . import naming  # noqa: PLC0415  (pure module; imported here to keep the header lean)
+
+    rows = list(rows)
+    out: dict[str, dict] = {}
+    pending: dict[str, list] = {}  # company -> rows that may need a bracket
+    for row in rows:
+        loc = naming.location(row.get("address"))
+        if row.get("own") is not None:
+            out[row["key"]] = {"name": row["own"], "name_source": "circle-local", "district": None}
+        elif row.get("sign"):
+            out[row["key"]] = {"name": row["sign"], "name_source": "sign", "district": loc.where_line}
+        else:
+            base = row.get("brand") or row.get("registered")
+            source = "brand" if row.get("brand") else "registered"
+            out[row["key"]] = {"name": base, "name_source": source, "district": loc.where_line}
+            if row.get("company") and base:
+                pending.setdefault(row["company"], []).append(row)
+    if not pending:
+        return out
+    # One query for every sign-less sibling of every company on screen, in the latest
+    # publication — the set that decides whether the base name collides.
+    siblings = (
+        await session.execute(
+            text(
+                "select rp.name as company, rp.registry_no, rp.address "
+                "from reference_place rp "
+                "where rp.publication_id = (" + LATEST_PLACE_PUBLICATION + ") "
+                "and rp.name in :companies "
+                "and not exists (" + STOREFRONT.format(registry="rp.registry_no") + ")"
+            ).bindparams(bindparam("companies", expanding=True)),
+            {"companies": list(pending)},
+        )
+    ).all()
+    by_company: dict[str, dict[str, str]] = {}
+    for sib in siblings:
+        by_company.setdefault(sib.company, {})[sib.registry_no] = sib.address
+    for company, company_rows in pending.items():
+        addresses = by_company.get(company, {})
+        if len(addresses) < 2:
+            continue
+        base = company_rows[0].get("brand") or company_rows[0].get("registered")
+        derived = naming.derive_names(base, addresses)
+        for row in company_rows:
+            derived_name = derived.get(row.get("registry_no"))
+            if derived_name:
+                out[row["key"]]["name"] = derived_name
+    return out
+
+
 async def place_names(session, place_ids) -> dict[int, str]:
     """Display names, most specific source first: a circle-local row's own words; the
     storefront sign for the site (D78); the brand when the company names exactly one (D77);
-    the registered name from the latest publication."""
+    the registered name from the latest publication — then D92's bracket when that base name
+    is shared by other sign-less sites of the same company (`compose_names`)."""
     ids = list(place_ids)
     if not ids:
         return {}
     rows = (
         await session.execute(
             text(
-                "select p.id, "
-                "coalesce(p.name, storefront.name, brand.brand_name, ref.name) as display_name "
+                "select p.id, p.name as own, p.registry_no, "
+                "storefront.name as sign, brand.brand_name as brand, "
+                "ref.name as registered, ref.name as company, ref.address "
                 "from place p "
                 "left join lateral ("
-                "  select rp.name from reference_place rp"
+                "  select rp.name, rp.address from reference_place rp"
                 "  join place_publication pp on pp.id = rp.publication_id"
                 "  where rp.registry_no = p.registry_no"
                 "  order by pp.detected_at desc limit 1"
@@ -80,7 +151,23 @@ async def place_names(session, place_ids) -> dict[int, str]:
             {"ids": ids},
         )
     ).all()
-    return {row.id: row.display_name for row in rows}
+    composed = await compose_names(
+        session,
+        (
+            {
+                "key": row.id,
+                "own": row.own,
+                "registry_no": row.registry_no,
+                "sign": row.sign,
+                "brand": row.brand,
+                "registered": row.registered,
+                "company": row.company,
+                "address": row.address,
+            }
+            for row in rows
+        ),
+    )
+    return {key: value["name"] for key, value in composed.items()}
 
 
 def result_body(
