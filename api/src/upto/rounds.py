@@ -41,6 +41,9 @@ from .engine.table import build as build_table
 from .engine.table import place_for
 from .stream import publish
 
+# Error `detail` strings a person can reach from the surface are product copy — the front end
+# prints them verbatim (D96/A10, 2026-08-17): plain 繁體中文, no spec citations. The 422 for a
+# malformed target_hour stays English because only a client bug, never a person, produces it.
 # No prefix: the proxy strips /api/ before forwarding (upto.conf's rewrite), so the app
 # serves /circles/... and the outside world sees /api/circles/... — same convention as
 # /weather. A prefix here once produced a proxy-only 404 the tests could not see.
@@ -129,10 +132,10 @@ async def propose(round_id: int, body: ProposeBody, request: Request, response: 
             )
         ).one_or_none()
         if round_row is None:
-            raise HTTPException(status_code=404, detail="no such round")
+            raise HTTPException(status_code=404, detail="找不到這一輪。")
         member = await _resolve_member(session, request, round_row.circle_id)
         if round_row.status != "open":
-            raise HTTPException(status_code=409, detail="the round is closed")
+            raise HTTPException(status_code=409, detail="這一輪已經擲過了。")
         place = (
             await session.execute(
                 text("select origin, circle_id from place where id = :p"),
@@ -144,7 +147,7 @@ async def propose(round_id: int, body: ProposeBody, request: Request, response: 
         if place is None or (
             place.origin == "circle-local" and place.circle_id != round_row.circle_id
         ):
-            raise HTTPException(status_code=404, detail="no such place")
+            raise HTTPException(status_code=404, detail="找不到這家店。")
         try:
             await session.execute(
                 text(
@@ -175,7 +178,7 @@ async def propose(round_id: int, body: ProposeBody, request: Request, response: 
                 return {"round_id": round_id, "place_id": body.place_id, "pooled": True}
             if "3 proposals" in message:
                 raise HTTPException(
-                    status_code=409, detail="three proposals per member per round (§3.0)"
+                    status_code=409, detail="一輪最多提三家。"
                 ) from None
             raise
     return {"round_id": round_id, "place_id": body.place_id, "pooled": True}
@@ -267,7 +270,7 @@ async def roll(round_id: int, request: Request) -> dict:
             )
         ).one_or_none()
         if round_row is None:
-            raise HTTPException(status_code=404, detail="no such round")
+            raise HTTPException(status_code=404, detail="找不到這一輪。")
         await _resolve_member(session, request, round_row.circle_id)
 
         if round_row.status == "closed":
@@ -314,7 +317,7 @@ async def roll(round_id: int, request: Request) -> dict:
         except EmptyPoolError:
             raise HTTPException(
                 status_code=409,
-                detail="nothing can be drawn — the pool is empty or fully at weight zero (D22)",
+                detail="池子是空的，或每一家的權重都是零，擲不出結果。",
             ) from None
         dice = (secrets.randbelow(6) + 1, secrets.randbelow(6) + 1)
         winner = place_for(table, dice[0], dice[1])
