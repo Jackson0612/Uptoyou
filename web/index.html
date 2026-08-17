@@ -275,11 +275,26 @@
      and inheriting that width would make an illustration the widest thing on the screen. */
   .mech { margin-top: 1.75rem; max-width: 40rem; }
   .mechhead { margin: 0 0 .7rem; font-size: .95rem; font-weight: 600; }
-  .mechgrid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; }
-  .mechgrid i { aspect-ratio: 1; border-radius: 1px; background: var(--line); }
-  .mechgrid i.a { background: var(--accent); }
-  .mechgrid i.b { background: color-mix(in srgb, var(--ink) 55%, var(--paper)); }
-  .mechgrid i.c { background: var(--edge); }
+  /* **R-10: 6×6, because the caption says 36 and a 9×4 grid does not show 6×6.** And the accent
+     stops being a fill: 14 solid red cells were the largest painted red area in the product, and
+     D87 spends red on the dice, the winner and the hit row — never on walls. Red is now an
+     outline, so the share is still readable and the page is not. The other two tones are
+     separable by lightness rather than by hue, and the key names them. */
+  .mechgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 22rem; }
+  .mechgrid i { aspect-ratio: 1; border-radius: 2px; background: transparent;
+                border: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
+  .mechgrid i.a { border: 1.5px solid var(--accent); background: transparent; }
+  .mechgrid i.b { background: color-mix(in srgb, var(--ink) 30%, transparent); border-color: transparent; }
+  .mechgrid i.c { background: color-mix(in srgb, var(--ink) 12%, transparent); border-color: transparent; }
+
+  .mechkey { list-style: none; margin: .8rem 0 0; padding: 0; display: flex;
+             flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .8rem; color: var(--muted); }
+  .mechkey li { display: flex; align-items: center; gap: .4rem; }
+  .mechkey i { width: 12px; height: 12px; border-radius: 2px; flex: none;
+               border: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
+  .mechkey i.a { border: 1.5px solid var(--accent); }
+  .mechkey i.b { background: color-mix(in srgb, var(--ink) 30%, transparent); border-color: transparent; }
+  .mechkey i.c { background: color-mix(in srgb, var(--ink) 12%, transparent); border-color: transparent; }
   .mechnote { margin: .8rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.6; }
 
   footer { margin-top: 1.5rem; color: var(--muted); font-size: .82rem; line-height: 1.6; }
@@ -336,6 +351,21 @@
     box-shadow: none; opacity: 1; cursor: not-allowed;
   }
   .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
+  /* **R-11: at rest the round screen had no primary control and 擲骰 was field-shaped.** R-2 gave
+     the ink fill to propose — correctly — but propose only exists once you have typed, so the
+     resting screen had nothing primary at all. Measured before this rule: the roll and the text
+     input 10px above it were both 345px wide with the same 1px solid border and near-identical
+     radius — a third field, not a button. Three separations, none of them colour:
+       · inset and pill-shaped, so it is not the input's twin;
+       · an ink border at rest, so the screen has one primary SHAPE without taking the fill R-2
+         assigned to propose;
+       · and the disabled state keeps a dashed border, which `.ghost` had been overriding — a dead
+         control pixel-identical to a live one is the defect A1 was supposed to end. */
+  .act.roll.ghost {
+    width: auto; min-width: 9rem; margin-left: auto; margin-right: auto;
+    border-radius: 999px; border: 1.5px solid var(--ink); padding-inline: 1.6rem;
+  }
+  .act.roll.ghost:disabled { border: 1.5px dashed var(--edge); color: var(--muted); }
 
   /* The round sheet. Its padding is a token so the fold's gutter and the sheet's margin
      grow together; every other `.card` on the surface keeps the padding it was ruled with. */
@@ -776,14 +806,22 @@
        an illustration in its own caption rather than left to look like a reading. -->
   <section class="mech">
     <p class="mechhead">三十六格是怎麼分的</p>
+    <p class="mechnote">上圖是示意，不是這一輪的數字。</p>
     <div class="mechgrid" aria-hidden="true">
-      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
-      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
-      <i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="c"></i><i class="c"></i>
-      <i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
+      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
+      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
+      <i class="a"></i><i class="a"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
+      <i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
+      <i class="b"></i><i class="b"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
+      <i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
     </div>
+    <ul class="mechkey">
+      <li><i class="a"></i>權重高的一家　14 格</li>
+      <li><i class="b"></i>中間的一家　12 格</li>
+      <li><i class="c"></i>權重低的一家　10 格</li>
+    </ul>
     <p class="mechnote">兩顆骰子共三十六種點數組合，每一種機會相等。權重決定每一家拿到幾格，
-      三十六格全部攤開。上圖是示意，不是這一輪的數字。</p>
+      三十六格全部攤開。</p>
   </section>
 
   <!-- The footer sits **inside the home screen, not in chrome**, and that is deliberate.
