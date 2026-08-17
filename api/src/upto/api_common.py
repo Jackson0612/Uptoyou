@@ -79,6 +79,9 @@ async def compose_names(session, rows) -> dict[str, dict]:
     pending: dict[str, list] = {}  # company -> rows that may need a bracket
     for row in rows:
         loc = naming.location(row.get("address"))
+        # R-6 (owner-ruled 2026-08-18): a registry footnote at the head of the registered
+        # name is read out before anything is composed; the stored row is untouched.
+        row = dict(row, registered=naming.strip_registry_footnote(row.get("registered")))
         if row.get("own") is not None:
             out[row["key"]] = {"name": row["own"], "name_source": "circle-local", "district": None}
         elif row.get("sign"):

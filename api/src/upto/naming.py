@@ -61,6 +61,26 @@ class Location:
         return joined or None
 
 
+# R-6, owner-ruled 2026-08-18: a registry footnote typed into the name field — 「(無市招)」 (no
+# sign), 「(重複登錄)」 (registered twice), 「(餐飲業)」 (the trade, no name) — is metadata in the
+# wrong column, not part of the name, and is stripped at read time only. Stored strings, join
+# keys and lineage never change. The list is closed on purpose: only these leading markers go,
+# never "any parenthesis" — D92's derived bracket is full-width and at the end. Measured
+# 2026-08-18: 3 rows of 36,499 carry one. If stripping leaves nothing, the string stays as it is
+# — nothing is invented.
+REGISTRY_FOOTNOTES = ("(無市招)", "(重複登錄)", "(餐飲業)")
+
+
+def strip_registry_footnote(name: Optional[str]) -> Optional[str]:
+    if not name:
+        return name
+    for marker in REGISTRY_FOOTNOTES:
+        if name.startswith(marker):
+            rest = name[len(marker):].strip()
+            return rest or name
+    return name
+
+
 def location(address: Optional[str]) -> Location:
     match = _ADDRESS.match(address or "")
     if match is None:

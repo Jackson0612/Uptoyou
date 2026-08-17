@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
-from upto.naming import derive_names, location  # noqa: E402
+from upto.naming import derive_names, location, strip_registry_footnote  # noqa: E402
 
 FAILURES = []
 
@@ -85,6 +85,14 @@ check("its sibling still bracketed", names["A"] == "麥當勞（內湖舊宗路1
 # --- one site alone never gains a bracket
 names = derive_names("阿宗麵線", {"A": "臺北市萬華區峨眉街8之1號"})
 check("single site bare", names["A"] == "阿宗麵線", repr(names))
+
+# --- R-6: registry footnotes at the head of the name are read out; nothing else is
+check("無市招 stripped", strip_registry_footnote("(無市招)52巷3姊妹麵攤") == "52巷3姊妹麵攤")
+check("重複登錄 stripped", strip_registry_footnote("(重複登錄)豪吐司早餐店") == "豪吐司早餐店")
+check("footnote alone stays", strip_registry_footnote("(餐飲業)") == "(餐飲業)")
+check("unknown marker untouched", strip_registry_footnote("(新開)小吃店") == "(新開)小吃店")
+check("D92 bracket untouched", strip_registry_footnote("麥當勞（內湖舊宗路1段）") == "麥當勞（內湖舊宗路1段）")
+check("None passes through", strip_registry_footnote(None) is None)
 
 if FAILURES:
     print("\n{} failing: {}".format(len(FAILURES), ", ".join(FAILURES)))

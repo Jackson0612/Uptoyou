@@ -81,6 +81,10 @@ async def scenario(test_url: str) -> None:
         "D-2": (CHAIN_B, "臺北市信義區市府路45號"),
         # An independent shop with a unique name.
         "I-1": ("啟祥早餐店", "臺北市松山區八德路4段1號"),
+        # R-6 (owner-ruled 2026-08-18): a registry footnote at the head of the name is read
+        # out; a name that is only a footnote stays as it is.
+        "F-1": ("(無市招)52巷3姊妹麵攤", "臺北市大同區延平北路2段1號"),
+        "F-2": ("(餐飲業)", "臺北市大同區延平北路2段2號"),
     }
 
     async with Session() as session:
@@ -172,6 +176,8 @@ async def scenario(test_url: str) -> None:
         "D-1": CHAIN_B,
         "D-2": "鼎泰豐-臺北101店",
         "I-1": "啟祥早餐店",
+        "F-1": "52巷3姊妹麵攤",
+        "F-2": "(餐飲業)",
     }
 
     # --- The pool reads the composed name — the one function every screen uses.
@@ -214,6 +220,9 @@ async def scenario(test_url: str) -> None:
         assert rows and rows[0]["kind"] == "circle-local", rows
         assert rows[0]["name"] == "巷口麵攤" and rows[0]["name_source"] == "circle-local", rows
         assert rows[0]["district"] is None, rows
+        ref = [c for c in rows if c["kind"] == "reference"]
+        assert [c["name"] for c in ref] == ["52巷3姊妹麵攤"], ref
+        assert ref[0]["registry_no"] == "F-1" and ref[0]["district"] == "大同區延平北路2段", ref
 
     await engine.dispose()
     from upto.db import dispose_all  # noqa: PLC0415
