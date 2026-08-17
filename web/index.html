@@ -415,17 +415,32 @@
      everyone at the table sees the same roll and nobody's browser is deciding anything.
      A reconnect's snapshot deliberately does NOT tumble — replaying an hour-old roll as
      drama would be the surface asserting an event that is not happening. */
-  /* The gap is not decorative: a tumbling cube sweeps wider than its own face, so at 1.1rem the
-     two dice passed through each other mid-roll. Half a die's width clears it. */
-  .dicebox { display: flex; align-items: center; justify-content: center; gap: 2.2rem;
-             font-variant-numeric: tabular-nums; padding: .4rem 0 .2rem; perspective: 900px; }
+  /* **R-5: the gap is computed from the body diagonal, not guessed.** A tumbling cube sweeps a
+     sphere of its body diagonal — edge × √3 — so two dice avoid each other only if their centre
+     distance exceeds that. Centre distance is `stage + gap`, so `gap >= diagonal − stage`, i.e.
+     0.732 × stage. My previous "half a die's width" was under that and the cubes still clipped at
+     the larger R-3 sizes. Set per tier from the measured diagonals (166 / 208 / 277px against
+     stages of 96 / 120 / 160). */
+  .dicebox { display: flex; align-items: center; justify-content: center; gap: 1rem;
+             font-variant-numeric: tabular-nums; padding: .4rem 0 .2rem; perspective: 900px;
+             flex-wrap: wrap; }
+  /* The computed distance belongs BETWEEN THE TWO DICE and nowhere else. Applied to `.dicebox` it
+     also spaced the sum, which took the row to 384px inside a 344px card at 430 — and flex then
+     shrank the stages from 96 to 89 while `--half` stayed at 48, so the cube came apart. The
+     failure was silent: no overflow, no error, just six faces that no longer close. */
+  .dicepair { display: flex; align-items: center; gap: 76px; }
+  @media (min-width: 760px)  { .dicepair { gap: 92px; } }
+  @media (min-width: 2100px) { .dicepair { gap: 124px; } }
   /* The die is this screen's subject, and 84px tall on a 2560 monitor is an icon. It scales with
      the tier — and `--land`'s translateZ has to scale with it or the six faces stop closing into a
      cube, which is why the depth is a variable rather than a literal. */
-  .stage { width: 62px; height: 62px; }
-  @media (min-width: 760px)  { .stage { width: 74px; height: 74px; } }
-  @media (min-width: 1200px) { .stage { width: 104px; height: 104px; } }
-  @media (min-width: 1600px) { .stage { width: 132px; height: 132px; } }
+  /* **R-3: 62px was 9.5% of a 760px phone screen, on the screen whose subject it is.** 96px at
+     430 takes the dice plus the sum to ~30% of the viewport. The tiers collapse to three, not
+     five: 1200 and 1600 shared a 120px value with 900 once the sizes grew, and a tier that
+     changes nothing is a number to keep in step for no reason. */
+  /* `flex: none` because a silently shrunk stage IS a broken cube — see above. */
+  .stage { flex: none; width: 96px; height: 96px; }
+  @media (min-width: 760px)  { .stage { width: 120px; height: 120px; } }
   @media (min-width: 2100px) { .stage { width: 160px; height: 160px; } }
   .cube { position: relative; width: 100%; height: 100%;
           transform-style: preserve-3d; transform: var(--land); }
@@ -443,10 +458,9 @@
   /* translateZ is half the die's width, so the six faces close into a cube. **One variable, not
      six literals per tier** — B4 added three more tiers and the literal version would have been
      twenty-four hand-kept numbers whose only job is to stay equal to half of another number. */
-  .dicebox { --half: 31px; }
-  @media (min-width: 760px)  { .dicebox { --half: 37px; } }
-  @media (min-width: 1200px) { .dicebox { --half: 52px; } }
-  @media (min-width: 1600px) { .dicebox { --half: 66px; } }
+  /* Exactly half the stage at every tier, or the six faces stop closing into a cube. */
+  .dicebox { --half: 48px; }
+  @media (min-width: 760px)  { .dicebox { --half: 60px; } }
   @media (min-width: 2100px) { .dicebox { --half: 80px; } }
   .f1 { transform: translateZ(var(--half)); }
   .f6 { transform: rotateY(180deg) translateZ(var(--half)); }
@@ -456,13 +470,27 @@
   .f2 { transform: rotateX(-90deg) translateZ(var(--half)); }
   .pip { border-radius: 50%; background: var(--pip); width: 74%; aspect-ratio: 1;
          align-self: center; justify-self: center; }
-  /* Front keeps the measured fill; the others step down, darkest on the faces a viewer only
-     sees edge-on mid-roll, so the landed face is always the brightest one. */
-  .f1 { background: var(--diefill); }
-  .f6 { background: color-mix(in srgb, var(--diefill) 88%, var(--ink)); }
-  .f3, .f4 { background: color-mix(in srgb, var(--diefill) 94%, var(--ink)); }
-  .f5 { background: color-mix(in srgb, var(--diefill) 97%, var(--ink)); }
-  .f2 { background: color-mix(in srgb, var(--diefill) 91%, var(--ink)); }
+  /* **R-4: the shading is motion-only.** Two stopped dice must be one object — measured before
+     this change, one landed on 239,237,233 and the other on 252,250,246, a 13-unit difference
+     that reads as two dice from two different sets on the screen where the product asks to be
+     believed. So the step is scoped to `.tumble`: while it rotates the faces are lit differently
+     (which is what makes a rotating cube legible), and the landed state has every face on the
+     one measured `--diefill`.
+
+     **This is a `background-color` change at the 900ms boundary and nothing else** — D91 rules
+     that nothing may MOVE when the answer arrives, and no geometry, size or position is touched
+     here, so the zero-layout-shift guarantee is untouched.
+
+     **R-5's dark half needed no second set of values, and that is a measurement not a shortcut.**
+     The step is expressed against `--diefill`, which already differs per mode, so the same
+     percentages produce a proportional dark ladder. Pip contrast on the darkest face: 4.07:1
+     light, **3.50:1 dark** — both clear of the 3.0 a graphical object needs. What round 2
+     measured as "dark spans 0.15pp" was the landed state, which R-4 has now flattened anyway. */
+  .dicebox.tumble .f1 { background: var(--diefill); }
+  .dicebox.tumble .f6 { background: color-mix(in srgb, var(--diefill) 88%, var(--ink)); }
+  .dicebox.tumble .f3, .dicebox.tumble .f4 { background: color-mix(in srgb, var(--diefill) 94%, var(--ink)); }
+  .dicebox.tumble .f5 { background: color-mix(in srgb, var(--diefill) 97%, var(--ink)); }
+  .dicebox.tumble .f2 { background: color-mix(in srgb, var(--diefill) 91%, var(--ink)); }
 
   .pip.red { background: var(--pipred); }
 
@@ -799,6 +827,7 @@
   <div v-if="view === 'round' && !openRound" class="revealband">
     <div v-if="lastResult" class="card">
       <div class="dicebox" :class="{ tumble: tumble }">
+        <div class="dicepair">
         <div class="stage" v-for="(face, i) in diceFaces" :key="i">
           <div class="cube" :style="{ '--land': landing(face) }">
             <div v-for="f in 6" :key="f" class="face" :class="'f' + f">
@@ -807,6 +836,7 @@
                     :style="{ gridArea: cell }"></span>
             </div>
           </div>
+        </div>
         </div>
         <span class="dicesum" v-if="lastResult.sum">＝ {{ lastResult.sum }}</span>
       </div>
