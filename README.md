@@ -104,7 +104,7 @@ stay comparable across prompt versions, which carry a version string that change
 
 ## Key technical decisions
 
-Eight choices, each with what was rejected and the number that decided it. The full argument for
+Nine choices, each with what was rejected and the number that decided it. The full argument for
 every one — and for the eighty-odd smaller ones — lives in the private design log; this is the
 digest a reader of the code should have.
 
@@ -140,20 +140,25 @@ matches.
 *Rejected:* the registered name alone; string similarity across sources. *The number:* 40.2% of
 registered names are legal-entity strings that name no shop at all; the sign join needs no matching
 (1,686 rows, 1,379 joining the current publication); a trial of an outside geodata source
-false-joined 46% on address alone and was dropped.
+false-joined 46% on address alone and was dropped. Measured across sources: the sign differs
+from the registered name on 93% of the rows that have one, and the brand table renames 57% of
+the companies it covers — the ladder is doing work, not decoration.
 
 **6. Official industry codes decide only what they can, and that is one row in ten.**
 *Chosen:* the tax registry's codes rule where unambiguous, the model takes the rest. *Rejected:*
 codes as the classifier; ignoring codes entirely. *The number:* codes settle 10.9% of city rows;
 a coffee chain's 245 branches register under a wholesale code, so a code alone would mislabel every
-one of them.
+one of them. The join itself is safe — 99.78% name agreement once the legal-form suffix is
+stripped — and the address is not: 89.8% differ, 13.7% are registered outside the city.
 
 **7. Every source is content-addressed and its no-change days are recorded.**
 *Chosen:* a publication row per fetched file (hashed, deduplicated), a data row per record, and a
 run ledger where a no-change day writes a heartbeat. *Rejected:* overwrite-in-place; schedules
 guessed to match each file's cadence. *The number:* six daily DAGs, most days storing nothing and
 recording that — a silently broken source and a quiet one become distinguishable, which is the
-absence-vs-failure problem the ledger exists to solve.
+absence-vs-failure problem the ledger exists to solve. Proven, not assumed: every source is
+idempotent on identical bytes (every column of every table compared, `tests/test_ingest_idempotency.py`),
+and the no-change path costs 1.6 s against 15–19 s for a real store.
 
 **8. The cloud serves; the home box computes; the ledger is the clock.**
 *Chosen:* a small EC2 instance runs the API and database; model batches run overnight on a home
@@ -161,6 +166,17 @@ server and land through the same ingest ledger. *Rejected:* a resident model on 
 batches. *The number:* the API stack sits at ~1.6 GB resident without the model; the home box —
 4 cores / 8 threads, once its VM stopped masking AVX2 — takes a RAG-shaped batch at 12–19 s a name,
 one night for the whole city.
+
+**9. Substring search stays a sequential scan; the trigram index was measured and rejected.**
+*Chosen:* leave the typeahead's `ILIKE '%q%'` as it is. *Rejected:* `pg_trgm` + GIN on the three
+searched columns; rewriting to the similarity operator. *The number:* the index changed the plan
+for 0 of 31 realistic queries and left p50 at 311 → 324 ms, because the predicate ORs a base
+column against two lateral outputs so the filter cannot reach the index — and because the
+cluster's deterministic `C` locale makes `pg_trgm` emit no trigrams for 96.2% of the names. The
+similarity rewrite returned zero rows for every CJK query and was refused. The scan was never the
+cost: the reference table is ~1% of the query's buffers; a per-row lateral brand lookup executed
+35,533 times per keystroke is 93%, and expressing it as one grouped join is 61× fewer buffers
+with a provably identical result — a separate, pending change.
 
 ## Diagrams
 
