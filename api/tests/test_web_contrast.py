@@ -23,7 +23,7 @@ import unittest
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "web")
 HOME = os.path.join(WEB, "index.html")
 
-TOKENS = ("ink", "paper", "muted", "line", "edge", "raised", "accent")
+TOKENS = ("ink", "paper", "muted", "line", "edge", "raised", "accent", "pip", "pipred", "diefill")
 
 # (foreground, background, floor, where the pair actually meets on the page)
 PAIRS = [
@@ -36,6 +36,12 @@ PAIRS = [
     ("accent", "raised", 4.5, "the hit row inside the allocation table"),
     ("edge", "paper", 3.0, "an unselected pill's only boundary"),
     ("edge", "raised", 3.0, "the same boundary if pills move onto a card"),
+    # D91: pips are graphical objects, not text, so the UI floor applies. The red pip has its
+    # own token, --pipred, one value in both modes — --accent flips lighter in dark (a UI accent
+    # on a dark page must) while the die face does not (an object, not a surface), and the two
+    # light values stacked measured 2.74:1. Paint on a die is the same paint with the lights off.
+    ("pipred", "diefill", 3.0, "the red 1 and 4 pips on a die face"),
+    ("pip", "diefill", 3.0, "a black pip on a die face"),
 ]
 
 
