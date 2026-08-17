@@ -565,7 +565,11 @@
   <!-- chrome -->
   <header>
     <h1>Up to you</h1>
-    <p class="promise">決定一頓飯，不用有人先犧牲。</p>
+    <!-- B7: the tagline renders on home and device only. It is positioning, not wayfinding, and
+         at 430x760 h1 + tagline + tabs consumed 175px — 23% of the viewport — on the screen where
+         the round's own state got 30px. The h1 stays everywhere; the promise goes where somebody
+         is still deciding whether to use this, not where they are already using it. -->
+    <p class="promise" v-if="view === 'home' || view === 'device'">決定一頓飯，不用有人先犧牲。</p>
     <!-- A2: `hasDevice` is true the moment localStorage holds two strings, which is BEFORE the
          stream has said whether they work. On a bad key the tabs appeared while the card below
          still said this device had none. Gating on the view as well means the tabs arrive when
