@@ -160,14 +160,29 @@
 
   /* The township picker. A circle would supply this; there are no circles yet, so it is
      chosen here and that is stated in the footer rather than hidden. */
+  /* **A pill is 45px tall, not 34px, and that is an accessibility floor rather than a taste.**
+     Measured at 430px: both the tabs and the township pills were 34px, against the 44px
+     minimum a touch target needs — on a phone-first surface, where the picker is the only
+     control on the home screen. The fix is vertical padding, so the pills read chunkier and
+     the picker grew about 33px taller. That visible cost is the honest one; the alternative
+     considered was an invisible expanded hit area via `::after`, and it was rejected because
+     at this row gap the expanded boxes of adjacent rows overlap by ~6px, which hands taps
+     near the boundary to whichever pill sits later in the DOM. A control that is hard to hit
+     is better than one that is easy to hit wrongly.
+
+     **Focus rings, added because there were none anywhere on the surface** — `focus-visible`
+     appeared zero times in this file. Every pill, button and field now shows where the
+     keyboard is, and `:focus-visible` rather than `:focus` so a mouse click does not leave a
+     ring behind. */
   .picker { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
   .picker button {
-    font: inherit; font-size: .85rem; padding: .3rem .7rem; border-radius: 999px;
+    font: inherit; font-size: .85rem; padding: .65rem .9rem; border-radius: 999px;
     /* `--edge`, not `--line`: this is the only boundary an unselected pill has. */
     border: 1px solid var(--edge); background: transparent; color: var(--muted);
     cursor: pointer; transition: color .12s, border-color .12s;
   }
   .picker button:hover { color: var(--ink); border-color: var(--muted); }
+  .picker button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .picker button[aria-pressed="true"] {
     color: var(--paper); background: var(--ink); border-color: var(--ink);
   }
@@ -203,9 +218,10 @@
   /* The circle half — tickets 19/20's screens. Same tokens, same paper. */
   .tabs { display: flex; gap: .35rem; margin-top: .9rem; }
   .tabs button {
-    font: inherit; font-size: .85rem; padding: .3rem .8rem; border-radius: 999px;
+    font: inherit; font-size: .85rem; padding: .65rem 1rem; border-radius: 999px;
     border: 1px solid var(--edge); background: transparent; color: var(--muted); cursor: pointer;
   }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .tabs button[aria-pressed="true"] { color: var(--paper); background: var(--ink); border-color: var(--ink); }
 
   .fieldlabel { display: block; color: var(--muted); font-size: .87rem; margin: .9rem 0 .25rem; }
@@ -213,13 +229,14 @@
     font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .55rem;
     border: 1px solid var(--edge); background: var(--paper); color: var(--ink);
   }
-  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   .act {
     font: inherit; display: block; width: 100%; margin-top: 1.1rem; padding: .65rem;
     border-radius: .6rem; border: 1px solid var(--ink); background: var(--ink);
     color: var(--paper); cursor: pointer; font-weight: 550;
   }
+  .act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .act:disabled { opacity: .45; cursor: default; }
   .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
 
@@ -287,6 +304,7 @@
     color: var(--ink); cursor: pointer;
   }
   .candidates .pick:hover { border-color: var(--muted); }
+  .candidates .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   /* ---- the dice, and the roll's own moment (D91, ruled 2026-08-15) -----------------
      Each die is a cube of six faces built from real pips, replacing the Unicode faces
