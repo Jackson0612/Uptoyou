@@ -3,6 +3,7 @@
 - **candidate**: `qwen`
 - **model**: `qwen2.5:3b-instruct-q4_K_M`
 - **prompt version**: `v5-rag-2026-08-15`
+- **retrieval (D88)**: `bge-m3`, k=5
 - **started / finished**: 2026-08-15T00:10:59+00:00 → 2026-08-15T04:03:08+00:00
 - **test set**: `testset_v1.json`
 - **test set sha256**: `fd711a7483fd5d8bb894d35c62654219156d1ba144a129649058084d0963b2a0`

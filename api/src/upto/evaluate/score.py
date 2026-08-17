@@ -205,6 +205,14 @@ def render(round_doc: dict, scored: list[dict], stale: list[dict], unanswered: l
     lines.append(f"- **candidate**: `{candidate}`")
     lines.append(f"- **model**: `{round_doc.get('model', '?')}`")
     lines.append(f"- **prompt version**: `{round_doc.get('prompt_version', '?')}`")
+    # D88's second axis, printed only for a retrieval round. Without it the nine cells of the
+    # 3-embedder × 3-generator matrix render identical headers — the prompt version is the
+    # same for all nine by design (the embedder is a retrieval variable, not a prompt one), so
+    # the embedding model is the only thing on the page that tells two of them apart.
+    retrieval = round_doc.get("rag")
+    if retrieval:
+        lines.append(f"- **retrieval (D88)**: `{retrieval.get('embed_model', '?')}`, "
+                     f"k={retrieval.get('k', '?')}")
     lines.append(f"- **started / finished**: {round_doc.get('started_at', '?')} → "
                  f"{round_doc.get('finished_at') or '(unfinished)'}")
     lines.append(f"- **test set**: `{os.path.basename(testset_path)}`")

@@ -4,12 +4,25 @@
     docker compose exec api python -m upto.evaluate.run_round qwen   # or gemma, llama
     python3 -m upto.evaluate.run_round gemini          # host-side; the key never enters the stack
     docker compose exec api python -m upto.evaluate.run_round qwen --rag   # D88
+    docker compose exec api python -m upto.evaluate.run_round qwen --rag --embed arctic
 
 **`--rag` is a second prompt, not a second runner.** It asks through
 `classify_name_rag` with five retrieved neighbours from `example_embedding` (D88), stamps
 `RAG_PROMPT_VERSION`, and therefore writes `round_<name>_v5-rag-2026-08-15.json` — a
 different file, so resume, model-pinning and the scorer all work unchanged and no round is
 ever mixed with a plain one.
+
+**`--embed` is the second axis, and the prompt version does not move with it.** D88's
+amendment, owner-ruled 2026-08-17: the matrix is 3 embedders × 3 generators, and the embedder
+is a *retrieval* variable — the prompt text is byte-identical whichever one retrieved the
+cribs, so bumping `RAG_PROMPT_VERSION` would claim a change that did not happen. The file
+name carries the embedder instead: **`bge` keeps the existing
+`round_<name>_v5-rag-2026-08-15.json`**, because the three rounds already scored under it
+were embedded by bge-m3 and are the matrix's first column — renaming them would be re-running
+them for nothing — and every other embedder appends its key,
+`round_<name>_v5-rag-2026-08-15_<key>.json`. The round document records `rag.embed_model` and
+`rag.embed_key`, and a stored round refuses to be continued by a different embedder for the
+same reason it refuses a different generator: one round is one measurement.
 
 **`gemini --rag` is refused, and it is a rule rather than a limitation.** The crib carries
 the owner's gold labels, and gold does not leave this machine; the hosted baseline stays at
@@ -67,6 +80,9 @@ import urllib.request
 from datetime import datetime, timezone
 
 from upto.classify.classify import Classified, NoSignal, classify_name, classify_name_rag
+# `upto.classify.embed` is standard library only — it reaches Ollama over urllib and nothing
+# else — so naming it here does not break the import discipline `examples` is kept out for.
+from upto.classify.embed import DEFAULT_EMBED_KEY, EMBED_MODELS
 from upto.classify.prompt import NO_SIGNAL, PROMPT_VERSION, RAG_PROMPT_VERSION
 from upto.evaluate.score import TESTSET_PATH, load_testset
 
@@ -144,8 +160,19 @@ def evaluation_dir(start: str | None = None) -> str:
         path = parent
 
 
-def round_path(candidate: str, prompt_version: str = PROMPT_VERSION) -> str:
-    return os.path.join(evaluation_dir(), f"round_{candidate}_{prompt_version}.json")
+def round_path(candidate: str, prompt_version: str = PROMPT_VERSION,
+               embed_key: str | None = None) -> str:
+    """Where a round is written. `embed_key` is D88's second axis and `bge` is spelled by omission.
+
+    The default embedder appends nothing, and that is a compatibility rule rather than
+    tidiness: `round_qwen_v5-rag-2026-08-15.json` and its two siblings are already scored and
+    committed as the bge column of the matrix (2026-08-15), and a suffix here would make them
+    unreachable by the runner that wrote them.
+    """
+    suffix = ""
+    if embed_key and embed_key != DEFAULT_EMBED_KEY:
+        suffix = "_" + embed_key
+    return os.path.join(evaluation_dir(), f"round_{candidate}_{prompt_version}{suffix}.json")
 
 
 def save(path: str, document: dict) -> None:
@@ -375,7 +402,7 @@ def answer_row(index: int, gold_row: dict, ask, examples_for=None) -> dict:
     return row
 
 
-def rag_examples(digest: str):
+def rag_examples(digest: str, embed_model: str):
     """D88's per-name crib lookup, or a UsageError if the store cannot honestly supply one.
 
     **Imported here rather than at module level, and that is load-bearing.** The example
@@ -383,30 +410,36 @@ def rag_examples(digest: str):
     and that test asserts this module imports nothing beyond the standard library and
     `upto.classify`. A plain round must stay runnable there.
 
-    The digest check is the stale-cache refusal: the table is a derived copy of
-    `testset_v1.json` (0018), D82 freezes that file against re-drawing but not against the
-    owner's corrections, and a round asked with cribs built from amended-away labels would
-    report a number about neither set.
+    The digest check is the stale-cache refusal, and after 0019 it is **per embedder**: the
+    table is a derived copy of `testset_v1.json`, D82 freezes that file against re-drawing but
+    not against the owner's corrections, and a round asked with cribs built from amended-away
+    labels would report a number about neither set. Each embedder's rows carry their own
+    digest, so a fresh load of one says nothing about the staleness of another.
+
+    Both the query vector and the neighbour search name the same `embed_model`. That is the
+    whole of what keeps a round inside one vector space: an embedder asked for the query and
+    a different one's rows searched would return five well-formed neighbours of nothing.
     """
     from upto.classify import embed as embedding
     from upto.classify import examples as example_store
 
-    stored = example_store.stored_sha_sync()
+    stored = example_store.stored_sha_sync(embed_model)
     if stored is None:
         raise UsageError(
-            "example_embedding is empty — D88's crib has never been loaded. Run "
-            "`docker compose exec api python -m upto.classify.examples load` first."
+            f"example_embedding holds no {embed_model} rows — D88's crib has never been loaded "
+            "for this embedder. Run `docker compose exec api python -m upto.classify.examples "
+            f"load --embed <key>` first; `… examples status` lists what is loaded."
         )
     if stored != digest:
         raise UsageError(
-            f"example_embedding was built from test set {stored} and the file now hashes to "
-            f"{digest} — the owner amended a label under the crib. Re-run "
-            "`docker compose exec api python -m upto.classify.examples load`."
+            f"example_embedding's {embed_model} rows were built from test set {stored} and the "
+            f"file now hashes to {digest} — the owner amended a label under the crib. Re-run "
+            "`docker compose exec api python -m upto.classify.examples load --embed <key>`."
         )
 
     def examples_for(name: str) -> list[tuple[str, str]]:
         try:
-            vector = embedding.embed([name])[0]
+            vector = embedding.embed([name], model=embed_model)[0]
         except embedding.EmbedUnavailable as error:
             raise ComeBackLater(
                 f"{error} — the embedding model sits behind the same compose profile as the "
@@ -414,12 +447,20 @@ def rag_examples(digest: str):
             ) from None
         # Leave-one-out: the asked name is itself in the store, and retrieving its own gold
         # row would hand the model the exam answer (D82, D88).
-        neighbours = example_store.nearest_sync(vector, k=RAG_K, exclude_name=name)
+        neighbours = example_store.nearest_sync(
+            vector, embed_model, k=RAG_K, exclude_name=name
+        )
         # Three-element cribs: the prompt prints the subtype when the store holds one, and
         # NULL everywhere is what the frozen set gives today (0018).
         return [(row["name"], row["label"], row["subtype"]) for row in neighbours]
 
-    return examples_for, embedding.EMBED_MODEL
+    return examples_for
+
+
+USAGE = (
+    "usage: python -m upto.evaluate.run_round <qwen|gemma|llama|gemini> "
+    "[--rag [--embed <{}>]]".format("|".join(EMBED_MODELS))
+)
 
 
 def main(argv: list[str]) -> int:
@@ -427,9 +468,46 @@ def main(argv: list[str]) -> int:
     rag = "--rag" in arguments
     if rag:
         arguments.remove("--rag")
+    embed_key: str | None = None
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--embed":
+            if index + 1 >= len(arguments):
+                print(USAGE, file=sys.stderr)
+                return 2
+            embed_key = arguments[index + 1]
+            del arguments[index : index + 2]
+            continue
+        if argument.startswith("--embed="):
+            embed_key = argument.split("=", 1)[1]
+            del arguments[index]
+            continue
+        index += 1
     if len(arguments) != 1 or arguments[0].startswith("-"):
-        print("usage: python -m upto.evaluate.run_round <qwen|gemma|llama|gemini> [--rag]",
-              file=sys.stderr)
+        print(USAGE, file=sys.stderr)
+        return 2
+    if embed_key is not None and not rag:
+        # An embedder is a retrieval setting and a plain round retrieves nothing. Accepting it
+        # here would write a round file whose name and metadata claimed a variable the run
+        # never used.
+        print(
+            "--embed only means something with --rag: a plain round retrieves no examples, so "
+            "there is no embedding model in it to choose.",
+            file=sys.stderr,
+        )
+        return 2
+    # `is None`, not `or`: an empty `--embed ''` is a typo to refuse, not an omission to
+    # default. Falling back would run a bge round under a command that asked for something.
+    if embed_key is None:
+        embed_key = DEFAULT_EMBED_KEY
+    if rag and embed_key not in EMBED_MODELS:
+        print(
+            f"unknown embedder {embed_key!r} — it is one of {', '.join(EMBED_MODELS)}. The key "
+            "is pinned to a model string in `upto.classify.embed`, because a round is a "
+            "measurement of one named model.",
+            file=sys.stderr,
+        )
         return 2
     name = arguments[0]
     if rag and name == "gemini":
@@ -451,7 +529,7 @@ def main(argv: list[str]) -> int:
 
     gold_rows, digest = load_testset()
     prompt_version = RAG_PROMPT_VERSION if rag else PROMPT_VERSION
-    path = round_path(name, prompt_version)
+    path = round_path(name, prompt_version, embed_key if rag else None)
 
     examples_for = None
     document = {
@@ -465,12 +543,16 @@ def main(argv: list[str]) -> int:
         "rows": [],
     }
     if rag:
+        embed_model = EMBED_MODELS[embed_key]
         try:
-            examples_for, embed_model = rag_examples(digest)
+            examples_for = rag_examples(digest, embed_model)
         except UsageError as error:
             print(str(error), file=sys.stderr)
             return 2
-        document["rag"] = {"embed_model": embed_model, "k": RAG_K}
+        # `embed_model` is the pinned string and `embed_key` is what was typed. Both are kept:
+        # the string is what a later reader has to match a vector space against, the key is
+        # what names this cell of the matrix and what the file name carries.
+        document["rag"] = {"embed_model": embed_model, "embed_key": embed_key, "k": RAG_K}
     if os.path.exists(path):
         with open(path, encoding="utf-8") as handle:
             existing = json.load(handle)
@@ -491,6 +573,21 @@ def main(argv: list[str]) -> int:
                 file=sys.stderr,
             )
             return 2
+        if rag:
+            # The third pin, and it is the same rule as the other two: one round is one
+            # measurement. A file half-answered under bge-m3's neighbours and half under
+            # arctic's would score a candidate that never existed — and unlike the generator,
+            # this one is invisible in the file name for the default embedder, which is
+            # exactly why it has to be refused from the metadata.
+            stored_embed = (existing.get("rag") or {}).get("embed_model")
+            if stored_embed and stored_embed != embed_model:
+                print(
+                    f"{path} was answered with cribs retrieved by {stored_embed} and this run "
+                    f"would retrieve with {embed_model}. One round is one embedding model — "
+                    "move the file aside and start a round for the new one.",
+                    file=sys.stderr,
+                )
+                return 2
         kept, start = resume_point(existing.get("rows", []), gold_rows)
         # The stored document wins, then this run's own facts are written back over it — the
         # model it will actually answer with, and D88's retrieval settings, which describe
@@ -508,7 +605,7 @@ def main(argv: list[str]) -> int:
     else:
         start = 0
         print(f"new round: {name} against {len(gold_rows)} names, prompt {prompt_version}"
-              + (f", {RAG_K} retrieved examples each" if rag else ""))
+              + (f", {RAG_K} examples each retrieved by {embed_model}" if rag else ""))
 
     try:
         candidate.check()

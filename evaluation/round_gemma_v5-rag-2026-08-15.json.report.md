@@ -3,6 +3,7 @@
 - **candidate**: `gemma`
 - **model**: `gemma2:2b`
 - **prompt version**: `v5-rag-2026-08-15`
+- **retrieval (D88)**: `bge-m3`, k=5
 - **started / finished**: 2026-08-15T04:03:09+00:00 → 2026-08-15T05:40:13+00:00
 - **test set**: `testset_v1.json`
 - **test set sha256**: `fd711a7483fd5d8bb894d35c62654219156d1ba144a129649058084d0963b2a0`

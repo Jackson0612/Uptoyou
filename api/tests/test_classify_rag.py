@@ -21,6 +21,11 @@ Four things, and each one is a way the experiment could quietly stop measuring r
 4. **`gemini --rag` is refused before anything else happens.** The crib is the owner's gold
    labels and gold does not leave this machine (D88), so the refusal is argv-level and costs
    no key read, no network and no database.
+5. **`--embed` names a cell of the matrix and the file name follows it.** D88's amendment,
+   2026-08-17: `bge` writes the *existing* `round_<name>_v5-rag-2026-08-15.json`, because the
+   three rounds already scored under that name are the bge column and re-running them would
+   buy nothing; every other embedder appends its key. An unknown key is refused at argv, for
+   the same reason an unknown candidate is — a round is a measurement of one named model.
 
 Import discipline, same rule as `test_evaluate_score.py`: nothing reached from here may pull
 SQLAlchemy at import time. The host Python has none, and D88's store is imported by
@@ -44,6 +49,7 @@ from upto.classify import (  # noqa: E402
     build_rag,
     classify_name_rag,
 )
+from upto.classify.embed import EMBED_MODELS  # noqa: E402
 from upto.classify.prompt import INSTRUCTION, RAG_INSTRUCTION  # noqa: E402
 from upto.evaluate import run_round  # noqa: E402
 
@@ -192,6 +198,11 @@ class TestTheRunnerRefusesGemini(unittest.TestCase):
         try:
             self.assertEqual(run_round.main(["gemini", "--rag"]), 2)
             self.assertEqual(run_round.main(["--rag", "gemini"]), 2)
+            # The second axis does not open a door the first one closed: whichever embedder is
+            # named, the crib is still the owner's gold and still does not leave this machine.
+            for key in EMBED_MODELS:
+                self.assertEqual(run_round.main(["gemini", "--rag", "--embed", key]), 2, key)
+            self.assertEqual(run_round.main(["gemini", "--rag", "--embed=arctic"]), 2)
         finally:
             run_round.build_candidate = original
 
@@ -221,6 +232,98 @@ class TestTheRunnerRefusesGemini(unittest.TestCase):
     def test_nothing_here_pulled_sqlalchemy(self):
         # D88's example store reaches SQLAlchemy and the host Python has none. `run_round`
         # imports it inside the `--rag` branch alone, so a plain round stays runnable here.
+        self.assertNotIn("sqlalchemy", sys.modules)
+
+
+class TestTheEmbedderAxis(unittest.TestCase):
+    """D88's amendment: 3 embedders × 3 generators, chosen at argv and carried by the file name."""
+
+    def test_the_default_embedder_keeps_the_existing_filename(self):
+        # The load-bearing one. `round_qwen_v5-rag-2026-08-15.json` and its two siblings are
+        # already scored and committed as the bge column; a suffix here would orphan them.
+        self.assertEqual(
+            run_round.round_path("qwen", RAG_PROMPT_VERSION),
+            run_round.round_path("qwen", RAG_PROMPT_VERSION, "bge"),
+        )
+        self.assertTrue(
+            run_round.round_path("qwen", RAG_PROMPT_VERSION, "bge").endswith(
+                f"round_qwen_{RAG_PROMPT_VERSION}.json"
+            ),
+            run_round.round_path("qwen", RAG_PROMPT_VERSION, "bge"),
+        )
+
+    def test_every_other_embedder_appends_its_key(self):
+        for key in EMBED_MODELS:
+            if key == run_round.DEFAULT_EMBED_KEY:
+                continue
+            path = run_round.round_path("gemma", RAG_PROMPT_VERSION, key)
+            self.assertTrue(
+                path.endswith(f"round_gemma_{RAG_PROMPT_VERSION}_{key}.json"), path
+            )
+
+    def test_the_nine_cells_are_nine_distinct_files(self):
+        # The whole point of the naming rule: no two cells of the matrix may share a file, or
+        # the second round run would resume the first and score a candidate that never existed.
+        paths = {
+            run_round.round_path(generator, RAG_PROMPT_VERSION, key)
+            for generator in ("qwen", "gemma", "llama")
+            for key in EMBED_MODELS
+        }
+        self.assertEqual(len(paths), 9, sorted(paths))
+
+    def test_the_prompt_version_does_not_move_with_the_embedder(self):
+        # The embedder is a retrieval variable, not a prompt one: the prompt text is
+        # byte-identical whichever model retrieved the cribs, so bumping the version would
+        # claim a change that did not happen.
+        self.assertEqual(build_rag("一階堂", EXAMPLES), build_rag("一階堂", EXAMPLES))
+        for path in (run_round.round_path("qwen", RAG_PROMPT_VERSION, key)
+                     for key in EMBED_MODELS):
+            self.assertIn(RAG_PROMPT_VERSION, path)
+
+    def test_an_unknown_embedder_is_refused_at_argv(self):
+        def explode(*_args, **_kwargs):
+            raise AssertionError("an unknown embedder reached something expensive")
+
+        original = run_round.build_candidate
+        run_round.build_candidate = explode
+        try:
+            for bad in ("bge-m3", "nomic", "", "BGE"):
+                with self.subTest(key=bad):
+                    self.assertEqual(run_round.main(["qwen", "--rag", "--embed", bad]), 2)
+            # A flag with nothing after it is usage, not a silent fall back to the default.
+            self.assertEqual(run_round.main(["qwen", "--rag", "--embed"]), 2)
+        finally:
+            run_round.build_candidate = original
+
+    def test_embed_without_rag_is_a_usage_error(self):
+        # A plain round retrieves nothing, so there is no embedding model in it to choose;
+        # accepting the flag would write a file claiming a variable the run never used.
+        def explode(*_args, **_kwargs):
+            raise AssertionError("--embed was accepted without --rag")
+
+        original = run_round.build_candidate
+        run_round.build_candidate = explode
+        try:
+            self.assertEqual(run_round.main(["qwen", "--embed", "arctic"]), 2)
+        finally:
+            run_round.build_candidate = original
+
+    def test_the_keys_are_pinned_to_model_strings(self):
+        # Same rule as LOCAL_MODELS: a key that resolved differently on two days would produce
+        # two scores belonging to neither.
+        self.assertEqual(
+            EMBED_MODELS,
+            {
+                "bge": "bge-m3",
+                "qwen3e": "qwen3-embedding:0.6b",
+                "arctic": "snowflake-arctic-embed2",
+            },
+        )
+        self.assertIn(run_round.DEFAULT_EMBED_KEY, EMBED_MODELS)
+
+    def test_the_embedder_axis_pulled_no_sqlalchemy_either(self):
+        # `upto.classify.embed` is standard library only, which is what lets `run_round` name
+        # it at module level while `examples` stays inside the `--rag` branch.
         self.assertNotIn("sqlalchemy", sys.modules)
 
 
