@@ -191,7 +191,28 @@
      appeared zero times in this file. Every pill, button and field now shows where the
      keyboard is, and `:focus-visible` rather than `:focus` so a mouse click does not leave a
      ring behind. */
-  .picker { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  /* **D97 (owner-ruled): twelve chips become one line.** Twelve values of one dimension is the
+     shape of a selector, not the shape of twelve buttons — and at 430 they took three rows and
+     ~146px above the card they filter, colliding with the tab row that is also a row of pills.
+     Collapsed: one visible value in the card's header, opening to twelve. The recovered space goes
+     to the mechanism tile D94 authorises. District stays user-chosen; how it is chosen is what
+     changed, not who chooses.
+
+     `<details>` rather than a scripted popover: it opens without JavaScript, closes on Escape, is
+     keyboard-reachable and announced, and needs no focus management of my own. */
+  .districts { margin-bottom: 1rem; }
+  .districts > summary {
+    display: flex; align-items: baseline; gap: .5rem; cursor: pointer;
+    list-style: none; padding: .55rem .1rem; font-size: .9rem;
+  }
+  .districts > summary::-webkit-details-marker { display: none; }
+  .districts > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .districts .who { color: var(--muted); font-size: .8rem; letter-spacing: .04em; }
+  .districts .val { font-weight: 600; }
+  .districts .caret { color: var(--muted); font-size: .75rem; margin-left: auto; }
+  .districts[open] .caret { transform: rotate(180deg); }
+
+  .picker { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 0; }
   .picker button {
     font: inherit; font-size: .85rem; padding: .65rem .9rem; border-radius: 999px;
     /* `--edge`, not `--line`: this is the only boundary an unselected pill has. */
@@ -602,14 +623,21 @@
   <!-- `homeband` is the hook B3's width rule matches on, the same way `.sheet` is the round's.
        A bound class cannot be used here — H31: this element's parent is Vue's mount container. -->
   <div v-if="view === 'home'" class="swap homeband">
-  <div class="picker">
-    <button
-      v-for="place in townships"
-      :key="place.code"
-      :aria-pressed="place.code === selected ? 'true' : 'false'"
-      @click="choose(place.code)"
-    >{{ place.name }}</button>
-  </div>
+  <details class="districts" ref="districts">
+    <summary>
+      <span class="who">行政區</span>
+      <span class="val">{{ selectedName }}</span>
+      <span class="caret">▾</span>
+    </summary>
+    <div class="picker">
+      <button
+        v-for="place in townships"
+        :key="place.code"
+        :aria-pressed="place.code === selected ? 'true' : 'false'"
+        @click="choose(place.code)"
+      >{{ place.name }}</button>
+    </div>
+  </details>
 
   <div class="card swap" :key="selected">
     <div v-if="loading" class="state">讀取中…</div>
@@ -856,7 +884,15 @@ createApp({
       loading.value = false;
     }
 
-    function choose(code) { selected.value = code; }
+    function choose(code) {
+      selected.value = code;
+      // Close the collapsed selector on choosing: an open list after the choice gives back the
+      // space the collapse existed to recover. Queried rather than held as a ref, because a ref on
+      // this element would be a binding on markup Vue does compile — but the element is created by
+      // the same template, so a query is the smaller surface.
+      const box = document.querySelector('details.districts');
+      if (box) box.open = false;
+    }
     watch(selected, load);
     onMounted(() => {
       load();
@@ -872,6 +908,17 @@ createApp({
     // two; the screen deliberately does not, because "CWA left this field out of the 03:00
     // publication" is not a sentence a person deciding on lunch has any use for.
     const measure = (name) => (reading.value && reading.value.measures[name]) || '—';
+
+    // D97: the collapsed selector closes on choosing. Leaving it open after a choice gives back
+    // the space the collapse was for.
+    const selectedName = computed(() => {
+      // `townships` is a plain array (`const townships = TOWNSHIPS`), NOT a ref — reading
+      // `.value` on it returned undefined and `.find` threw inside render, which took the whole
+      // app down to a blank page rather than degrading. Caught by the DOM being empty, not by a
+      // console line: a render-time throw in a Vue template gives a stack with no message.
+      const hit = townships.find((t) => t.code === selected.value);
+      return hit ? hit.name : '';
+    });
 
     const hourLabel = computed(() => {
       if (!reading.value) return '';
@@ -1149,7 +1196,7 @@ createApp({
     onMounted(() => { if (hasDevice.value) connectStream(); });
 
     return {
-      townships, selected, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel,
+      townships, selected, selectedName, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel,
       hasDevice, view, deviceForm, openRound, lastResult, actionError, query, candidates,
       saveDevice, openNewRound, pickCandidate, proposeTyped, rollDice, exactMatch,
       roundHourLabel, winnerName, resultRows, factorRows, channelLabel,
