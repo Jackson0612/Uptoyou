@@ -67,7 +67,7 @@ def build(name: str) -> str:
 #
 # **Based on v3, not on v4, and that is the ruling rather than an oversight.** v4 added three
 # hand-written rules and measurably lost: qwen 51.0→50.0, gemma 51.5→49.5 on the frozen set.
-# The champion criterion is absolute accuracy, so retrieval is stacked on the best-measured
+# The comparison reads absolute accuracy, so retrieval is stacked on the best-measured
 # base — otherwise a v5-rag that beat v4 would still be worse than doing nothing, and the
 # experiment would have measured retrieval against a handicap it chose itself.
 #
