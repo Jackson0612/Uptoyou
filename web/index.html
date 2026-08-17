@@ -250,7 +250,7 @@
     padding: 1.35rem 1.4rem 1.15rem;
   }
   .now { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-  .temp { font-size: 3.4rem; line-height: 1; font-weight: 300; letter-spacing: -0.03em;
+  .temp { font-size: clamp(3.4rem, 2.9rem + 1.4vw, 5rem); line-height: 1; font-weight: 300; letter-spacing: -0.03em;
           font-variant-numeric: tabular-nums;
           /* baseline-aligned flex, so the unit sits ON the numeral's baseline instead of
              hanging 2px under its box the way an inline span does. */
@@ -310,7 +310,7 @@
   /* The circle half — tickets 19/20's screens. Same tokens, same paper. */
   .tabs { display: flex; gap: .35rem; margin-top: .9rem; }
   .tabs button {
-    font: inherit; font-size: .85rem; padding: .65rem 1rem; border-radius: 999px;
+    font: inherit; font-size: clamp(.85rem, .8rem + .2vw, 1.05rem); padding: .65rem 1rem; border-radius: 999px;
     border: 1px solid var(--edge); background: transparent; color: var(--muted); cursor: pointer;
   }
   .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -466,7 +466,7 @@
        rows and fitted three. Two-line rows measure ~71px since R-9, so three rows is what clears
        the 430 fold with the fade visible. Height and count are set together and the label reads
        from the count, so they cannot drift apart again. */
-    max-height: 13.5rem; overflow-y: auto;
+    max-height: 9rem; overflow-y: auto;
     mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
   }
   .candidates li { border-bottom: 1px solid var(--line); }
@@ -634,7 +634,13 @@
             font-size: clamp(1.9rem, 1.4rem + 1.8vw, 3rem); line-height: 1.15;
             margin: .9rem 0 1.1rem; }
 
-  .alloc { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  /* **M-2, and the cap never existed.** §8 item 3 asked for the blanket `.card > *` cap to MOVE to
+     the table; I removed the blanket (correctly — it broke D89's split) and the half that was meant
+     to put it back was another silent no-op (H34). At 2560 that left a 1297px table in a 1344px
+     card with a name and its share ~1000px apart. Centred as well as capped, so the reveal keeps
+     the full-card composition the removal bought. */
+  .alloc { width: 100%; max-width: 46rem; margin-inline: auto;
+           border-collapse: collapse; font-variant-numeric: tabular-nums; }
   .alloc caption { caption-side: bottom; color: var(--muted); font-size: clamp(.78rem, .7rem + .3vw, 1.05rem);
                    padding-top: .6rem; text-align: left; line-height: 1.5; }
   /* 1.61:1 is not structure at 1297px — A16's reasoning, one step further. */
@@ -943,10 +949,18 @@
         <!-- item 10: the propose error belongs beside the list it is about, not 83px under the
              roll button where it read as a failure of the roll. -->
         <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
-        <button v-if="query.trim() && !exactMatch" class="act typed" @click="proposeTyped">
-          以「{{ query.trim() }}」提案
+        <!-- M-1: this was `v-if`-gated on a typed query, so at rest the screen had no filled
+             control at all and R-11's clause 2 never landed. Always present, disabled until there
+             is something to propose — the label says what it will do with what you typed, and what
+             it is waiting for when you have not. -->
+        <button class="act typed" :disabled="!query.trim() || exactMatch" @click="proposeTyped">
+          {{ query.trim() && !exactMatch ? '以「' + query.trim() + '」提案' : '打上店名就能提案' }}
         </button>
-        <ul class="candidates" :class="{ faded: candidates.length > shownCandidates.length }" v-if="candidates.length">
+        <!-- M-3: the fade was bound to `candidates.length > shown`, a statement about the QUERY
+             rather than about the box — so with nothing overflowing it still half-erased a fully
+             visible row. Bound to the box overflowing now, which is what a fade means. -->
+        <ul class="candidates" :class="{ faded: listOverflows }" v-if="candidates.length"
+            ref="listEl">
           <li v-for="candidate in shownCandidates"
               :key="candidate.kind + (candidate.registry_no || candidate.place_id)">
             <!-- B6's second line, and it shows only where it ADDS something.
@@ -1421,8 +1435,18 @@ createApp({
     // BELOW the fold (item 8), so the truncation the fade announces was itself cut off. Four rows
     // clears it. Because R-7 made this the single constant governing how many rows exist, the fix
     // is one number — a CSS cap and a JS count would have needed two, and could disagree.
-    const CANDIDATE_ROWS = 3;
+    const CANDIDATE_ROWS = 2;
     const shownCandidates = computed(() => candidates.value.slice(0, CANDIDATE_ROWS));
+
+    // M-3: measured from the element. "Is anything hidden" is a fact about the box and cannot be
+    // inferred from how many results the query returned.
+    const listEl = ref(null);
+    const listOverflows = ref(false);
+    watch(shownCandidates, async () => {
+      await nextTick();
+      const el = listEl.value;
+      listOverflows.value = !!el && el.scrollHeight > el.clientHeight + 1;
+    });
 
     const exactMatch = computed(
       () => candidates.value.some((c) => c.name === query.value.trim())
@@ -1493,6 +1517,7 @@ createApp({
       townships, selected, selectedName, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel,
       hasDevice, view, deviceForm, showToken, openRound, lastResult, actionError, query, candidates,
       saveDevice, openNewRound, pickCandidate, proposeTyped, rollDice, exactMatch, shownCandidates,
+      listEl, listOverflows,
       roundHourLabel, winnerName, resultRows, factorRows, channelLabel,
       tumble, rollArmed, armRoll, cancelRoll, diceFaces, pipCells, landing, isRedFace,
     };
