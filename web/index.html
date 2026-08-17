@@ -442,8 +442,8 @@
      the row stays a normal row until the dice stop rather than blinking out and back. */
   .dicebox.tumble ~ .alloc tr.hit td { animation: hitin 300ms ease-out 980ms both; }
   @keyframes hitin {
-    from { color: var(--ink); font-weight: 400; }
-    to   { color: var(--accent); font-weight: 650; }
+    from { font-weight: 400; }
+    to   { font-weight: 700; }
   }
   @media (prefers-reduced-motion: reduce) {
     .dicebox.tumble .cube,
@@ -458,7 +458,18 @@
   /* **A18: the answer was set smaller than the outdoor temperature on another screen.** The
      winner is the one thing this product exists to produce, and 1.35rem left it quieter than
      the evidence table 40px beneath it. Colour is B5's decision and is not touched here. */
-  .winner { font-family: var(--serif); text-align: center; font-weight: 700;
+  /* **B5 (evaluator, inside D87): the seal red reaches the winner's name.** D87 names where the
+     accent is spent — "the dice, the winner, the hit row" — and the winner was the one missing.
+     Leaving it in ink inverted emphasis measurably: a 21.6px ink line was quieter than the
+     seal-red table row 40px beneath it, so the eye found the answer in the evidence rather than
+     in the answer. Measured before applying: 5.37:1 in light, 4.91:1 in dark on `--raised`, both
+     clear of the 4.5 body floor and far clear of the 3.0 this size actually needs.
+
+     **The admitted cost is D87's own:** the accent now carries celebration here and failure in
+     `.state.bad`, so a future screen showing a result beside a failure inherits the obligation to
+     split the pair. D87 flagged that hazard for a future screen; this is the screen that takes it
+     on. */
+  .winner { font-family: var(--serif); text-align: center; font-weight: 700; color: var(--accent);
             font-size: clamp(1.9rem, 1.4rem + 1.8vw, 3rem); line-height: 1.15;
             margin: .9rem 0 1.1rem; }
 
@@ -470,7 +481,11 @@
   .alloc td { padding: .45rem .3rem; border-bottom: 1px solid var(--line); }
   .alloc .num { text-align: right; }
   .alloc th:nth-child(n+2), .alloc td:nth-child(n+2) { text-align: right; }
-  .alloc tr.hit td { font-weight: 650; color: var(--accent); }
+  /* With the winner in accent, the hit row keeps its emphasis by weight and its own rule rather
+     than by being the only red thing on the screen — two reds at different sizes competing is
+     what B5 traded away. */
+  .alloc tr.hit td { font-weight: 700;
+                     border-bottom-color: color-mix(in srgb, var(--edge) 70%, transparent); }
 
   .factors { margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--line); }
   .factorhead { margin: 0; font-size: .95rem; font-weight: 600; }
