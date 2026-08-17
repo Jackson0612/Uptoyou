@@ -1,0 +1,39 @@
+erDiagram
+    forecast_publication {
+        bigint id PK
+        text dataset_id
+        char_64 content_sha256
+        timestamptz detected_at
+    }
+    forecast_reading {
+        bigint publication_id PK,FK
+        text element PK
+        timestamptz slot_start PK
+        text measure PK
+        text value
+        text township_code PK
+    }
+    observation_publication {
+        bigint id PK
+        text dataset_id
+        char_64 content_sha256
+        timestamptz detected_at
+    }
+    observation_reading {
+        bigint publication_id PK,FK
+        text station_id PK
+        text station_name
+        timestamptz observed_at PK
+        text element PK
+        text value "nullable"
+        text town_code "nullable"
+    }
+    township_station {
+        text township_code PK
+        text township_name
+        text station_id
+        text resolution
+        decimal_6_2 distance_km "nullable"
+    }
+    forecast_reading }o--|| forecast_publication : "publication_id"
+    observation_reading }o--|| observation_publication : "publication_id"

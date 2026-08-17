@@ -162,6 +162,22 @@ batches. *The number:* the API stack sits at ~1.6 GB resident without the model;
 4 cores / 8 threads, once its VM stopped masking AVX2 — takes a RAG-shaped batch at 12–19 s a name,
 one night for the whole city.
 
+## Diagrams
+
+Four views of the same system, in `docs/diagrams/` — each PNG has a self-contained source
+beside it (`.html` for the drawn ones, `.mmd` for the ER set), no external request in any of them:
+
+- **Architecture** — `architecture.png`: the compose stack, what is published, and the
+  deployment intent (the cloud serves, the home box computes, the run ledger is the clock).
+- **ETL pipeline** — `etl-flow.png`: six sources, six DAGs, the one content-addressed path they
+  all take, the run ledger's three outcomes, and the read-time name ladder.
+- **AI evaluation** — `evaluation-flow.png`: the frozen set, the pgvector crib, the four
+  candidates, and what the set measured.
+- **ER diagrams** — `er-overview.png` is all 26 tables; the readable ones are the four clusters,
+  `er-reference.png` · `er-weather.png` · `er-product.png` · `er-ledger.png`. Generated from the
+  live schema by `erdify` (`docs/diagrams/build.sh`); `build.sh --check` fails when the schema
+  and the committed diagrams disagree.
+
 ## Privacy
 
 **Authorship dies at the close, in the database.** Closing a round fires a trigger that nulls

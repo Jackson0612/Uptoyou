@@ -1,0 +1,108 @@
+erDiagram
+    circle {
+        bigint id PK
+        text name
+        timestamptz created_at "default CURRENT_TIMESTAMP()"
+    }
+    principal {
+        bigint id PK
+        timestamptz created_at "default CURRENT_TIMESTAMP()"
+    }
+    member {
+        bigint id PK
+        bigint principal_id FK
+        bigint circle_id FK
+        text nickname
+        timestamptz joined_at "default CURRENT_TIMESTAMP()"
+    }
+    device_secret {
+        bigint id PK
+        bigint principal_id FK
+        char_64 secret_sha256
+        timestamptz created_at "default CURRENT_TIMESTAMP()"
+    }
+    place {
+        bigint id PK
+        text origin
+        bigint circle_id FK "nullable"
+        text name "nullable"
+        text registry_no "nullable"
+        text category "nullable"
+        text category_model "nullable"
+        text category_input "nullable"
+    }
+    round {
+        bigint id PK
+        bigint circle_id FK
+        timestamptz target_hour
+        text status "default CAST('open' AS TEXT)"
+        bigint winning_place_id FK "nullable"
+        timestamptz closed_at "nullable"
+        smallint die1 "nullable"
+        smallint die2 "nullable"
+    }
+    proposal {
+        bigint id PK
+        bigint round_id FK
+        bigint place_id FK
+        bigint member_id FK "nullable"
+        timestamptz proposed_at "default CURRENT_TIMESTAMP()"
+        decimal weight "nullable"
+    }
+    weight_contribution {
+        bigint id PK
+        bigint round_id FK
+        bigint place_id FK
+        text channel
+        text contributor
+        decimal_4_3 effect
+        text reason_visibility
+        bigint member_id FK "nullable"
+        bigint forecast_publication_id FK "nullable"
+        text forecast_township_code FK "nullable"
+        text forecast_element FK "nullable"
+        text forecast_measure FK "nullable"
+        timestamptz forecast_slot_start FK "nullable"
+        bigint observation_publication_id FK "nullable"
+        text observation_station_id FK "nullable"
+        text observation_element FK "nullable"
+        timestamptz observation_observed_at FK "nullable"
+    }
+    forecast_reading {
+        bigint publication_id PK
+        text element PK
+        timestamptz slot_start PK
+        text measure PK
+        text value
+        text township_code PK
+    }
+    observation_reading {
+        bigint publication_id PK
+        text station_id PK
+        text station_name
+        timestamptz observed_at PK
+        text element PK
+        text value "nullable"
+        text town_code "nullable"
+    }
+    member }o--|| principal : "principal_id"
+    member }o--|| circle : "circle_id"
+    device_secret }o--|| principal : "principal_id"
+    place }o--|| circle : "circle_id"
+    round }o--|| circle : "circle_id"
+    round }o--|| place : "winning_place_id"
+    proposal }o--|| round : "round_id"
+    proposal }o--|| place : "place_id"
+    proposal }o--|| member : "member_id"
+    weight_contribution }o--|| proposal : "round_id"
+    weight_contribution }o--|| proposal : "place_id"
+    weight_contribution }o--|| member : "member_id"
+    weight_contribution }o--|| forecast_reading : "forecast_publication_id"
+    weight_contribution }o--|| forecast_reading : "forecast_township_code"
+    weight_contribution }o--|| forecast_reading : "forecast_element"
+    weight_contribution }o--|| forecast_reading : "forecast_measure"
+    weight_contribution }o--|| forecast_reading : "forecast_slot_start"
+    weight_contribution }o--|| observation_reading : "observation_publication_id"
+    weight_contribution }o--|| observation_reading : "observation_station_id"
+    weight_contribution }o--|| observation_reading : "observation_element"
+    weight_contribution }o--|| observation_reading : "observation_observed_at"

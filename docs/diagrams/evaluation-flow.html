@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Up to you — AI evaluation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Consolas, 'Noto Sans TC', 'Noto Sans CJK TC', 'Microsoft JhengHei', 'PingFang TC', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container { max-width: 1620px; margin: 0 auto; }
+
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #a78bfa; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg { width: 100%; min-width: 1200px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.78rem; line-height: 1.55; }
+    .card li { margin-bottom: 0.375rem; }
+    .card code { color: #cbd5e1; }
+
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+
+    @media print { body { background: #020617; padding: 1rem; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Up to you — AI evaluation</h1>
+      </div>
+      <p class="subtitle">A frozen 200-name set, a pgvector crib of worked examples, four candidate models — and a report that carries the set's sha256 so two scores only compare when they should.</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1560 1056" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+          <marker id="ah" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="ah-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+        </defs>
+
+        <rect width="1560" height="1056" fill="url(#grid)"/>
+
+        <!-- ================= arrows first ================= -->
+        <g fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)">
+          <path d="M 175 200 L 175 226"/>          <!-- draw -> testset -->
+          <path d="M 330 315 L 366 315"/>          <!-- testset -> embedders -->
+          <path d="M 535 230 L 535 256"/>          <!-- embedders -> store -->
+          <path d="M 535 430 L 535 456"/>          <!-- store -> retrieval -->
+          <path d="M 700 530 C 730 530, 736 200, 736 160"/>  <!-- retrieval -> the prompt -->
+          <path d="M 910 220 L 910 246"/>          <!-- prompt -> candidates -->
+          <path d="M 1080 320 L 1116 320"/>        <!-- candidates -> round json -->
+          <path d="M 1320 220 L 1320 246"/>        <!-- round json -> score -->
+          <path d="M 1320 390 L 1320 416"/>        <!-- score -> report -->
+        </g>
+        <g fill="none" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ah-rose)">
+          <path d="M 700 570 C 760 600, 800 590, 838 570"/>  <!-- retrieval -> the refusal -->
+        </g>
+
+        <!-- ================= section labels ================= -->
+        <text x="30" y="46" fill="#22d3ee" font-size="13" font-weight="600">A · The frozen set</text>
+        <text x="366" y="46" fill="#34d399" font-size="13" font-weight="600">B · The crib</text>
+        <text x="490" y="46" fill="#94a3b8" font-size="11">— missing knowledge added as data</text>
+        <text x="740" y="46" fill="#fbbf24" font-size="13" font-weight="600">C · The ask</text>
+        <text x="1120" y="46" fill="#a78bfa" font-size="13" font-weight="600">D · The record</text>
+
+        <!-- ================= A. the frozen set ================= -->
+        <rect x="30" y="70" width="290" height="130" rx="6" fill="#0f172a"/>
+        <rect x="30" y="70" width="290" height="130" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="46" y="95" fill="white" font-size="13" font-weight="600">evaluate.draw</text>
+        <text x="46" y="116" fill="#22d3ee" font-size="10">same publication, same seed, same 200 rows</text>
+        <text x="46" y="137" fill="#94a3b8" font-size="10">Stratified by which rung of the name ladder</text>
+        <text x="46" y="153" fill="#94a3b8" font-size="10">supplied the name, with a floor of 30 per rung —</text>
+        <text x="46" y="169" fill="#94a3b8" font-size="10">so the small sign and brand strata stay scorable</text>
+        <text x="46" y="189" fill="#94a3b8" font-size="10">rather than being drowned by the registered ones.</text>
+
+        <rect x="30" y="226" width="290" height="176" rx="6" fill="#0f172a"/>
+        <rect x="30" y="226" width="290" height="176" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="46" y="251" fill="white" font-size="13" font-weight="600">testset_v1.json — frozen</text>
+        <text x="46" y="272" fill="#22d3ee" font-size="10">200 names · 10 closed categories</text>
+        <text x="46" y="293" fill="#94a3b8" font-size="10">labeled_by = <tspan fill="#fbbf24">fable5+gemini</tspan> — drafted by one</text>
+        <text x="46" y="309" fill="#94a3b8" font-size="10">frontier model, cross-checked by a second, and</text>
+        <text x="46" y="325" fill="#94a3b8" font-size="10">never hand-adjudicated. A score therefore reads</text>
+        <text x="46" y="341" fill="#94a3b8" font-size="10">"agreement with the teacher", never ground truth,</text>
+        <text x="46" y="357" fill="#94a3b8" font-size="10">and that is stamped rather than left implicit.</text>
+        <text x="46" y="379" fill="#94a3b8" font-size="10">sha256 <tspan fill="#e2e8f0">fd711a7483fd…</tspan></text>
+        <text x="46" y="395" fill="#fb7185" font-size="10">Do not re-draw: frozen is the whole point.</text>
+
+        <rect x="30" y="428" width="290" height="126" rx="6" fill="#0f172a"/>
+        <rect x="30" y="428" width="290" height="126" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="46" y="453" fill="white" font-size="12" font-weight="600">The three strata, as loaded</text>
+        <text x="46" y="476" fill="#94a3b8" font-size="10">sign 店名</text>
+        <text x="186" y="476" fill="#34d399" font-size="10">33 names</text>
+        <text x="46" y="496" fill="#94a3b8" font-size="10">brand 品牌名稱</text>
+        <text x="186" y="496" fill="#22d3ee" font-size="10">20 names</text>
+        <text x="46" y="516" fill="#94a3b8" font-size="10">registered 登記名稱</text>
+        <text x="186" y="516" fill="#a78bfa" font-size="10">126 names</text>
+        <text x="46" y="542" fill="#94a3b8" font-size="10">179 distinct — 21 of the 200 repeat a name.</text>
+
+        <!-- ================= B. the crib ================= -->
+        <rect x="366" y="70" width="338" height="160" rx="6" fill="#0f172a"/>
+        <rect x="366" y="70" width="338" height="160" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="382" y="95" fill="white" font-size="13" font-weight="600">classify.examples load  —  embed</text>
+        <text x="382" y="116" fill="#34d399" font-size="10">three embedders, measured side by side</text>
+        <text x="382" y="137" fill="#e2e8f0" font-size="10">bge-m3</text>
+        <text x="560" y="137" fill="#94a3b8" font-size="10">1024-d · the default</text>
+        <text x="382" y="155" fill="#e2e8f0" font-size="10">qwen3-embedding:0.6b</text>
+        <text x="560" y="155" fill="#94a3b8" font-size="10">1024-d</text>
+        <text x="382" y="173" fill="#e2e8f0" font-size="10">snowflake-arctic-embed2</text>
+        <text x="560" y="173" fill="#94a3b8" font-size="10">1024-d</text>
+        <text x="382" y="196" fill="#94a3b8" font-size="10">Widths are pinned in code and in the column type,</text>
+        <text x="382" y="212" fill="#94a3b8" font-size="10">so a model that came back 768 is refused twice.</text>
+
+        <rect x="366" y="256" width="338" height="174" rx="6" fill="#0f172a"/>
+        <rect x="366" y="256" width="338" height="174" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="382" y="281" fill="white" font-size="13" font-weight="600">example_embedding</text>
+        <text x="382" y="302" fill="#a78bfa" font-size="10">pgvector in the database that was already there</text>
+        <text x="382" y="323" fill="#94a3b8" font-size="10">179 rows per embedder · <tspan fill="#e2e8f0">537 in total</tspan></text>
+        <text x="382" y="343" fill="#94a3b8" font-size="10">UNIQUE (embed_model, name) — one name is one crib,</text>
+        <text x="382" y="359" fill="#94a3b8" font-size="10">and a reload is scoped to one embedder's rows.</text>
+        <text x="382" y="381" fill="#94a3b8" font-size="10">Every row is stamped with <tspan fill="#e2e8f0">testset_sha256</tspan>, so a</text>
+        <text x="382" y="397" fill="#94a3b8" font-size="10">round refuses a stale crib after any label amendment.</text>
+        <text x="382" y="419" fill="#94a3b8" font-size="10">Rejected: a dedicated vector store — 537 rows do not need one.</text>
+
+        <rect x="366" y="456" width="338" height="150" rx="6" fill="#0f172a"/>
+        <rect x="366" y="456" width="338" height="150" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="382" y="481" fill="white" font-size="13" font-weight="600">nearest — retrieve k = 5</text>
+        <text x="382" y="502" fill="#34d399" font-size="10">exact cosine over a sequential scan, no ANN index</text>
+        <text x="382" y="523" fill="#94a3b8" font-size="10">179 rows is microseconds, and an approximate index</text>
+        <text x="382" y="539" fill="#94a3b8" font-size="10">would sometimes drop the true nearest neighbour —</text>
+        <text x="382" y="555" fill="#94a3b8" font-size="10">a different experiment, not a faster one.</text>
+        <text x="382" y="577" fill="#fbbf24" font-size="10">Leave-one-out: name &lt;&gt; :exclude, in the WHERE clause</text>
+        <text x="382" y="593" fill="#94a3b8" font-size="10">— refused at the query, never filtered afterwards.</text>
+
+        <!-- ================= C. the ask ================= -->
+        <rect x="740" y="70" width="340" height="150" rx="6" fill="#0f172a"/>
+        <rect x="740" y="70" width="340" height="150" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="756" y="95" fill="white" font-size="13" font-weight="600">the prompt — two versions, scored apart</text>
+        <text x="756" y="118" fill="#94a3b8" font-size="10"><tspan fill="#e2e8f0">v3 plain</tspan> — the name, the ten categories, nothing else</text>
+        <text x="756" y="138" fill="#94a3b8" font-size="10"><tspan fill="#e2e8f0">v5 + crib</tspan> — the same, plus the five retrieved names</text>
+        <text x="774" y="154" fill="#94a3b8" font-size="10">and their labels as worked examples</text>
+        <text x="756" y="177" fill="#fb7185" font-size="10">v4 was a prompt revision and it lost points</text>
+        <text x="756" y="193" fill="#94a3b8" font-size="10">(gemma 51.5 → 49.5, qwen 51.0 → 50.0), so knowledge</text>
+        <text x="756" y="209" fill="#94a3b8" font-size="10">is added as data from here on, not as more wording.</text>
+
+        <rect x="740" y="246" width="340" height="196" rx="6" fill="#0f172a"/>
+        <rect x="740" y="246" width="340" height="196" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="756" y="271" fill="white" font-size="13" font-weight="600">four candidates, one round each</text>
+        <text x="756" y="292" fill="#fb923c" font-size="10">three local, self-hostable · one hosted yardstick</text>
+        <text x="756" y="314" fill="#e2e8f0" font-size="10">gemma2:2b</text>
+        <text x="756" y="332" fill="#e2e8f0" font-size="10">qwen2.5:3b-instruct-q4_K_M</text>
+        <text x="756" y="350" fill="#e2e8f0" font-size="10">llama3.2:3b</text>
+        <text x="972" y="332" fill="#94a3b8" font-size="10">via ollama,</text>
+        <text x="972" y="348" fill="#94a3b8" font-size="10">in the stack</text>
+        <text x="756" y="374" fill="#e2e8f0" font-size="10">gemini-3.5-flash-lite</text>
+        <text x="972" y="374" fill="#94a3b8" font-size="10">host-side only</text>
+        <text x="756" y="396" fill="#94a3b8" font-size="10">The model string is pinned before the round and written</text>
+        <text x="756" y="412" fill="#94a3b8" font-size="10">into the file; a stored round refuses to be continued by</text>
+        <text x="756" y="428" fill="#94a3b8" font-size="10">a different one. Resumable. Exit 3 = come back later.</text>
+
+        <rect x="740" y="478" width="340" height="128" rx="6" fill="#0f172a"/>
+        <rect x="740" y="478" width="340" height="128" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="756" y="503" fill="white" font-size="13" font-weight="600">gemini --rag is refused</text>
+        <text x="756" y="524" fill="#fb7185" font-size="10">a rule, not a limitation</text>
+        <text x="756" y="546" fill="#94a3b8" font-size="10">The crib is the owner's own answer key. Handing it to</text>
+        <text x="756" y="562" fill="#94a3b8" font-size="10">a hosted model would send the labels off this machine,</text>
+        <text x="756" y="578" fill="#94a3b8" font-size="10">so the hosted baseline keeps the plain prompt for good</text>
+        <text x="756" y="594" fill="#94a3b8" font-size="10">— which is also what keeps it a baseline.</text>
+
+        <!-- ================= D. the record ================= -->
+        <rect x="1120" y="70" width="410" height="150" rx="6" fill="#0f172a"/>
+        <rect x="1120" y="70" width="410" height="150" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="1136" y="95" fill="white" font-size="13" font-weight="600">round_&lt;name&gt;_&lt;prompt&gt;.json</text>
+        <text x="1136" y="116" fill="#fb7185" font-size="10">private — never moves under app/</text>
+        <text x="1136" y="138" fill="#94a3b8" font-size="10">One file per candidate per prompt version. It carries</text>
+        <text x="1136" y="154" fill="#94a3b8" font-size="10">the gold it was asked under, so a later amendment to</text>
+        <text x="1136" y="170" fill="#94a3b8" font-size="10">the set cannot quietly restate yesterday's answer.</text>
+        <text x="1136" y="192" fill="#94a3b8" font-size="10">A RAG round also records rag.embed_model and rag.k,</text>
+        <text x="1136" y="208" fill="#94a3b8" font-size="10">and refuses to be continued by a different embedder.</text>
+
+        <rect x="1120" y="246" width="410" height="144" rx="6" fill="#0f172a"/>
+        <rect x="1120" y="246" width="410" height="144" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1136" y="271" fill="white" font-size="13" font-weight="600">evaluate.score</text>
+        <text x="1136" y="292" fill="#34d399" font-size="10">pure and re-runnable — no clock is read</text>
+        <text x="1136" y="314" fill="#94a3b8" font-size="10">Same round file plus same frozen set in, same bytes out.</text>
+        <text x="1136" y="336" fill="#94a3b8" font-size="10">Metric order is fixed: <tspan fill="#e2e8f0">per name-layer first, pooled</tspan></text>
+        <text x="1136" y="352" fill="#94a3b8" font-size="10"><tspan fill="#e2e8f0">second</tspan> — a pooled number alone would hide, or punish,</text>
+        <text x="1136" y="368" fill="#94a3b8" font-size="10">the shape of the draw rather than the model's accuracy.</text>
+
+        <rect x="1120" y="416" width="410" height="190" rx="6" fill="#0f172a"/>
+        <rect x="1120" y="416" width="410" height="190" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1136" y="441" fill="white" font-size="13" font-weight="600">&lt;round&gt;.report.md</text>
+        <text x="1136" y="462" fill="#34d399" font-size="10">public — written into app/evaluation/</text>
+        <text x="1136" y="484" fill="#94a3b8" font-size="10">The report is the half a reader gets; the raw round file</text>
+        <text x="1136" y="500" fill="#94a3b8" font-size="10">stays private. One renderer feeds both, so the printed</text>
+        <text x="1136" y="516" fill="#94a3b8" font-size="10">report and the written file cannot disagree.</text>
+        <text x="1136" y="540" fill="#e2e8f0" font-size="11">Every report prints the sha256 of the set it scored</text>
+        <text x="1136" y="556" fill="#e2e8f0" font-size="11">against, and two reports compare only when it matches.</text>
+        <text x="1136" y="578" fill="#94a3b8" font-size="10">All ten reports below carry fd711a7483fd… — which is</text>
+        <text x="1136" y="594" fill="#94a3b8" font-size="10">why the columns can be put side by side at all.</text>
+
+        <!-- arrow labels -->
+        <text x="756" y="632" fill="#fb7185" font-size="10">the crib never leaves this machine</text>
+
+        <!-- ================= E. the result ================= -->
+        <text x="30" y="676" fill="#a78bfa" font-size="13" font-weight="600">E · What the frozen set measured</text>
+        <text x="330" y="676" fill="#94a3b8" font-size="11">— pooled accuracy, n = 200, one test set, one sha256. The same crib reads as knowledge to two models and as noise to the third, which is why the pairing is measured rather than assumed.</text>
+
+        <rect x="30" y="694" width="1500" height="268" rx="8" fill="none" stroke="#334155" stroke-width="1"/>
+
+        <text x="50" y="722" fill="#94a3b8" font-size="10">candidate</text>
+        <text x="330" y="722" fill="#94a3b8" font-size="10">v3 plain</text>
+        <text x="430" y="722" fill="#94a3b8" font-size="10">v5 + crib</text>
+        <text x="540" y="722" fill="#94a3b8" font-size="10">change</text>
+        <text x="700" y="722" fill="#94a3b8" font-size="10">0%</text>
+        <text x="1450" y="722" fill="#94a3b8" font-size="10">100%</text>
+
+        <!-- the baseline the local models are measured against -->
+        <line x1="1153" y1="728" x2="1153" y2="944" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.9"/>
+        <text x="1163" y="742" fill="#22d3ee" font-size="10">60.5% — the hosted baseline</text>
+
+        <line x1="700" y1="728" x2="700" y2="944" stroke="#334155" stroke-width="1"/>
+        <line x1="1450" y1="728" x2="1450" y2="944" stroke="#334155" stroke-width="1"/>
+
+        <!-- gemini -->
+        <text x="50" y="768" fill="#e2e8f0" font-size="11">gemini-3.5-flash-lite</text>
+        <text x="50" y="784" fill="#94a3b8" font-size="9">hosted · plain prompt only, by rule</text>
+        <text x="330" y="768" fill="#22d3ee" font-size="12" font-weight="600">60.5%</text>
+        <text x="430" y="768" fill="#475569" font-size="11">refused</text>
+        <text x="540" y="768" fill="#475569" font-size="11">—</text>
+        <rect x="700" y="758" width="454" height="9" rx="2" fill="#22d3ee" opacity="0.85"/>
+
+        <!-- gemma -->
+        <text x="50" y="822" fill="#e2e8f0" font-size="11">gemma2:2b</text>
+        <text x="50" y="838" fill="#94a3b8" font-size="9">local · the crib lands</text>
+        <text x="330" y="822" fill="#94a3b8" font-size="12">51.5%</text>
+        <text x="430" y="822" fill="#34d399" font-size="12" font-weight="600">61.0%</text>
+        <text x="540" y="822" fill="#34d399" font-size="12" font-weight="600">+9.5</text>
+        <rect x="700" y="806" width="386" height="7" rx="2" fill="#475569"/>
+        <rect x="700" y="819" width="458" height="9" rx="2" fill="#34d399" opacity="0.9"/>
+
+        <!-- llama -->
+        <text x="50" y="876" fill="#e2e8f0" font-size="11">llama3.2:3b</text>
+        <text x="50" y="892" fill="#94a3b8" font-size="9">local · the largest move measured</text>
+        <text x="330" y="876" fill="#94a3b8" font-size="12">37.0%</text>
+        <text x="430" y="876" fill="#34d399" font-size="12" font-weight="600">58.0%</text>
+        <text x="540" y="876" fill="#34d399" font-size="12" font-weight="600">+21.0</text>
+        <rect x="700" y="860" width="278" height="7" rx="2" fill="#475569"/>
+        <rect x="700" y="873" width="435" height="9" rx="2" fill="#34d399" opacity="0.9"/>
+
+        <!-- qwen -->
+        <text x="50" y="930" fill="#e2e8f0" font-size="11">qwen2.5:3b-instruct-q4_K_M</text>
+        <text x="50" y="946" fill="#94a3b8" font-size="9">local · the same crib costs it points</text>
+        <text x="330" y="930" fill="#94a3b8" font-size="12">51.0%</text>
+        <text x="430" y="930" fill="#fb7185" font-size="12" font-weight="600">48.5%</text>
+        <text x="540" y="930" fill="#fb7185" font-size="12" font-weight="600">−2.5</text>
+        <rect x="700" y="914" width="383" height="7" rx="2" fill="#475569"/>
+        <rect x="700" y="927" width="364" height="9" rx="2" fill="#fb7185" opacity="0.9"/>
+
+        <!-- ================= legend, below everything ================= -->
+        <g font-size="11" fill="#94a3b8">
+          <rect x="30" y="1000" width="14" height="14" rx="3" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="52" y="1012">the frozen set, and the baseline it is read against</text>
+          <rect x="430" y="1000" width="14" height="14" rx="3" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+          <text x="452" y="1012">code step</text>
+          <rect x="580" y="1000" width="14" height="14" rx="3" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+          <text x="602" y="1012">stored, in the database or on disk</text>
+          <rect x="880" y="1000" width="14" height="14" rx="3" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+          <text x="902" y="1012">model under test</text>
+          <rect x="1080" y="1000" width="14" height="14" rx="3" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+          <text x="1102" y="1012">a refusal that is part of the method</text>
+          <rect x="1400" y="1004" width="24" height="7" rx="2" fill="#475569"/>
+          <text x="1432" y="1012">plain prompt</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>Frozen, stratified, and honest about its author</h3></div>
+        <ul>
+          <li>• 200 names, fixed seed, stratified over the three name layers with a floor of 30 — so a layer with 20 real examples still gets scored instead of vanishing into a pooled average.</li>
+          <li>• The labels were drafted by one frontier model and cross-checked by a second. That is recorded in <code>labeled_by</code>, because an example teaches, and a crib that taught the wrong thing has to be able to name its teacher.</li>
+          <li>• The set caught a prompt that read better and scored worse. That is the only thing a frozen set exists to do.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Retrieval, not fine-tuning</h3></div>
+        <ul>
+          <li>• Rejected: another prompt revision (measured, and it lost); rejected: fine-tuning (a weight change nobody can read back).</li>
+          <li>• Chosen: labeled example names embedded into <code>pgvector</code>, the five nearest handed over as worked examples — knowledge added as data, in a table you can query.</li>
+          <li>• The store is the frozen set, so the asked name is in it. Retrieval excludes it in the <code>WHERE</code> clause; without that, the round would measure the lookup rather than the classifier.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot rose"></div><h3>What the numbers do and do not say</h3></div>
+        <ul>
+          <li>• Two of three local models reach the hosted baseline with the crib; the third loses points to the same crib. The pairing of model and crib is a measured variable, not an assumption.</li>
+          <li>• Every score is pooled accuracy over n = 200 against one sha256. Change the set and the columns stop comparing — which is why the digest is printed rather than trusted.</li>
+          <li>• A score is agreement with a teacher model, not correctness. The distinction is in the report, not only in the code.</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      Up to you · drawn from app/api/src/upto/evaluate/, upto/classify/ and the ten reports in app/evaluation/, 2026-08-17 · self-contained: no external request
+    </p>
+  </div>
+</body>
+</html>

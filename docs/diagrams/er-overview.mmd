@@ -1,0 +1,159 @@
+erDiagram
+    alembic_version {
+        varchar_32 version_num PK
+    }
+    brand_publication {
+        bigint id PK
+    }
+    brand_registration {
+        bigint publication_id PK,FK
+        text company_name PK
+        text brand_name PK
+    }
+    business_status_publication {
+        bigint id PK
+    }
+    business_status_row {
+        bigint publication_id PK,FK
+        text business_no PK
+        text name_raw PK
+        text status PK
+    }
+    business_tax_publication {
+        bigint id PK
+    }
+    business_tax_row {
+        bigint publication_id PK,FK
+        text business_no PK
+    }
+    circle {
+        bigint id PK
+    }
+    device_secret {
+        bigint id PK
+        bigint principal_id FK
+    }
+    example_embedding {
+        bigint id PK
+    }
+    forecast_publication {
+        bigint id PK
+    }
+    forecast_reading {
+        bigint publication_id PK,FK
+        text element PK
+        timestamptz slot_start PK
+        text measure PK
+        text township_code PK
+    }
+    ingest_run {
+        bigint id PK
+        bigint forecast_publication_id FK "nullable"
+        bigint observation_publication_id FK "nullable"
+        bigint place_publication_id FK "nullable"
+        bigint brand_publication_id FK "nullable"
+        bigint storefront_publication_id FK "nullable"
+        bigint business_status_publication_id FK "nullable"
+        bigint business_tax_publication_id FK "nullable"
+    }
+    member {
+        bigint id PK
+        bigint principal_id FK
+        bigint circle_id FK
+    }
+    observation_publication {
+        bigint id PK
+    }
+    observation_reading {
+        bigint publication_id PK,FK
+        text station_id PK
+        timestamptz observed_at PK
+        text element PK
+    }
+    place {
+        bigint id PK
+        bigint circle_id FK "nullable"
+    }
+    place_publication {
+        bigint id PK
+    }
+    principal {
+        bigint id PK
+    }
+    proposal {
+        bigint id PK
+        bigint round_id FK
+        bigint place_id FK
+        bigint member_id FK "nullable"
+    }
+    reference_place {
+        bigint publication_id PK,FK
+        text registry_no PK
+        text township_code FK "nullable"
+    }
+    round {
+        bigint id PK
+        bigint circle_id FK
+        bigint winning_place_id FK "nullable"
+    }
+    storefront_name {
+        bigint publication_id PK,FK
+        text registry_no PK
+    }
+    storefront_publication {
+        bigint id PK
+    }
+    township_station {
+        text township_code PK
+    }
+    weight_contribution {
+        bigint id PK
+        bigint round_id FK
+        bigint place_id FK
+        bigint member_id FK "nullable"
+        bigint forecast_publication_id FK "nullable"
+        text forecast_township_code FK "nullable"
+        text forecast_element FK "nullable"
+        text forecast_measure FK "nullable"
+        timestamptz forecast_slot_start FK "nullable"
+        bigint observation_publication_id FK "nullable"
+        text observation_station_id FK "nullable"
+        text observation_element FK "nullable"
+        timestamptz observation_observed_at FK "nullable"
+    }
+    brand_registration }o--|| brand_publication : "publication_id"
+    business_status_row }o--|| business_status_publication : "publication_id"
+    business_tax_row }o--|| business_tax_publication : "publication_id"
+    device_secret }o--|| principal : "principal_id"
+    forecast_reading }o--|| forecast_publication : "publication_id"
+    ingest_run }o--|| forecast_publication : "forecast_publication_id"
+    ingest_run }o--|| observation_publication : "observation_publication_id"
+    ingest_run }o--|| place_publication : "place_publication_id"
+    ingest_run }o--|| brand_publication : "brand_publication_id"
+    ingest_run }o--|| storefront_publication : "storefront_publication_id"
+    ingest_run }o--|| business_status_publication : "business_status_publication_id"
+    ingest_run }o--|| business_tax_publication : "business_tax_publication_id"
+    member }o--|| principal : "principal_id"
+    member }o--|| circle : "circle_id"
+    observation_reading }o--|| observation_publication : "publication_id"
+    place }o--|| circle : "circle_id"
+    proposal }o--|| round : "round_id"
+    proposal }o--|| place : "place_id"
+    proposal }o--|| member : "member_id"
+    reference_place }o--|| place_publication : "publication_id"
+    reference_place }o--|| township_station : "township_code"
+    round }o--|| circle : "circle_id"
+    round }o--|| place : "winning_place_id"
+    storefront_name }o--|| storefront_publication : "publication_id"
+    weight_contribution }o--|| proposal : "round_id"
+    weight_contribution }o--|| proposal : "place_id"
+    weight_contribution }o--|| member : "member_id"
+    weight_contribution }o--|| forecast_reading : "forecast_publication_id"
+    weight_contribution }o--|| forecast_reading : "forecast_township_code"
+    weight_contribution }o--|| forecast_reading : "forecast_element"
+    weight_contribution }o--|| forecast_reading : "forecast_measure"
+    weight_contribution }o--|| forecast_reading : "forecast_slot_start"
+    weight_contribution }o--|| observation_reading : "observation_publication_id"
+    weight_contribution }o--|| observation_reading : "observation_station_id"
+    weight_contribution }o--|| observation_reading : "observation_element"
+    weight_contribution }o--|| observation_reading : "observation_observed_at"

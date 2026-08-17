@@ -1,0 +1,82 @@
+erDiagram
+    ingest_run {
+        bigint id PK
+        text source
+        timestamptz started_at
+        text outcome
+        int rows_written "default 0"
+        text invoked_by "nullable"
+        bigint forecast_publication_id FK "nullable"
+        bigint observation_publication_id FK "nullable"
+        bigint place_publication_id FK "nullable"
+        bigint brand_publication_id FK "nullable"
+        bigint storefront_publication_id FK "nullable"
+        bigint business_status_publication_id FK "nullable"
+        bigint business_tax_publication_id FK "nullable"
+    }
+    example_embedding {
+        bigint id PK
+        text name
+        text label
+        text labeled_by
+        text layer
+        text embed_model
+        char_64 testset_sha256
+        vector_1024 embedding
+    }
+    forecast_publication {
+        bigint id PK
+        text dataset_id
+        char_64 content_sha256
+        timestamptz detected_at
+    }
+    observation_publication {
+        bigint id PK
+        text dataset_id
+        char_64 content_sha256
+        timestamptz detected_at
+    }
+    place_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz archive_stamp "nullable"
+        timestamptz detected_at
+        int place_rows "nullable"
+    }
+    brand_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz detected_at
+        int pair_rows "nullable"
+    }
+    storefront_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz detected_at
+        int name_rows "nullable"
+    }
+    business_status_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz detected_at
+        int status_rows "nullable"
+    }
+    business_tax_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        date file_stamp "nullable"
+        timestamptz detected_at
+        int tax_rows "nullable"
+    }
+    ingest_run }o--|| forecast_publication : "forecast_publication_id"
+    ingest_run }o--|| observation_publication : "observation_publication_id"
+    ingest_run }o--|| place_publication : "place_publication_id"
+    ingest_run }o--|| brand_publication : "brand_publication_id"
+    ingest_run }o--|| storefront_publication : "storefront_publication_id"
+    ingest_run }o--|| business_status_publication : "business_status_publication_id"
+    ingest_run }o--|| business_tax_publication : "business_tax_publication_id"

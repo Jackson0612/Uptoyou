@@ -1,0 +1,83 @@
+erDiagram
+    place_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz archive_stamp "nullable"
+        timestamptz detected_at
+        int place_rows "nullable"
+    }
+    reference_place {
+        bigint publication_id PK,FK
+        text registry_no PK
+        text name
+        text address
+        text business_no "nullable"
+        text township_code FK "nullable"
+    }
+    brand_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz detected_at
+        int pair_rows "nullable"
+    }
+    brand_registration {
+        bigint publication_id PK,FK
+        text company_name PK
+        text brand_name PK
+    }
+    storefront_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz detected_at
+        int name_rows "nullable"
+    }
+    storefront_name {
+        bigint publication_id PK,FK
+        text registry_no PK
+        text name
+        text grade
+    }
+    business_status_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        timestamptz detected_at
+        int status_rows "nullable"
+    }
+    business_status_row {
+        bigint publication_id PK,FK
+        text business_no PK
+        text name_raw PK
+        text status PK
+    }
+    business_tax_publication {
+        bigint id PK
+        text source
+        char_64 content_sha256
+        date file_stamp "nullable"
+        timestamptz detected_at
+        int tax_rows "nullable"
+    }
+    business_tax_row {
+        bigint publication_id PK,FK
+        text business_no PK
+        text tax_name
+        text address
+        text industry_code "nullable"
+    }
+    township_station {
+        text township_code PK
+        text township_name
+        text station_id
+        text resolution
+        decimal_6_2 distance_km "nullable"
+    }
+    reference_place }o--|| place_publication : "publication_id"
+    reference_place }o--|| township_station : "township_code"
+    brand_registration }o--|| brand_publication : "publication_id"
+    storefront_name }o--|| storefront_publication : "publication_id"
+    business_status_row }o--|| business_status_publication : "publication_id"
+    business_tax_row }o--|| business_tax_publication : "publication_id"
