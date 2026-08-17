@@ -303,7 +303,6 @@
     box-shadow: none; opacity: 1; cursor: not-allowed;
   }
   .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
-  .act.ghost.typed { margin-top: .55rem; }
 
   /* The round sheet. Its padding is a token so the fold's gutter and the sheet's margin
      grow together; every other `.card` on the surface keeps the padding it was ruled with. */
@@ -599,7 +598,15 @@
     margin: 0 0 .6rem; font-size: .87rem; color: var(--ink);
     padding-left: .7rem; border-left: 2px solid var(--accent);
   }
+  /* Inside the confirmation the roll takes the ink fill: there it IS the thing being confirmed.
+     **And the propose button gives the fill back while armed** — measured after the first attempt,
+     the armed state had TWO filled buttons, which is the defect R-2 exists to remove, just moved
+     to a different state. One filled control per column state means per state, not per screen. */
   .confirm .act.roll { margin-top: 0; }
+  .act.typed { margin-top: .55rem; }
+  .side-pending:has(.confirm) .act.typed {
+    background: transparent; color: var(--ink); border-color: var(--edge); box-shadow: none;
+  }
 
   .stacked { margin-top: 1rem; }
 </style>
@@ -773,7 +780,9 @@
         <!-- A12: this sits ABOVE the results, not below them. It answers "what I want is not
              in this list", and that thought arrives while reading the list rather than after
              scrolling past all of it — and below a capped, scrolling list it was unreachable. -->
-        <button v-if="query.trim() && !exactMatch" class="act ghost typed" @click="proposeTyped">
+        <!-- R-2: the frequent reversible act takes the ink. Proposing is done many times a round
+             and can be undone by simply not rolling; the roll cannot be undone at all. -->
+        <button v-if="query.trim() && !exactMatch" class="act typed" @click="proposeTyped">
           以「{{ query.trim() }}」提案
         </button>
         <ul class="candidates" v-if="candidates.length">
@@ -801,7 +810,7 @@
              18px under a text input, which is what a propose form's submit key looks like. The
              control replaces itself with its own confirmation rather than opening a modal: no
              overlay, no focus trap, and the thing you are confirming stays on screen. -->
-        <button v-if="!rollArmed" class="act roll" :disabled="!openRound.pool.length"
+        <button v-if="!rollArmed" class="act roll ghost" :disabled="!openRound.pool.length"
                 @click="rollArmed = true">擲骰</button>
         <div v-else class="confirm">
           <p class="confirmnote">擲下去就定案。池子裡 {{ openRound.pool.length }} 家。</p>
