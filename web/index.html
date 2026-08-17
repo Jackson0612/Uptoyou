@@ -292,6 +292,15 @@
   .tabs button[aria-pressed="true"]:hover { color: var(--paper); border-color: var(--ink); }
 
   .fieldlabel { display: block; color: var(--muted); font-size: .87rem; margin: .9rem 0 .25rem; }
+  /* item 20's reveal control. The key is a secret that a person still has to be able to check —
+     `password` alone turns a mistyped paste into an unexplainable 401. */
+  .secret { display: flex; gap: .5rem; align-items: stretch; }
+  .secret input { flex: 1 1 auto; }
+  .peek { font: inherit; font-size: .85rem; padding: .55rem .8rem; border-radius: .55rem;
+          border: 1px solid var(--edge); background: transparent; color: var(--muted);
+          cursor: pointer; flex: none; }
+  .peek:hover { color: var(--ink); border-color: var(--muted); }
+  .peek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   input {
     font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .55rem;
     border: 1px solid var(--edge); background: var(--paper); color: var(--ink);
@@ -781,12 +790,20 @@
   <div v-if="view === 'device'" class="card deviceband">
     <p class="fieldlabel">這台裝置還沒有鑰匙。把管理者給你的兩個值貼進來：</p>
     <label class="fieldlabel" for="device-token">裝置金鑰</label>
-    <input id="device-token" v-model="deviceForm.token" autocomplete="off">
+    <!-- item 20: it is a key, and it rendered in cleartext on a screen someone may be holding in
+         public. `password` with an explicit reveal, because a key you cannot check is a key you
+         paste twice. -->
+    <div class="secret">
+      <input id="device-token" :type="showToken ? 'text' : 'password'"
+             v-model="deviceForm.token" autocomplete="off">
+      <button type="button" class="peek" @click="showToken = !showToken"
+              :aria-pressed="showToken ? 'true' : 'false'">{{ showToken ? '隱藏' : '顯示' }}</button>
+    </div>
     <label class="fieldlabel" for="device-circle">圈子編號</label>
     <input id="device-circle" v-model="deviceForm.circle" inputmode="numeric" autocomplete="off">
     <button class="act" :disabled="!deviceForm.token.trim() || !deviceForm.circle.trim()"
             @click="saveDevice">保存在這台裝置</button>
-    <p v-if="actionError" class="state bad">{{ actionError }}</p>
+    <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
   </div>
   <!-- /screen -->
 
@@ -865,13 +882,13 @@
              control replaces itself with its own confirmation rather than opening a modal: no
              overlay, no focus trap, and the thing you are confirming stays on screen. -->
         <button v-if="!rollArmed" class="act roll ghost" :disabled="!openRound.pool.length"
-                @click="rollArmed = true">擲骰</button>
+                @click="armRoll">擲骰</button>
         <div v-else class="confirm">
-          <p class="confirmnote">擲下去就定案。池子裡 {{ openRound.pool.length }} 家。</p>
+          <p class="confirmnote" role="status">擲下去就定案。池子裡 {{ openRound.pool.length }} 家。</p>
           <button class="act roll" @click="rollDice">擲骰</button>
-          <button class="act ghost" @click="rollArmed = false">再等等</button>
+          <button class="act ghost" @click="cancelRoll">再等等</button>
         </div>
-        <p v-if="actionError" class="state bad">{{ actionError }}</p>
+        <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
       </section>
     </div>
   </div>
@@ -901,9 +918,13 @@
           </div>
         </div>
         </div>
-        <span class="dicesum" v-if="lastResult.sum">＝ {{ lastResult.sum }}</span>
+        <span class="dicesum" role="status" aria-live="polite" v-if="lastResult.sum">＝ {{ lastResult.sum }}</span>
       </div>
-      <p class="winner">{{ winnerName }}</p>
+      <!-- item 3: the result is announced when it arrives, not before. `aria-live` fires on the
+           text change, and the text is already gated by the same 980ms the visual reveal uses —
+           so the announcement lands WITH the reveal. That is D91's rule applied to a second
+           channel: the surface must not tell anyone the answer while the dice are still moving. -->
+      <p class="winner" role="status" aria-live="polite">{{ winnerName }}</p>
 
       <table class="alloc">
         <caption>兩顆骰子共 36 種點數組合，落在誰的格，就是誰。</caption>
@@ -940,14 +961,14 @@
     <div class="card" :class="{ stacked: lastResult }">
       <p v-if="!lastResult" class="state">這個圈子現在沒有進行中的一餐。</p>
       <button class="act" @click="openNewRound">開一輪</button>
-      <p v-if="actionError" class="state bad">{{ actionError }}</p>
+      <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
     </div>
   </div>
   <!-- /screen -->
 </main>
 
 <script>
-const { createApp, ref, computed, onMounted, watch } = Vue;
+const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
 
 // The twelve 臺北市 townships, matching the `township_station` seed exactly (ticket 06).
 // D31's ruling scopes the ingest to 臺北市, so this list is the whole product surface.
@@ -1079,6 +1100,7 @@ createApp({
     const hasDevice = computed(() => Boolean(token.value && circleId.value));
     const view = ref(hasDevice.value ? 'round' : 'device');
     const deviceForm = ref({ token: '', circle: '' });
+    const showToken = ref(false);
     const openRound = ref(null);
     const lastResult = ref(null);
     // D91: true only while the result being shown arrived as a live close.
@@ -1086,6 +1108,21 @@ createApp({
     // B2: the roll is armed, not fired. Cleared by every event that leaves this round, so a new
     // round never opens already-armed from the last one.
     const rollArmed = ref(false);
+
+    // item 4: the control replaces itself, so focus fell to BODY and a keyboard user lost their
+    // place at the exact step that needs confirming. Focus follows the control both ways.
+    async function armRoll() {
+      rollArmed.value = true;
+      await nextTick();
+      const btn = document.querySelector('.confirm .act.roll');
+      if (btn) btn.focus();
+    }
+    async function cancelRoll() {
+      rollArmed.value = false;
+      await nextTick();
+      const btn = document.querySelector('.side-pending .act.roll');
+      if (btn) btn.focus();
+    }
     const actionError = ref('');
     const query = ref('');
     const candidates = ref([]);
@@ -1322,10 +1359,10 @@ createApp({
 
     return {
       townships, selected, selectedName, choose, loading, error, measure, hourLabel, kindLabel, sourceLabel,
-      hasDevice, view, deviceForm, openRound, lastResult, actionError, query, candidates,
+      hasDevice, view, deviceForm, showToken, openRound, lastResult, actionError, query, candidates,
       saveDevice, openNewRound, pickCandidate, proposeTyped, rollDice, exactMatch, shownCandidates,
       roundHourLabel, winnerName, resultRows, factorRows, channelLabel,
-      tumble, rollArmed, diceFaces, pipCells, landing, isRedFace,
+      tumble, rollArmed, armRoll, cancelRoll, diceFaces, pipCells, landing, isRedFace,
     };
   }
 }).mount('#app');
