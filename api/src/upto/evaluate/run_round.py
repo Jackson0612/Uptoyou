@@ -5,6 +5,7 @@
     python3 -m upto.evaluate.run_round gemini          # host-side; the key never enters the stack
     docker compose exec api python -m upto.evaluate.run_round qwen --rag   # D88
     docker compose exec api python -m upto.evaluate.run_round qwen --rag --embed arctic
+    docker compose exec api python -m upto.evaluate.run_round qwen --rag --k 8   # M10
 
 **`--rag` is a second prompt, not a second runner.** It asks through
 `classify_name_rag` with five retrieved neighbours from `example_embedding` (D88), stamps
@@ -23,6 +24,15 @@ them for nothing — and every other embedder appends its key,
 `round_<name>_v5-rag-2026-08-15_<key>.json`. The round document records `rag.embed_model` and
 `rag.embed_key`, and a stored round refuses to be continued by a different embedder for the
 same reason it refuses a different generator: one round is one measurement.
+
+**`--k` is M10's third axis, owner-ruled, and it follows `--embed`'s rules exactly.** The number
+of retrieved cribs is a retrieval variable too, so the prompt version does not move with it
+either; **k=5 keeps writing the file name it already writes** (every round on disk was retrieved
+at five, and renaming them would be re-running them for nothing) and any other k appends `_k<k>`
+after the embedder — `round_gemma_v5-rag-2026-08-15_arctic_k1.json`, or
+`round_gemma_v5-rag-2026-08-15_k8.json` for bge. `rag.k` records the real k, 1 to 20; outside
+that it is refused rather than clamped, and a stored round refuses to be continued at a
+different k for the reason it refuses a different embedder: one round is one measurement.
 
 **`gemini --rag` is refused, and it is a rule rather than a limitation.** The crib carries
 the owner's gold labels, and gold does not leave this machine; the hosted baseline stays at
@@ -91,6 +101,12 @@ SAVE_EVERY = 10
 # D88's k, recorded in every round file it produces. Changing it is a different round, not a
 # tweak — which is why the number is written into the document rather than only living here.
 RAG_K = 5
+
+# M10's ceiling. A k above this is refused rather than clamped: 20 cribs is already most of a
+# prompt, and silently trimming a typo'd `--k 200` would write a file whose `rag.k` disagreed
+# with the command that produced it. The floor is 1 — `--k 0` is a plain round asked for under
+# a retrieval file name, which is the one thing the naming rule exists to prevent.
+RAG_K_MAX = 20
 
 # D64's local slate, owner-ruled 2026-08-14: three contenders, three makers, all under the
 # 4 GB EC2 class's ~2.5 GB resident line (gemma3:4b failed that gate and was replaced by
@@ -161,17 +177,25 @@ def evaluation_dir(start: str | None = None) -> str:
 
 
 def round_path(candidate: str, prompt_version: str = PROMPT_VERSION,
-               embed_key: str | None = None) -> str:
+               embed_key: str | None = None, k: int | None = None) -> str:
     """Where a round is written. `embed_key` is D88's second axis and `bge` is spelled by omission.
 
     The default embedder appends nothing, and that is a compatibility rule rather than
     tidiness: `round_qwen_v5-rag-2026-08-15.json` and its two siblings are already scored and
     committed as the bge column of the matrix (2026-08-15), and a suffix here would make them
     unreachable by the runner that wrote them.
+
+    **`k` is M10's third axis and `5` is spelled by omission, for the same compatibility
+    reason.** Every round on disk was retrieved at k=5, so k=5 must keep writing the name it
+    already writes — bge at k=5 stays `round_<name>_v5-rag-2026-08-15.json`. Any other k
+    appends `_k<k>` *after* the embedder, so the suffix order reads the way the matrix does:
+    generator, prompt, embedder, k.
     """
     suffix = ""
     if embed_key and embed_key != DEFAULT_EMBED_KEY:
         suffix = "_" + embed_key
+    if k is not None and k != RAG_K:
+        suffix += f"_k{k}"
     return os.path.join(evaluation_dir(), f"round_{candidate}_{prompt_version}{suffix}.json")
 
 
@@ -402,7 +426,7 @@ def answer_row(index: int, gold_row: dict, ask, examples_for=None) -> dict:
     return row
 
 
-def rag_examples(digest: str, embed_model: str):
+def rag_examples(digest: str, embed_model: str, k: int = RAG_K):
     """D88's per-name crib lookup, or a UsageError if the store cannot honestly supply one.
 
     **Imported here rather than at module level, and that is load-bearing.** The example
@@ -448,7 +472,7 @@ def rag_examples(digest: str, embed_model: str):
         # Leave-one-out: the asked name is itself in the store, and retrieving its own gold
         # row would hand the model the exam answer (D82, D88).
         neighbours = example_store.nearest_sync(
-            vector, embed_model, k=RAG_K, exclude_name=name
+            vector, embed_model, k=k, exclude_name=name
         )
         # Three-element cribs: the prompt prints the subtype when the store holds one, and
         # NULL everywhere is what the frozen set gives today (0018).
@@ -459,7 +483,7 @@ def rag_examples(digest: str, embed_model: str):
 
 USAGE = (
     "usage: python -m upto.evaluate.run_round <qwen|gemma|llama|gemini> "
-    "[--rag [--embed <{}>]]".format("|".join(EMBED_MODELS))
+    "[--rag [--embed <{}>] [--k <1-{}>]]".format("|".join(EMBED_MODELS), RAG_K_MAX)
 )
 
 
@@ -469,6 +493,7 @@ def main(argv: list[str]) -> int:
     if rag:
         arguments.remove("--rag")
     embed_key: str | None = None
+    k_asked: str | None = None
     index = 0
     while index < len(arguments):
         argument = arguments[index]
@@ -481,6 +506,17 @@ def main(argv: list[str]) -> int:
             continue
         if argument.startswith("--embed="):
             embed_key = argument.split("=", 1)[1]
+            del arguments[index]
+            continue
+        if argument == "--k":
+            if index + 1 >= len(arguments):
+                print(USAGE, file=sys.stderr)
+                return 2
+            k_asked = arguments[index + 1]
+            del arguments[index : index + 2]
+            continue
+        if argument.startswith("--k="):
+            k_asked = argument.split("=", 1)[1]
             del arguments[index]
             continue
         index += 1
@@ -497,6 +533,29 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 2
+    if k_asked is not None and not rag:
+        # Same reason as `--embed`, and M10 does not change it: a plain round retrieves nothing,
+        # so there is no number of examples in it to set.
+        print(
+            "--k only means something with --rag: a plain round retrieves no examples, so there "
+            "is no number of them to choose.",
+            file=sys.stderr,
+        )
+        return 2
+    k = RAG_K
+    if k_asked is not None:
+        # Strict digits, then the range. `--k 3.5` and `--k five` are typos, and a typo that
+        # became a default would write a k=5 round under a command that asked for something
+        # else — the same failure the empty `--embed ''` refusal exists to stop.
+        if not k_asked.isdigit() or not 1 <= int(k_asked) <= RAG_K_MAX:
+            print(
+                f"--k takes a whole number from 1 to {RAG_K_MAX} — got {k_asked!r}. It is the "
+                "number of retrieved cribs per name (D88), and it is refused rather than "
+                "clamped so `rag.k` in the round file is always what was asked for.",
+                file=sys.stderr,
+            )
+            return 2
+        k = int(k_asked)
     # `is None`, not `or`: an empty `--embed ''` is a typo to refuse, not an omission to
     # default. Falling back would run a bge round under a command that asked for something.
     if embed_key is None:
@@ -529,7 +588,7 @@ def main(argv: list[str]) -> int:
 
     gold_rows, digest = load_testset()
     prompt_version = RAG_PROMPT_VERSION if rag else PROMPT_VERSION
-    path = round_path(name, prompt_version, embed_key if rag else None)
+    path = round_path(name, prompt_version, embed_key if rag else None, k if rag else None)
 
     examples_for = None
     document = {
@@ -545,14 +604,15 @@ def main(argv: list[str]) -> int:
     if rag:
         embed_model = EMBED_MODELS[embed_key]
         try:
-            examples_for = rag_examples(digest, embed_model)
+            examples_for = rag_examples(digest, embed_model, k)
         except UsageError as error:
             print(str(error), file=sys.stderr)
             return 2
         # `embed_model` is the pinned string and `embed_key` is what was typed. Both are kept:
         # the string is what a later reader has to match a vector space against, the key is
-        # what names this cell of the matrix and what the file name carries.
-        document["rag"] = {"embed_model": embed_model, "embed_key": embed_key, "k": RAG_K}
+        # what names this cell of the matrix and what the file name carries. `k` is the real k
+        # this run retrieves with, never the constant — M10's scan is unreadable otherwise.
+        document["rag"] = {"embed_model": embed_model, "embed_key": embed_key, "k": k}
     if os.path.exists(path):
         with open(path, encoding="utf-8") as handle:
             existing = json.load(handle)
@@ -588,6 +648,19 @@ def main(argv: list[str]) -> int:
                     file=sys.stderr,
                 )
                 return 2
+            # The fourth pin, M10's, and it is the embed refusal's shape for the embed
+            # refusal's reason: a file half-answered with one crib and half with eight scores a
+            # candidate that never existed. k=5 is invisible in the file name by the
+            # compatibility rule, so like the embedder it has to be refused from the metadata.
+            stored_k = (existing.get("rag") or {}).get("k")
+            if stored_k is not None and stored_k != k:
+                print(
+                    f"{path} was answered with {stored_k} retrieved examples per name and this "
+                    f"run would retrieve {k}. One round is one k — move the file aside and "
+                    "start a round for the new one.",
+                    file=sys.stderr,
+                )
+                return 2
         kept, start = resume_point(existing.get("rows", []), gold_rows)
         # The stored document wins, then this run's own facts are written back over it — the
         # model it will actually answer with, and D88's retrieval settings, which describe
@@ -605,7 +678,7 @@ def main(argv: list[str]) -> int:
     else:
         start = 0
         print(f"new round: {name} against {len(gold_rows)} names, prompt {prompt_version}"
-              + (f", {RAG_K} examples each retrieved by {embed_model}" if rag else ""))
+              + (f", {k} examples each retrieved by {embed_model}" if rag else ""))
 
     try:
         candidate.check()

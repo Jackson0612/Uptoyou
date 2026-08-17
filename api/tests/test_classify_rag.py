@@ -27,13 +27,21 @@ Four things, and each one is a way the experiment could quietly stop measuring r
    buy nothing; every other embedder appends its key. An unknown key is refused at argv, for
    the same reason an unknown candidate is — a round is a measurement of one named model.
 
+6. **`--k` names the third axis and the file name follows it too.** M10, 2026-08-17: k=5 writes
+   the *existing* name (every round on disk was retrieved at five), any other k appends `_k<k>`
+   after the embedder, `rag.k` is the real k, and out-of-range or non-integer k is refused at
+   argv rather than clamped — a clamped k would put a number in the file that the command never
+   asked for.
+
 Import discipline, same rule as `test_evaluate_score.py`: nothing reached from here may pull
 SQLAlchemy at import time. The host Python has none, and D88's store is imported by
 `run_round` inside the `--rag` branch alone for exactly that reason.
 """
 
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
@@ -324,6 +332,220 @@ class TestTheEmbedderAxis(unittest.TestCase):
     def test_the_embedder_axis_pulled_no_sqlalchemy_either(self):
         # `upto.classify.embed` is standard library only, which is what lets `run_round` name
         # it at module level while `examples` stays inside the `--rag` branch.
+        self.assertNotIn("sqlalchemy", sys.modules)
+
+
+class Stubbed:
+    """A candidate that answers instantly and offline. `model` is pinned like a real one."""
+
+    model = "stub-model:test"
+
+    def check(self) -> None:
+        pass
+
+    def ask(self, prompt: str) -> str:
+        return "日式"
+
+
+class TestTheKAxis(unittest.TestCase):
+    """M10's k-scan: `--k` chosen at argv, carried by the file name, recorded as the real k.
+
+    Every test here stops before `rag_examples` reaches the example store, or stubs it — the
+    store is the one thing in this path that pulls SQLAlchemy, and the host Python has none.
+    """
+
+    def _parsed(self, argv):
+        """Run `main` far enough to see the k it parsed, and not one step further."""
+        seen = {}
+
+        def capture(digest, embed_model, k=run_round.RAG_K):
+            seen["k"] = k
+            seen["embed_model"] = embed_model
+            raise run_round.UsageError("stopped here on purpose")
+
+        originals = (run_round.build_candidate, run_round.rag_examples)
+        run_round.build_candidate = lambda name: Stubbed()
+        run_round.rag_examples = capture
+        try:
+            status = run_round.main(argv)
+        finally:
+            run_round.build_candidate, run_round.rag_examples = originals
+        return status, seen
+
+    def test_the_default_k_is_five(self):
+        # Both halves matter: the constant is 5, and a `--rag` round with no `--k` retrieves
+        # with it rather than with whatever the store's own default happens to be.
+        self.assertEqual(run_round.RAG_K, 5)
+        status, seen = self._parsed(["qwen", "--rag"])
+        self.assertEqual(status, 2)  # the stub stopped it; the parse already happened
+        self.assertEqual(seen["k"], 5)
+
+    def test_k_eight_is_accepted_and_reaches_the_retrieval(self):
+        for argv in (["qwen", "--rag", "--k", "8"], ["qwen", "--rag", "--k=8"]):
+            with self.subTest(argv=argv):
+                status, seen = self._parsed(argv)
+                self.assertEqual(status, 2)
+                self.assertEqual(seen["k"], 8)
+
+    def test_the_ends_of_the_range_are_accepted(self):
+        for value, expected in (("1", 1), ("20", 20)):
+            with self.subTest(k=value):
+                _status, seen = self._parsed(["gemma", "--rag", "--k", value])
+                self.assertEqual(seen["k"], expected)
+
+    def test_k_outside_the_range_or_not_a_number_is_refused_at_argv(self):
+        # Refused rather than clamped, and refused before retrieval: a clamped k would write a
+        # `rag.k` the command never asked for.
+        for bad in ("0", "21", "200", "-1", "3.5", "five", "", " "):
+            with self.subTest(k=bad):
+                status, seen = self._parsed(["qwen", "--rag", "--k", bad])
+                self.assertEqual(status, 2)
+                self.assertEqual(seen, {}, "a bad k reached the retrieval")
+
+    def test_k_with_nothing_after_it_is_usage(self):
+        status, seen = self._parsed(["qwen", "--rag", "--k"])
+        self.assertEqual(status, 2)
+        self.assertEqual(seen, {})
+
+    def test_k_without_rag_is_a_usage_error(self):
+        # `--embed`'s rule, unchanged: a plain round retrieves nothing, so there is no number
+        # of examples in it to set.
+        def explode(*_args, **_kwargs):
+            raise AssertionError("--k was accepted without --rag")
+
+        original = run_round.build_candidate
+        run_round.build_candidate = explode
+        try:
+            self.assertEqual(run_round.main(["qwen", "--k", "8"]), 2)
+            self.assertEqual(run_round.main(["qwen", "--k=8"]), 2)
+        finally:
+            run_round.build_candidate = original
+
+    def test_k_five_keeps_the_existing_filename_for_every_embedder(self):
+        # The compatibility half. The scored rounds on disk were all retrieved at five, so k=5
+        # must keep writing exactly the name they already carry.
+        for key in EMBED_MODELS:
+            with self.subTest(key=key):
+                self.assertEqual(
+                    run_round.round_path("gemma", RAG_PROMPT_VERSION, key),
+                    run_round.round_path("gemma", RAG_PROMPT_VERSION, key, 5),
+                )
+        self.assertTrue(
+            run_round.round_path("gemma", RAG_PROMPT_VERSION, "bge", 5).endswith(
+                f"round_gemma_{RAG_PROMPT_VERSION}.json"
+            )
+        )
+        self.assertTrue(
+            run_round.round_path("gemma", RAG_PROMPT_VERSION, "arctic", 5).endswith(
+                f"round_gemma_{RAG_PROMPT_VERSION}_arctic.json"
+            )
+        )
+
+    def test_any_other_k_is_suffixed_after_the_embedder(self):
+        self.assertTrue(
+            run_round.round_path("gemma", RAG_PROMPT_VERSION, "bge", 8).endswith(
+                f"round_gemma_{RAG_PROMPT_VERSION}_k8.json"
+            ),
+            run_round.round_path("gemma", RAG_PROMPT_VERSION, "bge", 8),
+        )
+        self.assertTrue(
+            run_round.round_path("gemma", RAG_PROMPT_VERSION, "arctic", 1).endswith(
+                f"round_gemma_{RAG_PROMPT_VERSION}_arctic_k1.json"
+            ),
+            run_round.round_path("gemma", RAG_PROMPT_VERSION, "arctic", 1),
+        )
+
+    def test_every_cell_of_the_scan_is_its_own_file(self):
+        # The naming rule's whole job: two cells sharing a file would make the second run
+        # resume the first and score a candidate that never existed.
+        paths = {
+            run_round.round_path(generator, RAG_PROMPT_VERSION, key, k)
+            for generator in ("qwen", "gemma", "llama")
+            for key in EMBED_MODELS
+            for k in (1, 3, 5, 8)
+        }
+        self.assertEqual(len(paths), 3 * len(EMBED_MODELS) * 4, sorted(paths))
+
+    def test_gemini_is_still_refused_whatever_the_k(self):
+        # The third axis does not open the door the first two are shut against: the crib is the
+        # owner's gold and gold does not leave this machine (D88).
+        def explode(*_args, **_kwargs):
+            raise AssertionError("the refusal happened after something expensive")
+
+        original = run_round.build_candidate
+        run_round.build_candidate = explode
+        try:
+            for k in ("1", "3", "8"):
+                with self.subTest(k=k):
+                    self.assertEqual(
+                        run_round.main(["gemini", "--rag", "--embed", "arctic", "--k", k]), 2
+                    )
+            self.assertEqual(run_round.main(["gemini", "--rag", "--k", "8"]), 2)
+        finally:
+            run_round.build_candidate = original
+
+    # --- the round document, written for real into a temporary directory ------------------
+
+    def _run_offline_round(self, argv, directory):
+        """A whole round with a stubbed candidate and a stubbed crib: no model, no store."""
+        originals = (run_round.build_candidate, run_round.rag_examples)
+        previous = os.environ.get("UPTO_EVALUATION_DIR")
+        os.environ["UPTO_EVALUATION_DIR"] = directory
+        run_round.build_candidate = lambda name: Stubbed()
+        run_round.rag_examples = lambda digest, embed_model, k=5: (
+            lambda name: list(EXAMPLES)[:k]
+        )
+        try:
+            return run_round.main(argv)
+        finally:
+            run_round.build_candidate, run_round.rag_examples = originals
+            if previous is None:
+                del os.environ["UPTO_EVALUATION_DIR"]
+            else:
+                os.environ["UPTO_EVALUATION_DIR"] = previous
+
+    def test_the_document_records_the_real_k_and_the_name_carries_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                self._run_offline_round(["gemma", "--rag", "--embed", "arctic", "--k", "3"],
+                                        directory),
+                0,
+            )
+            written = sorted(os.listdir(directory))
+            self.assertEqual(
+                written, [f"round_gemma_{RAG_PROMPT_VERSION}_arctic_k3.json"], written
+            )
+            with open(os.path.join(directory, written[0]), encoding="utf-8") as handle:
+                document = json.load(handle)
+            self.assertEqual(
+                document["rag"],
+                {"embed_model": EMBED_MODELS["arctic"], "embed_key": "arctic", "k": 3},
+            )
+            self.assertEqual(document["prompt_version"], RAG_PROMPT_VERSION)
+
+    def test_a_stored_round_refuses_to_be_continued_at_a_different_k(self):
+        # The fourth pin, and the same rule as the embedder's: one round is one measurement.
+        # k=5 is invisible in the file name by the compatibility rule, so the refusal has to
+        # come from the metadata — here a file that says 5 while the command asks for 8.
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, f"round_qwen_{RAG_PROMPT_VERSION}_k8.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "candidate": "qwen",
+                        "model": Stubbed.model,
+                        "prompt_version": RAG_PROMPT_VERSION,
+                        "rag": {"embed_model": EMBED_MODELS["bge"], "embed_key": "bge", "k": 5},
+                        "rows": [],
+                    },
+                    handle,
+                )
+            self.assertEqual(self._run_offline_round(["qwen", "--rag", "--k", "8"], directory), 2)
+            # Refused, not overwritten: the stored round is still the one that was there.
+            with open(path, encoding="utf-8") as handle:
+                self.assertEqual(json.load(handle)["rag"]["k"], 5)
+
+    def test_the_k_axis_pulled_no_sqlalchemy_either(self):
         self.assertNotIn("sqlalchemy", sys.modules)
 
 
