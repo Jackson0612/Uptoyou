@@ -159,16 +159,20 @@
      The admitted cost is D89's own sentence turned around: a 1344px weather card at 2560 is
      "precisely the change nobody asked for" — home becomes the widest surface while carrying the
      least. Ruled anyway, because the alternative is a phone column in an empty field. */
-  main:has(.sheet), main:has(.homeband) { max-width: var(--col); }
+  /* **B4 (evaluator, inside D89): the reveal panel takes the same ladder, and stays one column.**
+     A fold here would set the answer beside the evidence — and this panel has exactly one focal
+     point, so splitting it splits the one moment that must be undivided. D89's fold is structural
+     because the round HAS two states; the reveal has one. */
+  main:has(.sheet), main:has(.homeband), main:has(.revealband) { max-width: var(--col); }
   @media (min-width: 1200px) {
     main:has(.homeband) .grid { grid-template-columns: repeat(4, 1fr); }
   }
   /* Only the sheet's own text scales. Everything in the header is sized in rem — root-relative,
      not main-relative — so the title and the tabs are the same size on every screen, and the
      seam above stays a shift rather than a resize. */
-  @media (min-width: 760px)  { main:has(.sheet), main:has(.homeband) { font-size: 17px; margin-top: 1rem; } }
-  @media (min-width: 1600px) { main:has(.sheet), main:has(.homeband) { font-size: 18px; margin-top: 2rem; } }
-  @media (min-width: 2100px) { main:has(.sheet), main:has(.homeband) { font-size: 20px; } }
+  @media (min-width: 760px)  { main:has(.sheet), main:has(.homeband), main:has(.revealband) { font-size: 17px; margin-top: 1rem; } }
+  @media (min-width: 1600px) { main:has(.sheet), main:has(.homeband), main:has(.revealband) { font-size: 18px; margin-top: 2rem; } }
+  @media (min-width: 2100px) { main:has(.sheet), main:has(.homeband), main:has(.revealband) { font-size: 20px; } }
 
   header { margin-bottom: 1.75rem; }
   h1 { font-family: var(--serif); font-size: 1.4rem; margin: 0 0 .2rem;
@@ -412,8 +416,14 @@
      two dice passed through each other mid-roll. Half a die's width clears it. */
   .dicebox { display: flex; align-items: center; justify-content: center; gap: 2.2rem;
              font-variant-numeric: tabular-nums; padding: .4rem 0 .2rem; perspective: 900px; }
+  /* The die is this screen's subject, and 84px tall on a 2560 monitor is an icon. It scales with
+     the tier — and `--land`'s translateZ has to scale with it or the six faces stop closing into a
+     cube, which is why the depth is a variable rather than a literal. */
   .stage { width: 62px; height: 62px; }
-  @media (min-width: 760px) { .stage { width: 74px; height: 74px; } }
+  @media (min-width: 760px)  { .stage { width: 74px; height: 74px; } }
+  @media (min-width: 1200px) { .stage { width: 104px; height: 104px; } }
+  @media (min-width: 1600px) { .stage { width: 132px; height: 132px; } }
+  @media (min-width: 2100px) { .stage { width: 160px; height: 160px; } }
   .cube { position: relative; width: 100%; height: 100%;
           transform-style: preserve-3d; transform: var(--land); }
   /* **A17: six identically-lit faces read as a stack of planes, not a solid.** A real die's
@@ -427,21 +437,20 @@
     display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
     padding: 15%; gap: 6%; backface-visibility: hidden;
   }
-  /* translateZ is half the die's width, so the six faces close into a cube. */
-  .f1 { transform: translateZ(31px); }
-  .f6 { transform: rotateY(180deg) translateZ(31px); }
-  .f3 { transform: rotateY(90deg)  translateZ(31px); }
-  .f4 { transform: rotateY(-90deg) translateZ(31px); }
-  .f5 { transform: rotateX(90deg)  translateZ(31px); }
-  .f2 { transform: rotateX(-90deg) translateZ(31px); }
-  @media (min-width: 760px) {
-    .f1 { transform: translateZ(37px); }
-    .f6 { transform: rotateY(180deg) translateZ(37px); }
-    .f3 { transform: rotateY(90deg)  translateZ(37px); }
-    .f4 { transform: rotateY(-90deg) translateZ(37px); }
-    .f5 { transform: rotateX(90deg)  translateZ(37px); }
-    .f2 { transform: rotateX(-90deg) translateZ(37px); }
-  }
+  /* translateZ is half the die's width, so the six faces close into a cube. **One variable, not
+     six literals per tier** — B4 added three more tiers and the literal version would have been
+     twenty-four hand-kept numbers whose only job is to stay equal to half of another number. */
+  .dicebox { --half: 31px; }
+  @media (min-width: 760px)  { .dicebox { --half: 37px; } }
+  @media (min-width: 1200px) { .dicebox { --half: 52px; } }
+  @media (min-width: 1600px) { .dicebox { --half: 66px; } }
+  @media (min-width: 2100px) { .dicebox { --half: 80px; } }
+  .f1 { transform: translateZ(var(--half)); }
+  .f6 { transform: rotateY(180deg) translateZ(var(--half)); }
+  .f3 { transform: rotateY(90deg)  translateZ(var(--half)); }
+  .f4 { transform: rotateY(-90deg) translateZ(var(--half)); }
+  .f5 { transform: rotateX(90deg)  translateZ(var(--half)); }
+  .f2 { transform: rotateX(-90deg) translateZ(var(--half)); }
   .pip { border-radius: 50%; background: var(--pip); width: 74%; aspect-ratio: 1;
          align-self: center; justify-self: center; }
   /* Front keeps the measured fill; the others step down, darkest on the faces a viewer only
@@ -769,7 +778,9 @@
        whose sentence stayed private still shows its number (D13): the odds were never the
        secret. The contributor's own name may be a weather word, so rows are labelled by
        channel (D21: the nudge is carried silently; D20: no weather word off the home screen). -->
-  <div v-if="view === 'round' && !openRound">
+  <!-- `revealband` is B4's `:has()` hook, the same pattern as `.sheet` and `.homeband`
+       (H31: a bound class on the mount container is never compiled). -->
+  <div v-if="view === 'round' && !openRound" class="revealband">
     <div v-if="lastResult" class="card">
       <div class="dicebox" :class="{ tumble: tumble }">
         <div class="stage" v-for="(face, i) in diceFaces" :key="i">
