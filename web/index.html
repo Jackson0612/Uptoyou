@@ -234,9 +234,10 @@
     color: var(--paper); background: var(--ink); border-color: var(--ink);
   }
 
-  /* item 18: inside a 1344px column a name and its share sat ~1000px apart. The card keeps the
-     column; its CONTENT stops spanning it. */
-  .card > * { max-width: 46rem; }
+  /* item 18's cap lives on the TABLE only — see `.alloc` below. It was written as `.card > *`
+     and that capped `.split` too, which broke D89's recorded fold widths (pool 336px where D89
+     records 833px, and at 2560 a 736px sheet inside a 1344px card). A rule aimed at one child
+     must name that child. */
   .card {
     border: 1px solid var(--line); border-radius: .9rem; background: var(--raised);
     padding: 1.35rem 1.4rem 1.15rem;
@@ -525,10 +526,10 @@
      light, **3.50:1 dark** — both clear of the 3.0 a graphical object needs. What round 2
      measured as "dark spans 0.15pp" was the landed state, which R-4 has now flattened anyway. */
   .dicebox.tumble .f1 { background: var(--diefill); }
-  .dicebox.tumble .f6 { background: color-mix(in srgb, var(--diefill) 88%, var(--ink)); }
-  .dicebox.tumble .f3, .dicebox.tumble .f4 { background: color-mix(in srgb, var(--diefill) 94%, var(--ink)); }
-  .dicebox.tumble .f5 { background: color-mix(in srgb, var(--diefill) 97%, var(--ink)); }
-  .dicebox.tumble .f2 { background: color-mix(in srgb, var(--diefill) 91%, var(--ink)); }
+  .dicebox.tumble .f6 { background: color-mix(in srgb, var(--diefill) 88%, var(--pip)); }
+  .dicebox.tumble .f3, .dicebox.tumble .f4 { background: color-mix(in srgb, var(--diefill) 94%, var(--pip)); }
+  .dicebox.tumble .f5 { background: color-mix(in srgb, var(--diefill) 97%, var(--pip)); }
+  .dicebox.tumble .f2 { background: color-mix(in srgb, var(--diefill) 91%, var(--pip)); }
 
   .pip.red { background: var(--pipred); }
 
@@ -1166,6 +1167,7 @@ createApp({
     // B2: the roll is armed, not fired. Cleared by every event that leaves this round, so a new
     // round never opens already-armed from the last one.
     const rollArmed = ref(false);
+    let tumbleTimer = null;
 
     // item 4: the control replaces itself, so focus fell to BODY and a keyboard user lost their
     // place at the exact step that needs confirming. Focus follows the control both ways.
@@ -1264,6 +1266,13 @@ createApp({
         // and this is the surface's half of that promise.
         tumble.value = true;
         rollArmed.value = false;
+        // R-4 was inert: `tumble` was never cleared, so `.dicebox.tumble` stayed on forever and
+        // the landed single-fill rule never applied. Cleared AFTER the whole reveal sequence —
+        // the dice end at 1000ms and the name/sum/hit row at 980+300=1280ms — because clearing
+        // earlier removes the rule mid-fade and the name pops instead of arriving.
+        // **D91's 980ms is untouched:** this fires after everything it governs has finished.
+        if (tumbleTimer) clearTimeout(tumbleTimer);
+        tumbleTimer = setTimeout(() => { tumble.value = false; }, 1300);
       }
     }
 
