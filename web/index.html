@@ -422,7 +422,7 @@
      per-mode colour — and `max-height` is gone because the JS cap now decides how many rows
      exist, which means one number governs the count instead of two that can disagree. */
   .candidates.faded {
-    max-height: 15.5rem; overflow-y: auto;
+    max-height: 12.5rem; overflow-y: auto;
     mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
   }
   .candidates li { border-bottom: 1px solid var(--line); }
@@ -615,6 +615,7 @@
   .factors .num { font-variant-numeric: tabular-nums; }
   .factors .why { color: var(--muted); }
   .clampline { border-top: 1px dashed var(--line); }
+  .nofactors { color: var(--muted); font-size: .85rem; line-height: 1.6; }
 
   /* **A22: content swapped at 0ms.** `.picker button`'s colour transition was the only one in
      the file, so every actual content change — a new district's readings, a tab switch — arrived
@@ -971,6 +972,26 @@
         </tbody>
       </table>
 
+      <!-- **The empty state, decided rather than left to happen.** `weight_contribution` holds zero
+           rows today, so `factorRows` is empty and this block renders zero times — which means the
+           product's central claim (every number has a reason) is invisible on the one screen built
+           to show it. The producer side is D62's post-October backlog and ruled; the EMPTY STATE is
+           presentation and therefore mine.
+
+           **The panel says so rather than staying silent.** Silence here is indistinguishable from
+           "there were no reasons", which is a claim about this round that would be false — the
+           weights were all 1.0 because nobody has contributed yet, not because contributions were
+           weighed and found empty. So the line states the absence and names the cause. It states,
+           it does not advise, and it names no place.
+
+           Rejected: hiding the section entirely (a reader cannot tell a missing feature from a
+           missing reason), and inventing an illustrative factor row (R-1's fixed illustration is
+           allowed on home because it is labelled as one; an illustration HERE would sit where real
+           accounting goes and be read as this round's accounting). -->
+      <p v-if="!factorRows.length" class="factors nofactors">
+        這一輪沒有任何權重理由：每一家的權重都是 1.0，因為還沒有人留下偏好。
+      </p>
+
       <div v-for="row in factorRows" :key="'f' + row.place_id" class="factors">
         <p class="factorhead">{{ row.name }} 的權重怎麼來</p>
         <p class="ordernote">列序依通道分組，不代表影響力大小。</p>
@@ -1325,8 +1346,11 @@ createApp({
       }, 250);
     });
     // R-7: the cap is here rather than in CSS so the surface can say what it is not showing.
-    // Five rows is A11's measured cap; the number is one constant, not two that can drift.
-    const CANDIDATE_ROWS = 5;
+    // **Four rows, not five, and the reason is measured:** at 430x760 a five-row box ended 14px
+    // BELOW the fold (item 8), so the truncation the fade announces was itself cut off. Four rows
+    // clears it. Because R-7 made this the single constant governing how many rows exist, the fix
+    // is one number — a CSS cap and a JS count would have needed two, and could disagree.
+    const CANDIDATE_ROWS = 4;
     const shownCandidates = computed(() => candidates.value.slice(0, CANDIDATE_ROWS));
 
     const exactMatch = computed(
