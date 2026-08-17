@@ -174,7 +174,7 @@
      appeared zero times in this file. Every pill, button and field now shows where the
      keyboard is, and `:focus-visible` rather than `:focus` so a mouse click does not leave a
      ring behind. */
-  .picker { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
+  .picker { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
   .picker button {
     font: inherit; font-size: .85rem; padding: .65rem .9rem; border-radius: 999px;
     /* `--edge`, not `--line`: this is the only boundary an unselected pill has. */
@@ -193,7 +193,10 @@
   }
   .now { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .temp { font-size: 3.4rem; line-height: 1; font-weight: 300; letter-spacing: -0.03em;
-          font-variant-numeric: tabular-nums; }
+          font-variant-numeric: tabular-nums;
+          /* baseline-aligned flex, so the unit sits ON the numeral's baseline instead of
+             hanging 2px under its box the way an inline span does. */
+          display: flex; align-items: baseline; gap: .08em; }
   .temp span { font-size: 1.4rem; font-weight: 400; color: var(--muted); }
   .sky { text-align: right; }
   .sky .text { font-size: 1.05rem; }
@@ -203,8 +206,12 @@
     margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line);
     display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem 1rem;
   }
-  .metric { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
-  .metric .label { color: var(--muted); font-size: .87rem; }
+  /* **Proximity was inverted.** `space-between` pushed each label and its own value 102px
+     apart while neighbouring pairs sat 16px from each other, so the eye grouped across the
+     grid instead of down it. A label now sits next to its value; the min-width keeps the
+     numbers in a column without the gap doing it. */
+  .metric { display: flex; align-items: baseline; justify-content: flex-start; gap: .55rem; }
+  .metric .label { color: var(--muted); font-size: .87rem; min-width: 4.4em; }
   .metric .value { font-variant-numeric: tabular-nums; }
 
   .source { margin-top: 1rem; color: var(--muted); font-size: .78rem; line-height: 1.5; }
@@ -237,7 +244,16 @@
     color: var(--paper); cursor: pointer; font-weight: 550;
   }
   .act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .act:disabled { opacity: .45; cursor: default; }
+  /* **A dead control must not be the loudest one on the screen.** `opacity: .45` faded the
+     fill and the label together and measured **2.75:1** — under the floor, on the first screen
+     a new device ever sees, where it was also the only filled control. Dropping the fill says
+     "not yet" structurally rather than by dimming: outline, muted label, measured 4.84:1 on
+     `--paper` and 5.18:1 on `--raised`. `not-allowed` rather than `default`, because the
+     cursor is the other half of the same sentence. */
+  .act:disabled {
+    background: transparent; color: var(--muted); border-color: var(--edge);
+    box-shadow: none; opacity: 1; cursor: not-allowed;
+  }
   .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
 
   /* The round sheet. Its padding is a token so the fold's gutter and the sheet's margin
@@ -457,7 +473,11 @@
   <header>
     <h1>Up to you</h1>
     <p class="promise">決定一頓飯，不用有人先犧牲。</p>
-    <nav class="tabs" v-if="hasDevice">
+    <!-- A2: `hasDevice` is true the moment localStorage holds two strings, which is BEFORE the
+         stream has said whether they work. On a bad key the tabs appeared while the card below
+         still said this device had none. Gating on the view as well means the tabs arrive when
+         the surface actually has somewhere to go. -->
+    <nav class="tabs" v-if="hasDevice && view !== 'device'">
       <button :aria-pressed="view === 'home' ? 'true' : 'false'" @click="view = 'home'">首頁</button>
       <button :aria-pressed="view === 'round' ? 'true' : 'false'" @click="view = 'round'">這一餐</button>
     </nav>
@@ -510,8 +530,7 @@
        picker is doing here, and which screens do not exist yet. Chrome renders everywhere,
        so a sentence naming 天氣 would be a sentence naming it on the propose screen too. -->
   <footer>
-    提案與擲骰在「這一餐」。<br>
-    行政區在這裡是手選的；之後由圈子決定。
+    提案與擲骰在「這一餐」。
   </footer>
   </div>
   <!-- /screen -->
@@ -744,7 +763,10 @@ createApp({
       if (!source) return '';
       const when = new Date(source[source.time_label + '_at']);
       const word = source.time_label === 'detected' ? '偵測' : '取得';
-      return `${word}於 ${when.toLocaleString('zh-TW', { hour12: false })} · publication ${source.publication_id}`;
+      // A7: `publication N` was developer language on a surface whose whole claim is that
+      // every number has a source — so it is renamed, not deleted. Dropping it would have
+      // removed the one handle that makes a reading auditable.
+      return `${word}於 ${when.toLocaleString('zh-TW', { hour12: false })} · 資料版本 ${source.publication_id}`;
     });
 
     // ---------------- the circle half: device, round, reveal (tickets 19/20) ----------------
@@ -788,7 +810,7 @@ createApp({
             headers: authHeaders(), cache: 'no-store',
           });
           if (response.status === 401) {
-            actionError.value = '這把鑰匙開不了這個圈子。';
+            actionError.value = '這把鑰匙開不了這個圈子。確認圈子編號，或向管理者要一把新的。';
             view.value = 'device';
             return;
           }
