@@ -229,7 +229,9 @@
     border: 1px solid var(--edge); background: transparent; color: var(--muted); cursor: pointer;
   }
   .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tabs button:hover { color: var(--ink); border-color: var(--muted); }
   .tabs button[aria-pressed="true"] { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+  .tabs button[aria-pressed="true"]:hover { color: var(--paper); border-color: var(--ink); }
 
   .fieldlabel { display: block; color: var(--muted); font-size: .87rem; margin: .9rem 0 .25rem; }
   input {
@@ -243,6 +245,10 @@
     border-radius: .6rem; border: 1px solid var(--ink); background: var(--ink);
     color: var(--paper); cursor: pointer; font-weight: 550;
   }
+  /* A14: `:focus-visible` was on five elements and `:hover` on two, neither of them a primary
+     action — the keyboard was finished and the pointer was not. */
+  .act:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 88%, var(--paper)); }
+  .act.ghost:hover:not(:disabled) { background: transparent; border-color: var(--muted); }
   .act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* **A dead control must not be the loudest one on the screen.** `opacity: .45` faded the
      fill and the label together and measured **2.75:1** — under the floor, on the first screen
@@ -364,12 +370,19 @@
      everyone at the table sees the same roll and nobody's browser is deciding anything.
      A reconnect's snapshot deliberately does NOT tumble — replaying an hour-old roll as
      drama would be the surface asserting an event that is not happening. */
-  .dicebox { display: flex; align-items: center; justify-content: center; gap: 1.1rem;
+  /* The gap is not decorative: a tumbling cube sweeps wider than its own face, so at 1.1rem the
+     two dice passed through each other mid-roll. Half a die's width clears it. */
+  .dicebox { display: flex; align-items: center; justify-content: center; gap: 2.2rem;
              font-variant-numeric: tabular-nums; padding: .4rem 0 .2rem; perspective: 900px; }
   .stage { width: 62px; height: 62px; }
   @media (min-width: 760px) { .stage { width: 74px; height: 74px; } }
   .cube { position: relative; width: 100%; height: 100%;
           transform-style: preserve-3d; transform: var(--land); }
+  /* **A17: six identically-lit faces read as a stack of planes, not a solid.** A real die's
+     faces catch different amounts of light, and without that step the tumble looks like paper
+     folding. The ladder below is a lightness step off `--diefill` only — no new hue, no new
+     token — so the object gains volume inside D87's palette. Pips are untouched, so the pairs
+     test_web_contrast measures still hold against the base fill. */
   .face {
     position: absolute; inset: 0; border-radius: 12px;
     background: var(--diefill); border: 1px solid var(--dieedge);
@@ -393,6 +406,14 @@
   }
   .pip { border-radius: 50%; background: var(--pip); width: 74%; aspect-ratio: 1;
          align-self: center; justify-self: center; }
+  /* Front keeps the measured fill; the others step down, darkest on the faces a viewer only
+     sees edge-on mid-roll, so the landed face is always the brightest one. */
+  .f1 { background: var(--diefill); }
+  .f6 { background: color-mix(in srgb, var(--diefill) 88%, var(--ink)); }
+  .f3, .f4 { background: color-mix(in srgb, var(--diefill) 94%, var(--ink)); }
+  .f5 { background: color-mix(in srgb, var(--diefill) 97%, var(--ink)); }
+  .f2 { background: color-mix(in srgb, var(--diefill) 91%, var(--ink)); }
+
   .pip.red { background: var(--pipred); }
 
   @keyframes tumble {
@@ -432,9 +453,14 @@
     .dicebox.tumble ~ .alloc tr.hit td { animation-duration: 1ms; animation-delay: 0ms; }
   }
 
-  .dicesum { color: var(--muted); font-size: 1.2rem; }
-  .winner { font-family: var(--serif); text-align: center; font-size: 1.35rem;
-            font-weight: 700; margin: .6rem 0 1rem; }
+  /* The sum is a fact of the roll, not a caption about it — out of `--muted`, up a step. */
+  .dicesum { color: var(--ink); font-size: 1.35rem; }
+  /* **A18: the answer was set smaller than the outdoor temperature on another screen.** The
+     winner is the one thing this product exists to produce, and 1.35rem left it quieter than
+     the evidence table 40px beneath it. Colour is B5's decision and is not touched here. */
+  .winner { font-family: var(--serif); text-align: center; font-weight: 700;
+            font-size: clamp(1.9rem, 1.4rem + 1.8vw, 3rem); line-height: 1.15;
+            margin: .9rem 0 1.1rem; }
 
   .alloc { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   .alloc caption { caption-side: bottom; color: var(--muted); font-size: .78rem;
@@ -455,6 +481,23 @@
   .factors .num { font-variant-numeric: tabular-nums; }
   .factors .why { color: var(--muted); }
   .clampline { border-top: 1px dashed var(--line); }
+
+  /* **A22: content swapped at 0ms.** `.picker button`'s colour transition was the only one in
+     the file, so every actual content change — a new district's readings, a tab switch — arrived
+     as a hard cut. A short opacity fade says "this is new" without animating layout: only
+     `opacity` moves, so nothing reflows and nothing shifts under a cursor mid-press.
+     Keyed remount is what replays it (`:key` on the swapping element), which is why this is an
+     animation and not a transition.
+
+     **No `both` fill, and that is a measured decision.** `animation: … both` holds the animation
+     applied after it ends, which keeps the element on its own compositing layer — and a
+     composited layer renders text with grayscale antialiasing instead of subpixel. The result
+     looked identical and moved ~2,500 pixels per home shot in the regression diff, permanently.
+     Without the fill the layer is released when the animation finishes and the text goes back to
+     how the rest of the page is rendered. */
+  @keyframes swapin { from { opacity: 0; } to { opacity: 1; } }
+  .swap { animation: swapin 140ms ease-out; }
+  @media (prefers-reduced-motion: reduce) { .swap { animation-duration: 1ms; } }
 
   .stacked { margin-top: 1rem; }
 </style>
@@ -511,7 +554,7 @@
   <!-- /chrome -->
 
   <!-- screen: home -->
-  <div v-if="view === 'home'">
+  <div v-if="view === 'home'" class="swap">
   <div class="picker">
     <button
       v-for="place in townships"
@@ -521,7 +564,7 @@
     >{{ place.name }}</button>
   </div>
 
-  <div class="card">
+  <div class="card swap" :key="selected">
     <div v-if="loading" class="state">讀取中…</div>
     <div v-else-if="error" class="state bad">{{ error }}</div>
 
@@ -582,10 +625,13 @@
   <!-- The open round: the pool, the propose box, the dice. D20 governs every word here —
        the hour is shown and nothing else about the sky (D16's confirmation shows the hour,
        not the forecast). The full list stays visible with nothing removed (§3.0). -->
-  <div v-if="view === 'round' && openRound" class="card sheet">
+  <div v-if="view === 'round' && openRound" class="card sheet swap">
     <div class="roundhead">
-      <span>用餐時間 {{ roundHourLabel }}</span>
-      <span v-if="!openRound.target_hour_typed" class="hint">（未指定，擲骰當下為準）</span>
+      <!-- A20: when nobody typed an hour, the surface used to typeset the round's default as a
+           concrete 07:00 — a time no person chose, printed as though one had. It now says what
+           is true instead, and the parenthetical that used to explain the fiction is gone. -->
+      <span v-if="openRound.target_hour_typed">用餐時間 {{ roundHourLabel }}</span>
+      <span v-else>用餐時間 <span class="hint">以擲骰當下為準</span></span>
     </div>
 
     <!-- The fold (ruled 2026-08-15, direction B). On a phone this div is a plain block and
@@ -605,7 +651,10 @@
       <section class="side-pending">
         <p class="colhead"><span>提案</span></p>
         <label class="fieldlabel" for="place-query">提案</label>
-        <input id="place-query" v-model="query" placeholder="店名" autocomplete="off">
+        <!-- A19: the placeholder said 店名 while the label already said 提案 — a third label
+             for one field. Removed rather than replaced: an example shop name here would put a
+             restaurant name on the surface as illustration, which is the shape D94 rules out. -->
+        <input id="place-query" v-model="query" autocomplete="off">
         <!-- A12: this sits ABOVE the results, not below them. It answers "what I want is not
              in this list", and that thought arrives while reading the list rather than after
              scrolling past all of it — and below a capped, scrolling list it was unreachable. -->
