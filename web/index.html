@@ -294,6 +294,9 @@
   .fieldlabel { display: block; color: var(--muted); font-size: .87rem; margin: .9rem 0 .25rem; }
   /* item 20's reveal control. The key is a secret that a person still has to be able to check —
      `password` alone turns a mistyped paste into an unexplainable 401. */
+  .fieldnote { color: var(--muted); font-size: .82rem; margin: .3rem 0 .1rem; line-height: 1.55; }
+  .devicehead { font-family: var(--serif); font-size: 1.25rem; font-weight: 700; margin: 0 0 .4rem; }
+  .devicenote { color: var(--muted); margin: 0 0 1.1rem; font-size: .9rem; line-height: 1.6; }
   .secret { display: flex; gap: .5rem; align-items: stretch; }
   .secret input { flex: 1 1 auto; }
   .peek { font: inherit; font-size: .85rem; padding: .55rem .8rem; border-radius: .55rem;
@@ -776,8 +779,11 @@
        Both of its sentences are about this screen and this stage of the build — what the
        picker is doing here, and which screens do not exist yet. Chrome renders everywhere,
        so a sentence naming 天氣 would be a sentence naming it on the propose screen too. -->
+  <!-- item 17: 「提案與擲骰在「這一餐」。」 deleted. If the tabs are legible the sentence is an
+       apology for them; if they are not, the fix is the tabs. They are legible — 45px targets,
+       ink fill on the active one — so the sentence went. -->
   <footer>
-    提案與擲骰在「這一餐」。
+    每一個數字都查得到出處。
   </footer>
   </div>
   <!-- /screen -->
@@ -788,7 +794,10 @@
        header on every write (D67). No weather word may appear here: chrome and this screen
        render beside every other screen's rules. -->
   <div v-if="view === 'device'" class="card deviceband">
-    <p class="fieldlabel">這台裝置還沒有鑰匙。把管理者給你的兩個值貼進來：</p>
+    <!-- item 21: the paste instruction was wearing a field label's clothes and the screen had no
+         heading at all. A heading names where you are; an instruction says what to do. -->
+    <h2 class="devicehead">這台裝置還沒有鑰匙</h2>
+    <p class="devicenote">把管理者給你的兩個值貼進來，之後這台裝置就記得了。只需要做一次。</p>
     <label class="fieldlabel" for="device-token">裝置金鑰</label>
     <!-- item 20: it is a key, and it rendered in cleartext on a screen someone may be holding in
          public. `password` with an explicit reveal, because a key you cannot check is a key you
@@ -842,8 +851,18 @@
                a count of the QUERY, not a share of any place: identical for every member, not
                derived from the pool, and incapable of standing in for a weight. -->
           <span v-if="candidates.length > shownCandidates.length" class="count">顯示 {{ shownCandidates.length }}／{{ candidates.length }}</span>
+          <!-- item 11 (「還可以提 N 家」) is NOT implemented, and not because of B1's veto — backend
+               already cleared that. The payload has no quota: `open_round` carries only
+               `round_id`, `target_hour`, `target_hour_typed`, `opened_at` and a pool of
+               `{place_id, name}`, with no per-member proposal count and no `member_id` on a pool
+               row. The browser cannot know whose three the three are. Reported rather than
+               guessed at — a count I inferred from pool length would be wrong the moment two
+               people propose. -->
         </p>
         <label class="fieldlabel" for="place-query">提案</label>
+        <!-- item 12: A19 was right to kill the third *label*; it left the column wordless. This is
+             an instruction, not a label — it says what the field does, which the label cannot. -->
+        <p class="fieldnote">輸入店名，或直接以你打的字提案。</p>
         <!-- A19: the placeholder said 店名 while the label already said 提案 — a third label
              for one field. Removed rather than replaced: an example shop name here would put a
              restaurant name on the surface as illustration, which is the shape D94 rules out. -->
@@ -853,6 +872,9 @@
              scrolling past all of it — and below a capped, scrolling list it was unreachable. -->
         <!-- R-2: the frequent reversible act takes the ink. Proposing is done many times a round
              and can be undone by simply not rolling; the roll cannot be undone at all. -->
+        <!-- item 10: the propose error belongs beside the list it is about, not 83px under the
+             roll button where it read as a failure of the roll. -->
+        <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
         <button v-if="query.trim() && !exactMatch" class="act typed" @click="proposeTyped">
           以「{{ query.trim() }}」提案
         </button>
@@ -888,7 +910,6 @@
           <button class="act roll" @click="rollDice">擲骰</button>
           <button class="act ghost" @click="cancelRoll">再等等</button>
         </div>
-        <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
       </section>
     </div>
   </div>
