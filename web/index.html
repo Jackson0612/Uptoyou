@@ -261,6 +261,17 @@
   .state.bad { color: #a3341f; }
   @media (prefers-color-scheme: dark) { .state.bad { color: #f08a6c; } }
 
+  /* R-1's tile. Capped at 40rem even where `--col` is wider: the grid gains nothing from 1344px,
+     and inheriting that width would make an illustration the widest thing on the screen. */
+  .mech { margin-top: 1.75rem; max-width: 40rem; }
+  .mechhead { margin: 0 0 .7rem; font-size: .95rem; font-weight: 600; }
+  .mechgrid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; }
+  .mechgrid i { aspect-ratio: 1; border-radius: 1px; background: var(--line); }
+  .mechgrid i.a { background: var(--accent); }
+  .mechgrid i.b { background: color-mix(in srgb, var(--ink) 55%, var(--paper)); }
+  .mechgrid i.c { background: var(--edge); }
+  .mechnote { margin: .8rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.6; }
+
   footer { margin-top: 1.5rem; color: var(--muted); font-size: .82rem; line-height: 1.6; }
   footer code { font-size: .95em; }
 
@@ -715,6 +726,31 @@
       </p>
     </template>
   </div>
+
+  <!-- R-1: the room D97 recovered, spent on a FIXED-ILLUSTRATION mechanism tile.
+
+       **Every number here is a constant in the markup.** Nothing reads `openRound`, `lastResult`
+       or the pool; there is no place name and no per-place share. That is D96's reconciled line —
+       a home tile may show how the machine works and may not show what the machine chose — and
+       the B1 veto's standing rule (nothing pre-roll shows a weight, a share, or a count standing
+       in for one) is why the illustration is the DICE half rather than the weighting half: the
+       36-cell grid illustrates the draw, which the reveal's own caption already states in public,
+       while `×1.2 ×0.9` would illustrate weighting, which is the half the veto keeps backstage.
+
+       **Admitted, because it is the first of its kind on this surface:** every element until now
+       has had a provenance, and a fixed illustration has none by construction. It is labelled as
+       an illustration in its own caption rather than left to look like a reading. -->
+  <section class="mech">
+    <p class="mechhead">三十六格是怎麼分的</p>
+    <div class="mechgrid" aria-hidden="true">
+      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
+      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
+      <i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="c"></i><i class="c"></i>
+      <i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
+    </div>
+    <p class="mechnote">兩顆骰子共三十六種點數組合，每一種機會相等。權重決定每一家拿到幾格，
+      三十六格全部攤開。上圖是示意，不是這一輪的數字。</p>
+  </section>
 
   <!-- The footer sits **inside the home screen, not in chrome**, and that is deliberate.
        Both of its sentences are about this screen and this stage of the build — what the
