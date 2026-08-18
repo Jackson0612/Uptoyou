@@ -52,6 +52,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy import text
@@ -298,19 +299,34 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
         reset_retries()
         for start in range(0, len(todo), BATCH):
             batch = todo[start : start + BATCH]
-            # One embedding request for the whole batch (M12: 10.8× on that half). The commit
-            # batch and the embedding batch are deliberately the same 25: one knob, and the
-            # figure above was measured at 25.
+            # **Per-phase timing, added 2026-08-18 after a whole afternoon could not answer where a
+            # pass's time goes.** Three passes bent — 松山 0.92 → 2.0, 北投 0.94 → 1.42, 大安
+            # 1.09 → 1.72 — while the model's own reported work stayed flat at ~0.6 s a name and TCP
+            # connect stayed at 0.07 ms. **The gap could not be attributed from outside**, because
+            # ollama serves one request at a time: every measurement taken from a second client
+            # queues behind this pass and reads the pass's own slowness back at you. That trap
+            # caught both sessions investigating it. So the split is timed here, inside the only
+            # client that never waits for itself, and printed per batch.
+            #
+            # Three phases, and they are the three candidates: the one embedding request, the k-NN
+            # queries against the crib, and the model calls. Wall time for the batch is printed too,
+            # so what the three do *not* account for is visible rather than inferred.
+            batch_started = time.monotonic()
+            retrieval_started = time.monotonic()
             neighbours = (
                 None if retrieve_many is None
                 else await retrieve_many([name for _, name in batch])
             )
+            retrieval_s = time.monotonic() - retrieval_started
+            model_s = 0.0
             results = []
             for index, (place_id, name) in enumerate(batch):
+                asked_at = time.monotonic()
                 if neighbours is None:
                     outcome = classify_name(name, ask)
                 else:
                     outcome = classify_name_rag(name, ask, neighbours[index])
+                model_s += time.monotonic() - asked_at
                 if isinstance(outcome, Classified):
                     results.append((place_id, name, outcome.category, outcome.prompt_version))
                 elif isinstance(outcome, NoSignal):
@@ -322,6 +338,7 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
                     no_signal += 1
                 else:
                     refused += 1
+            write_started = time.monotonic()
             async with Session() as session:
                 for place_id, asked, category, version in results:
                     await session.execute(
@@ -340,11 +357,20 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
                         },
                     )
                 await session.commit()
+            write_s = time.monotonic() - write_started
+            batch_s = time.monotonic() - batch_started
             done += sum(1 for r in results if r[2] is not None)
             seen = done + no_signal + refused
+            # `rest` is what the three phases do not explain. It should be near zero; if a pass
+            # bends and `rest` is what grows, the cost is in this loop rather than in any of the
+            # three, and that is a different search from any conducted on 2026-08-18.
+            rest_s = batch_s - retrieval_s - model_s - write_s
             print(
                 f"  {seen}/{len(todo)}  written {done}  legal-entity {no_signal}  "
-                f"unusable {refused}",
+                f"unusable {refused}"
+                f"  |  {batch_s / len(batch):.3f} s/name"
+                f"  retrieve {retrieval_s:.2f}  model {model_s:.2f}"
+                f"  write {write_s:.2f}  rest {rest_s:.2f}",
                 flush=True,
             )
 
