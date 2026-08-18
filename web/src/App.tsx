@@ -1,16 +1,108 @@
+import { useEffect, useState } from 'react'
+import Collage from './components/home/Collage'
+import WeatherIcon from './components/home/WeatherIcon'
+import {
+  TOWNSHIPS, fetchWeather, conditionCode, measure, type Weather,
+} from './lib/weather'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+
 /**
- * A0b — the scaffold. One route, the product name, nothing else.
+ * The home entry — appetite, per the owner's ruling that the 36-cell mechanism does not belong
+ * here. Built against the approved comparison page; the numbers live in `home.css` beside the
+ * declarations they came from.
  *
- * No screen is built here: the home is the next ticket and waits on the owner
- * picking A or B on the comparison page. Nothing on this page fetches (§6).
+ * D20 binds: the weather STATES and never advises, and it appears on this screen and no other.
+ * D94 binds: no restaurant name on the home.
  */
 export default function App() {
+  const [township, setTownship] = useState('63000040')   // 中山區, the demo circle's district
+  const [weather, setWeather] = useState<Weather | null>(null)
+  const [error, setError] = useState('')
+  const hasDevice = Boolean(localStorage.getItem('upto_token') && localStorage.getItem('upto_circle'))
+
+  useEffect(() => {
+    let live = true
+    const load = () => fetchWeather(township)
+      .then((w) => { if (live) { setWeather(w); setError('') } })
+      // the API's own detail, never a sentence invented here: a wrong reason on screen is worse
+      // than a blunt one
+      .catch((e: Error) => { if (live) { setWeather(null); setError(e.message || '連不上 API') } })
+    load()
+    // the forecast republishes about every six hours and the observation hourly, so a five-minute
+    // poll is already far more often than the data can change; it exists so the hour rolls over
+    const t = window.setInterval(load, 5 * 60 * 1000)
+    return () => { live = false; window.clearInterval(t) }
+  }, [township])
+
+  const name = TOWNSHIPS.find((t) => t.code === township)?.name ?? ''
+  const hour = weather?.hour?.slice(11, 16) ?? ''
+
   return (
-    <main className="min-h-dvh grid place-items-center px-6">
-      <div data-part="mark" className="text-center">
-        <h1 className="text-display font-black tracking-tight">上桌了</h1>
-        <p className="text-note text-muted mt-2 tracking-[0.18em] uppercase">Up to you</p>
+    <>
+      <div className="col">
+        <header className="mast" data-part="masthead">
+          <div className="brand"><b>由你決定</b><span>Up to you</span></div>
+          <Select value={township} onValueChange={setTownship}>
+            <SelectTrigger data-part="picker" aria-label="選擇行政區">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TOWNSHIPS.map((t) => (
+                <SelectItem key={t.code} value={t.code}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </header>
+
+        <div className="hero">
+          <div className="heroL">
+            <p className="eyebrow" data-part="badge"><em>★</em>臺北市 12 區 · 全部來自公開登記資料</p>
+            <h1 className="headline" data-part="headline">
+              <span>今天吃什麼</span><span className="lit">讓骰子決定</span>
+            </h1>
+            <p className="say" data-part="bodyline">
+              一人提一家，權重一次算清，兩顆骰子擲一次就定案。沒有人要先犧牲，也沒有人要當壞人。
+            </p>
+
+            <div className="wx" data-part="weather">
+              {error ? (
+                <p className="wxnow"><span className="c">{error}</span></p>
+              ) : (
+                <>
+                  <p className="wxnow">
+                    <WeatherIcon code={conditionCode(weather)} />
+                    <span className="t">{measure(weather, 'temperature_c')}<span>°C</span></span>
+                    <span className="c">{measure(weather, 'weather_text')}</span>
+                  </p>
+                  <div className="wxstrip">
+                    <span className="u"><span className="k">體感</span>
+                      <span className="v">{measure(weather, 'apparent_temperature_c')}°C</span></span>
+                    <span className="u"><span className="k">降雨機率</span>
+                      <span className="v">{measure(weather, 'rain_probability_pct')}%</span></span>
+                    <span className="u"><span className="k">相對濕度</span>
+                      <span className="v">{measure(weather, 'humidity_pct')}%</span></span>
+                  </div>
+                </>
+              )}
+              {/* provenance is kept and demoted, never removed — it is the claim itself */}
+              <p className="wxsrc" data-part="weather-source">
+                {name}{hour && ` ${hour}`} · {weather?.kind === 'observation' ? '觀測' : '預報'}
+                {' · 中央氣象署開放資料'}
+              </p>
+            </div>
+          </div>
+
+          <div className="heroR"><Collage /></div>
+        </div>
       </div>
-    </main>
+
+      {/* One filled control, and its label follows device state: a person with no key would
+          otherwise land on a home whose only primary action points where they cannot go. */}
+      <div className="bar" data-part="bar">
+        <button type="button">{hasDevice ? '這一餐' : '貼上鑰匙'}</button>
+      </div>
+    </>
   )
 }

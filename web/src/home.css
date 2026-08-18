@@ -1,0 +1,186 @@
+/* The home screen's geometry.
+   
+   Written as CSS rather than as utility strings on purpose: the acceptance criterion for this
+   screen is a PIXEL DIFF against the owner-approved page (`idea & img/design-proposals/
+   home-v2.html`), and every number below is transcribed from it. Keeping the same class names and
+   the same declarations makes the two comparable by reading as well as by measuring — a utility
+   soup would be correct and unreviewable.
+   Colour and type come from the theme in `index.css`; nothing here invents a value. */
+
+.col { width: min(1200px, 88vw); margin: 0 auto; }
+
+/* ── masthead ─────────────────────────────────────────────────────────────── */
+.mast {
+  display: flex; align-items: center; justify-content: space-between;
+  border: 2px solid var(--color-ink); padding: 14px 20px; margin-top: 20px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand b { font-size: var(--text-lead); font-weight: 900; letter-spacing: .02em; }
+.brand span { font-size: var(--text-note); color: var(--color-muted);
+              letter-spacing: .1em; text-transform: uppercase; }
+
+/* ── hero ─────────────────────────────────────────────────────────────────── */
+.hero { display: grid; gap: 28px; margin-top: 34px; }
+.heroL { display: flex; flex-direction: column; }
+
+@media (min-width: 900px) {
+  /* The hero owns the viewport, capped. Both halves of the reasoning are in the approved page's
+     source and are repeated here because they are the two shapes a reader would otherwise retry:
+     a STRETCHED row makes the text column as tall as the viewport while the collage stops at its
+     cap, dropping the weather line hundreds of px below the images; a CENTRED row sizes to the
+     TEXT column, so the collage shrinks instead of growing. The cap belongs on the hero.
+     480px is swept, not chosen: at 620 the page measures 0.222 mean saturation / 22.1% high-sat
+     against ceilings of 0.20 and 20%. The break is between 510 and 540; 510 passes at exactly
+     0.200, which is the "holds only at the ceiling" shape the type ladder exists to forbid. */
+  .col   { min-height: calc(100vh - var(--bar-h) - 20px); display: flex; flex-direction: column; }
+  .hero  { grid-template-columns: 46fr 54fr; gap: 44px; margin-top: 52px;
+           flex: 1 1 auto; max-height: 480px; margin-block: auto; align-items: stretch; }
+  /* the weather settles to the collage's foot rather than trailing the body copy */
+  .heroL .wx { margin-top: auto; }
+}
+
+/* `align-self` because .heroL is a column flex container: without it the box stretches to the
+   full column and stops reading as a tag. */
+.eyebrow {
+  display: inline-flex; align-self: flex-start; align-items: center; gap: 8px;
+  border: 2px solid var(--color-ink); padding: 7px 13px;
+  font-size: var(--text-note); font-weight: 700; letter-spacing: .02em;
+}
+.eyebrow em { color: var(--color-hot-ink); font-style: normal; font-weight: 900; }
+
+h1.headline {
+  font-family: "UpTo Serif", "Noto Serif TC", serif;
+  font-weight: 900; line-height: 1.08; letter-spacing: .01em;
+  font-size: clamp(40px, 3.6vw, 64px);
+  margin: 18px 0 0;
+}
+h1.headline span { display: block; }
+/* text on paper, so hot-ink: `hot` here measures 2.33 against a 3.0 floor */
+h1.headline .lit { color: var(--color-hot-ink); }
+
+.say { margin-top: 16px; font-size: var(--text-body); max-width: 22em; }
+
+/* ── the collage ──────────────────────────────────────────────────────────── */
+.collage { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px;
+           align-items: start; position: relative; padding-right: 8px; }
+.cell { position: relative; border: 2px solid var(--color-ink);
+        box-shadow: 6px 6px 0 var(--color-ink); overflow: hidden;
+        line-height: 0; background: var(--color-ink); }
+.cell img { position: absolute; inset: 0; display: block;
+            width: 100%; height: 100%; object-fit: cover; }
+.cell:nth-child(2), .cell:nth-child(4) { margin-top: 22px; }
+
+/* The aspect ratios drive layout only BELOW 900, where the hero does not fill the viewport.
+   Leaving them live above 900 lets `:nth-child` (0,2,1) outrank the height reset and each cell
+   sizes its WIDTH from its height — measured once at 370/328/328/370 with two overrunning the
+   column by 62px. Visible in the render, invisible in the diff. */
+@media (max-width: 899.98px) {
+  .cell:nth-child(1) { aspect-ratio: 3/2; }
+  .cell:nth-child(2) { aspect-ratio: 4/3; }
+  .cell:nth-child(3) { aspect-ratio: 4/3; }
+  .cell:nth-child(4) { aspect-ratio: 3/2; }
+}
+@media (min-width: 900px) {
+  .collage { height: 100%; grid-template-rows: 1fr 1fr; align-items: stretch; }
+  .cell { height: 100%; }
+}
+
+/* HC-3: the swap touches opacity and nothing else. Both images are absolutely positioned in a
+   box whose size is set by the grid, so a cross-fade cannot move a pixel. */
+.cell img { transition: opacity 400ms ease-out; }
+[data-collage-state="static"] .cell img { transition: none; }
+@media (prefers-reduced-motion: reduce) { .cell img { transition: none; } }
+
+.tag {
+  position: absolute; right: 34px; bottom: -14px; z-index: 2;
+  background: var(--color-hot); color: var(--color-on-hot);
+  border: 2px solid var(--color-ink); box-shadow: 6px 6px 0 var(--color-ink);
+  padding: 10px 18px; text-align: center; line-height: 1.6;
+}
+.tag b { display: block; font-size: var(--text-display); font-weight: 900; line-height: 1;
+         font-variant-numeric: tabular-nums; }
+.tag span { display: block; font-size: var(--text-note); font-weight: 700;
+            letter-spacing: .06em; margin-top: 3px; }
+
+/* ── the pinned bar ───────────────────────────────────────────────────────── */
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+       background: var(--color-hot); border-top: 2px solid var(--color-ink); }
+.bar button {
+  font: inherit; display: block; width: min(1200px, 88vw); margin: 0 auto;
+  height: var(--bar-h); border: 0; background: transparent; color: var(--color-on-hot);
+  font-size: var(--text-lead); font-weight: 900; letter-spacing: .04em; cursor: pointer;
+}
+.bar button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
+
+/* ── the weather (W-2, owner-ruled) ───────────────────────────────────────────
+   The rejected treatment ran six facts together with dots at one weight — a data dump wearing a
+   sentence's clothes, which is what the owner was pointing at. W-2 is two levels: one glanceable
+   number, then the detail. D20 binds absolutely: these are numbers and nothing infers from them. */
+.wx { margin-top: 24px; }
+.wxnow { display: flex; align-items: baseline; gap: 10px; }
+.wxnow .t { font-size: var(--text-temp); font-weight: 900; line-height: 1;
+            font-variant-numeric: tabular-nums; }
+.wxnow .t span { font-size: .5em; font-weight: 700; margin-left: 2px; }
+.wxnow .c { font-size: var(--text-body); }
+.wxstrip { display: flex; margin-top: 14px; gap: 30px; }
+.wxstrip .u { display: flex; flex-direction: column; gap: 2px; }
+.wxstrip .k { font-size: var(--text-note); color: var(--color-muted); white-space: nowrap; }
+.wxstrip .v { font-size: var(--text-note); color: var(--color-ink); font-weight: 700;
+              font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wxsrc { margin-top: 10px; font-size: var(--text-note); color: var(--color-muted); }
+
+/* A FIXED SQUARE, identical for every condition, so a condition change cannot shift a pixel.
+   The box is sized here and the glyphs fill it — that is why an unknown code, a null, or a
+   missing key all draw nothing and leave the layout untouched. */
+.wxicon { width: 36px; height: 36px; flex: none; align-self: center; margin-right: 4px; }
+@media (min-width: 900px) { .wxicon { width: 44px; height: 44px; } }
+.wxicon svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+@keyframes spin       { to { transform: rotate(360deg) } }
+@keyframes drift      { 0%,100% { transform: translateX(0) } 50% { transform: translateX(5px) } }
+@keyframes drift-slow { 0%,100% { transform: translateX(0) } 50% { transform: translateX(-4px) } }
+@keyframes fall       { 0% { transform: translateY(-4px); opacity: 0 }
+                        25% { opacity: 1 } 85% { opacity: 1 }
+                        100% { transform: translateY(16px); opacity: 0 } }
+/* the bolt is ALWAYS visible and the flash is a BRIGHTENING, not an appearance. A bolt hidden for
+   88% of its cycle makes 雷雨 read as ordinary rain — the one state it exists to be told from. */
+@keyframes flash      { 0%,86%,100% { opacity: .9; transform: scale(1) }
+                        88% { opacity: 1; transform: scale(1.14) }
+                        91% { opacity: .75; transform: scale(1) }
+                        94% { opacity: 1; transform: scale(1.1) } }
+@keyframes glow       { 0%,100% { opacity: .5; transform: scale(1) }
+                        50% { opacity: .9; transform: scale(1.12) } }
+.rays   { transform-origin: 32px 32px; animation: spin 14s linear infinite }
+.halo   { transform-origin: 32px 32px; animation: glow 5s ease-in-out infinite }
+.cloud  { animation: drift 6s ease-in-out infinite }
+.cloud2 { animation: drift-slow 8s ease-in-out infinite }
+.drop   { animation: fall 1.5s linear infinite }
+.drop:nth-of-type(2) { animation-delay: .5s }
+.drop:nth-of-type(3) { animation-delay: 1s }
+.bolt   { transform-origin: 34px 50px; animation: flash 3.2s linear infinite }
+/* §5 rule 4's third condition: stopped on a LEGIBLE frame, not a blank one — a stopped sun keeps
+   its halo rather than losing it to the 0% keyframe. */
+@media (prefers-reduced-motion: reduce) {
+  .rays, .halo, .cloud, .cloud2, .drop, .bolt { animation: none }
+  .halo { opacity: .7 }
+}
+
+/* ── PICKER — shadcn Select, restyled to the approved masthead box. shadcn is adopted for its
+   BEHAVIOUR (keyboard, focus management, typeahead); none of its appearance survives. The caret
+   is a CSS triangle and lucide's chevron is removed, per §7's rule that icons are not UI. */
+[data-part="picker"] {
+  display: inline-flex; align-items: center; gap: 8px; height: auto;
+  border: 2px solid var(--color-ink); padding: 6px 12px;
+  font-size: var(--text-body); font-weight: 700;
+  background: var(--color-paper); color: var(--color-ink);
+}
+[data-part="picker"] svg { display: none; }
+[data-part="picker"]::after {
+  content: ""; width: 0; height: 0; display: block;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 6px solid var(--color-ink);
+}
+[data-part="picker"]:focus-visible { outline: 2px solid var(--color-hot-ink); outline-offset: 2px; }
+[data-slot="select-content"] { border: 2px solid var(--color-ink); box-shadow: none;
+                               background: var(--color-paper); }
+[data-slot="select-item"] { font-size: var(--text-body); }
