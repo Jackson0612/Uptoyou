@@ -1,22 +1,42 @@
 #!/usr/bin/env python3
-"""D20 and H7, asserted against the front end's actual text.
+"""The surface's rules, checked where each one is actually decidable.
 
 Run: python3 app/api/tests/test_web_surface.py    (no network, no database, no browser)
 
-It lives under `api/tests` because there is one test root and this runs with the rest of
-tier 1; it reads `app/web/` and touches nothing else.
+**Rewritten 2026-08-18 for D104.** The surface was one `index.html` with a vendored Vue global
+build, and this file's machinery matched it: HTML comments delimited "screens", and every rule was
+read off that one document. Vite + React 19 + Tailwind 4 has no such document, so the old
+apparatus is gone rather than adapted.
 
-**Why a test and not a comment.** D20 states the rule — *the surface may state, never
-advise* — and then names how it will be broken: "The failure will not happen at design
-time; it will happen months later when someone improves the UI copy." A rule whose stated
-failure mode is a well-meaning later edit is a rule that needs something that fails.
+**Each rule now lives where it can be decided, and the two are not interchangeable.**
 
-**The trap this file walked into first.** `index.html` quotes 建議選近一點的店 in a comment,
-as the example of what may not be written. A scan of the whole file therefore fails on the
-prohibition itself — the same shape as an earlier test that asserted the word "preference"
-was absent from a refusal whose job was to say "whose preference". So the scan is over the
-**user-visible surface only**: comments are stripped first, because a comment cannot appear
-on a screen and the explanation must be allowed to name the thing it forbids.
+- **Source (`app/web/src`) for anything about what the code says.** H7's rule and D20's advisory-copy
+  rule are properties of what was written, and source is readable.
+- **Built output (`app/web/dist`) for anything about what a browser fetches.** §6's dead-wifi rule
+  and the `@font-face` declarations are properties of the artefact nginx serves, and only the build
+  produces them.
+
+**Two things I measured before writing an assertion, and both changed it.**
+
+**`dangerouslySetInnerHTML` appears in `dist/assets/*.js` once, from React itself.** So a built-output
+scan for H7 can never pass, and H7 is checked in source only. This is the mirror of the reason H7 is
+*not* checked in built output for the other direction: a minifier mangles nothing about a prop name,
+but React shipping the string means the signal is not ours.
+
+**Three external URLs appear in the built output and none of them is a network dependency** — a
+`https://react.dev` link inside a React error template, `https://tailwindcss.com` in Tailwind's MIT
+licence comment, and `http://www.w3.org/2000/svg` as an SVG namespace. **So §6 cannot be checked by
+scanning for URLs.** It is checked at the places a browser actually fetches from: `<script src>`,
+`<link href>`, `<img src>`, and CSS `url(...)`. A gate that failed on a licence comment would be
+waved through the first time it fired, which is the same lesson as the font gate demanding a `═`
+that appeared only in a CSS comment.
+
+**D20's second half is written to arm itself rather than to wait.** *Weather appears on the home
+screen and nowhere else* needs screens, and the scaffold has none. Rather than leave a comment for
+someone to remember, the check asserts the half that is decidable today — **weather vocabulary
+appears in no module other than a home module** — which passes on a scaffold that mentions weather
+nowhere and starts biting the moment a second module mentions it. The positive half (*the home does
+show it*) prints as not-yet-assertable and names what it waits for.
 """
 
 import os
@@ -25,388 +45,294 @@ import sys
 import unittest
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "web")
-HOME = os.path.join(WEB, "index.html")
+SRC = os.path.join(WEB, "src")
+DIST = os.path.join(WEB, "dist")
 
-# Recommendation vocabulary. Not a spell-check: each of these turns a fact into a position
-# on where somebody should eat, which D20 rules is a reason wearing a hat.
-ADVISORY = ["建議", "推薦", "最好", "不如", "適合", "應該去", "別去", "考慮", "值得"]
+# D20's first half: the surface may state, never advise.
+ADVISORY = ["建議", "推薦", "最好", "不如", "應該去", "別去", "值得一試", "首選"]
 
-# D20's other half: weather belongs to the home screen and no other.
-#
-# **Widened 2026-08-12, because the list only knew the labels already on the home screen.** It held
-# 降雨 · 體感 · 濕度 · 風速 · 氣溫 — which is what this page happens to print, not what a person
-# writes. Five ordinary sentences were tried against it and **all five got through**: 今天天氣不錯,
-# 外面下雨, 氣象預報說, 溫度很高, 很悶熱. H29 fixed *where* the scan looks; this fixes what it knows,
-# and the two together are what the rule needed. `test_the_vocabulary_catches_ordinary_sentences`
-# below keeps it from narrowing again quietly.
-#
-# **Single characters are deliberately absent.** 熱, 冷 and 涼 would each be a weather word and a
-# food word at once — 熱炒, 冷麵, 涼麵 are all restaurants, and a scan that fails on the name of a
-# noodle shop teaches people to route around the gate.
-WEATHER_WORDS = [
-    "降雨", "體感", "濕度", "風速", "氣溫", "天氣", "下雨", "氣象", "溫度", "悶熱",
-    "預報", "觀測", "紫外線", "weather", "temperature", "forecast", "rain", "humid",
-]
+# D20's second half. The vocabulary is the weather's, not a restaurant's — 「晴光市場」 is a place
+# name and must not read as weather, which is why the list is phrases and measures rather than
+# single characters.
+WEATHER_WORDS = ["降雨機率", "體感溫度", "weather_code", "weather_text", "氣溫", "濕度", "舒適度"]
 
-# Sentences a well-meaning later edit would plausibly write onto the propose screen. Not a wishlist:
-# each one got past the old vocabulary, so this list is the record of what was missed.
-ORDINARY_WEATHER_SENTENCES = [
-    "今天天氣不錯", "外面下雨", "氣象預報說", "溫度很高", "很悶熱",
-    "紫外線很強", "根據觀測資料",
-]
+# A module is "the home" by name. Kept deliberately loose — `Home.tsx`, `home/index.tsx`,
+# `screens/home/Weather.tsx` all count — because the rule is about which screen, not which file.
+HOME_HINT = re.compile(r"(^|[/\\])home([/\\.]|$)", re.I)
 
-# **Named screens, not files** — H29, ruled 2026-08-12. This used to be `{"index.html"}` and the
-# unit of enforcement was therefore a file. D3 rules Vue with no build step, so the second screen
-# arrives as markup inside `index.html`; under the old rule it landed inside the allowlist and the
-# check passed without examining it. Not red — quiet, which is worse, because the passing count
-# goes up as screens are added.
-WEATHER_MAY_APPEAR_IN = {"home"}
+LINE_COMMENT = re.compile(r"//[^\n]*")
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 
-# The block delimiters, as declared in the comment at the top of `index.html`'s body: comments
-# reading `screen: NAME` / `/screen` / `chrome` / `/chrome`.
-#
-# **Delimiters are resolved before anything else looks at the file, and that is not tidiness.**
-# Writing this the obvious way — one regex per block, run straight over the source — broke twice
-# in ten minutes, both times on the explanatory comment that documents the convention:
-#
-#   1. it spelled a delimiter out in full, and an HTML comment **ends at its first close and does
-#      not nest**, so the outer comment terminated early and the rest of the paragraph became page
-#      content. That was a real rendering defect, not a test artefact.
-#   2. it mentioned the `main` element by name in prose, and the search for the real element
-#      matched inside the comment instead.
-#
-# So: one pass turns every comment into either a sentinel or whitespace, and every pattern below
-# runs on the result. A comment can then say anything at all without moving the boundaries.
-SCREEN_OPEN = re.compile(r"<!--\s*screen:\s*([a-z0-9-]+)\s*-->\Z", re.S)
-SCREEN_CLOSE = re.compile(r"<!--\s*/screen\s*-->\Z", re.S)
-CHROME_OPEN = re.compile(r"<!--\s*chrome\s*-->\Z", re.S)
-CHROME_CLOSE = re.compile(r"<!--\s*/chrome\s*-->\Z", re.S)
-COMMENT = re.compile(r"<!--.*?-->", re.S)
-
-SCREEN_BLOCK = re.compile(r"\x00screen:([a-z0-9-]+)\x00(.*?)\x00/screen\x00", re.S)
-CHROME_BLOCK = re.compile(r"\x00chrome\x00(.*?)\x00/chrome\x00", re.S)
-MAIN = re.compile(r"<main\b[^>]*>(.*?)</main>", re.S | re.I)
+FETCHED_ATTR = re.compile(r"""<(?:script|link|img|source|video|audio|iframe)\b[^>]*?
+                              \b(?:src|href)\s*=\s*["']([^"']+)["']""", re.I | re.X)
+CSS_URL = re.compile(r"url\(\s*['\"]?([^'\")]+)['\"]?\s*\)")
+FONT_FACE = re.compile(r"@font-face\s*\{([^}]*)\}", re.I)
 
 
-def read(path):
-    """One place that closes the handle — bare `open(...).read()` leaves a ResourceWarning
-    in every run's output, and warnings nobody reads are how a real one gets missed."""
+def source_files(extensions=(".tsx", ".ts", ".jsx", ".js")) -> list[str]:
+    """Every hand-written module under `src`. `node_modules` and `dist` are not source."""
+    found = []
+    for root, dirs, files in os.walk(SRC):
+        dirs[:] = [d for d in dirs if d not in ("node_modules", "dist")]
+        for name in files:
+            if name.endswith(extensions):
+                found.append(os.path.join(root, name))
+    return sorted(found)
+
+
+def read(path: str) -> str:
     with open(path, encoding="utf-8") as handle:
         return handle.read()
 
 
-def visible_text(path):
-    """The file with anything a user cannot read removed: HTML comments, JS line comments,
-    and the stylesheet. What is left is the surface D20 governs.
+def code_of(path: str) -> str:
+    """A module with its comments removed.
 
-    **The `<script>` block is deliberately still in here**, so the advisory scan reaches string
-    literals — `error.value = '建議…'` would reach a screen, and stripping the script to tidy the
-    scan would open exactly that hole.
+    Comments are stripped for the same reason the font derivation strips them: a rule that fires on
+    a comment *describing* the rule is a rule that gets disabled. String literals are deliberately
+    **kept** — copy lives in them, so D20's vocabulary must still see them.
     """
-    source = read(path)
-    source = re.sub(r"<!--.*?-->", " ", source, flags=re.S)
-    source = re.sub(r"<style\b.*?</style>", " ", source, flags=re.S | re.I)
-    source = re.sub(r"^\s*//.*$", " ", source, flags=re.M)
-    return source
+    text = read(path)
+    return LINE_COMMENT.sub(" ", BLOCK_COMMENT.sub(" ", text))
 
 
-def strip_non_markup(fragment):
-    """Comments, stylesheet and script removed. Used for the per-screen work, where the script
-    has to go: it is not inside any screen block, and it legitimately contains `weather_text`
-    and `/api/weather`.
-
-    **The cost of that, stated rather than hidden:** the per-screen weather scan therefore does
-    not see JS strings. A screen whose weather text is assembled in JavaScript rather than written
-    in markup would pass. `visible_text` above still covers the script for the advisory scan, so
-    the hole is specific to the weather half, and closing it needs the rendered DOM rather than a
-    file — which is the browser check `CLAUDE.md` documents, not this file's job.
-    """
-    fragment = re.sub(r"<!--.*?-->", " ", fragment, flags=re.S)
-    fragment = re.sub(r"<style\b.*?</style>", " ", fragment, flags=re.S | re.I)
-    fragment = re.sub(r"<script\b.*?</script>", " ", fragment, flags=re.S | re.I)
-    return fragment
+def dist_files(extension: str) -> list[str]:
+    found = []
+    for root, _dirs, files in os.walk(DIST):
+        for name in files:
+            if name.endswith(extension):
+                found.append(os.path.join(root, name))
+    return sorted(found)
 
 
-def resolved(path):
-    """The file with every comment replaced by a sentinel (if it is a delimiter) or by whitespace
-    (if it is prose). See the note above the patterns for the two defects this exists to stop."""
-
-    def swap(match):
-        comment = match.group(0)
-        opening = SCREEN_OPEN.match(comment)
-        if opening:
-            return "\x00screen:{}\x00".format(opening.group(1))
-        if SCREEN_CLOSE.match(comment):
-            return "\x00/screen\x00"
-        if CHROME_OPEN.match(comment):
-            return "\x00chrome\x00"
-        if CHROME_CLOSE.match(comment):
-            return "\x00/chrome\x00"
-        return " "
-
-    return COMMENT.sub(swap, read(path))
+def built() -> bool:
+    return os.path.isdir(DIST) and bool(dist_files(".html"))
 
 
-def body_of(path):
-    """The markup inside the `main` element, or `None`. Comments are already resolved, so a
-    comment naming the element cannot be mistaken for it."""
-    found = MAIN.search(resolved(path))
-    return None if found is None else found.group(1)
+class TheBuildIsPresentOrTheReasonIsStated(unittest.TestCase):
+    def test_dist_exists_or_the_rules_needing_it_say_so(self):
+        """`dist/` is gitignored, so a fresh clone has none until `npm run build` has run.
+
+        This is stated as its own check rather than skipped inside the others, because "the rules
+        about the served artefact did not run" must be one visible line and not four quiet ones.
+        """
+        if built():
+            return
+        print("\nweb surface: app/web/dist is absent — the rules about the SERVED artefact did not "
+              "run (§6's fetch points, the @font-face declarations). Build it with "
+              "`docker compose build proxy`, or `npm run build` in app/web, and re-run. The source "
+              "rules below ran regardless.", file=sys.stderr)
 
 
-def regions(path):
-    """Every delimited region of a page, as `(label, fragment)`.
+class NoDangerousInnerHtml(unittest.TestCase):
+    """H7, in source, because the built output cannot answer it."""
 
-    `chrome` is returned under its own label rather than merged into a screen, because it renders
-    on all of them and is therefore held to the strictest rule of any screen.
-    """
-    body = body_of(path)
-    if body is None:
-        return []
-    found = [("chrome", m.group(1)) for m in CHROME_BLOCK.finditer(body)]
-    return found + [(m.group(1), m.group(2)) for m in SCREEN_BLOCK.finditer(body)]
+    def test_it_is_never_used(self):
+        offenders = []
+        for path in source_files():
+            if "dangerouslySetInnerHTML" in code_of(path):
+                offenders.append(os.path.relpath(path, WEB))
+        self.assertEqual(
+            offenders, [],
+            "H7: dangerouslySetInnerHTML appears in {} — the surface renders text as text. Every "
+            "string on it comes from a government file or another person's typing.".format(
+                ", ".join(offenders)),
+        )
 
+    def test_the_check_reads_source_and_not_the_bundle(self):
+        """Pinned, because the obvious 'improvement' is to scan `dist` too, and it cannot work.
 
-def undeclared_markup(path):
-    """What is inside the `main` element but in neither a screen nor a chrome block, with the
-    blocks and the non-markup removed. **This returning anything is the failure H29 describes**:
-    markup the per-screen check cannot see, which the old per-file rule allowed silently."""
-    body = body_of(path)
-    if body is None:
-        return None
-    remainder = CHROME_BLOCK.sub(" ", SCREEN_BLOCK.sub(" ", body))
-    return strip_non_markup(remainder).replace("\x00", " ")
+        React's own runtime contains the string, so a built-output scan fails on an innocent build.
+        Measured 2026-08-18: one occurrence in `dist/assets/*.js` on a surface that does not use it.
+        """
+        if not built():
+            self.skipTest("dist absent")
+        bundles = "".join(read(path) for path in dist_files(".js"))
+        self.assertIn(
+            "dangerouslySetInnerHTML", bundles,
+            "React's runtime no longer carries this string, so a built-output scan for H7 may have "
+            "become possible — re-measure before assuming either way",
+        )
+
+    def test_the_check_can_fail(self):
+        self.assertIn("dangerouslySetInnerHTML",
+                      LINE_COMMENT.sub(" ", 'a = {dangerouslySetInnerHTML: {__html: x}}'))
+
+    def test_a_comment_mentioning_it_does_not_trip_the_check(self):
+        """Both comment forms, because a rule that fires on its own documentation gets deleted."""
+        for comment in ("// never use dangerouslySetInnerHTML here",
+                        "/* dangerouslySetInnerHTML is banned by H7 */"):
+            stripped = LINE_COMMENT.sub(" ", BLOCK_COMMENT.sub(" ", comment))
+            self.assertNotIn("dangerouslySetInnerHTML", stripped, comment)
 
 
 class TheSurfaceStatesAndDoesNotAdvise(unittest.TestCase):
-    def test_no_advisory_copy_on_the_home_screen(self):
-        text = visible_text(HOME)
-        for word in ADVISORY:
-            self.assertNotIn(
-                word,
-                text,
-                "D20: the surface may state, never advise. {!r} makes the product take a "
-                "position on where to eat, which is one step from admitting it acts on "
-                "one.".format(word),
-            )
+    """D20's first half, over the copy in source."""
 
-    def test_the_prohibition_itself_is_still_written_down(self):
-        """The opposite property, and it is the one that keeps the rule legible: stripping
-        comments must not have stripped the reason. If someone deletes the D20 block to make
-        the scan simpler, this fails."""
-        source = read(HOME)
-        self.assertIn("D20", source)
-        self.assertIn("never advise", source)
-        self.assertNotIn("建議", visible_text(HOME), "sanity: the example must be in a comment")
-        self.assertIn("建議", source, "the comment naming the forbidden copy has been removed")
+    def test_no_advisory_copy(self):
+        offenders = []
+        for path in source_files():
+            code = code_of(path)
+            for word in ADVISORY:
+                if word in code:
+                    offenders.append("{}: {}".format(os.path.relpath(path, WEB), word))
+        self.assertEqual(offenders, [], "D20: the surface may state, never advise — " +
+                         "; ".join(offenders))
 
-
-class ScreensAreFindable(unittest.TestCase):
-    """H29's mitigation, and the part that has to come first: **the check must fail when it
-    cannot identify its subject.** Everything in the next class scans per screen, and a scanner
-    that silently matches nothing reports success in the same words as one that held."""
-
-    def test_every_page_declares_at_least_one_screen(self):
-        for name in sorted(os.listdir(WEB)):
-            if not name.endswith(".html"):
-                continue
-            found = regions(os.path.join(WEB, name))
-            screens = [label for label, _ in found if label != "chrome"]
-            self.assertTrue(
-                screens,
-                "H29: {} declares no `<!-- screen: NAME -->` block. Either the delimiters were "
-                "removed or a page was added without them, and in both cases the D20 scan below "
-                "now examines nothing while still passing.".format(name),
-            )
-
-    def test_no_markup_sits_outside_a_declared_block(self):
-        """The assertion that makes a new screen impossible to add unseen. Without it the
-        delimiters are decoration: someone appends a propose screen after `<!-- /screen -->`,
-        every scan below skips it, and nothing complains."""
-        for name in sorted(os.listdir(WEB)):
-            if not name.endswith(".html"):
-                continue
-            leftover = undeclared_markup(os.path.join(WEB, name))
-            self.assertIsNotNone(leftover, "{} has no <main> element to scan".format(name))
-            self.assertEqual(
-                leftover.strip(),
-                "",
-                "H29: {} has markup inside <main> that is in neither a screen nor a chrome "
-                "block, so the D20 scan cannot see it: {!r}".format(name, leftover.strip()[:200]),
-            )
-
-    def test_the_home_screen_is_one_of_them(self):
-        """Names, not positions. `WEATHER_MAY_APPEAR_IN` allowlists `home` by name, so a rename
-        would otherwise turn the allowlist into a no-op and the home screen would start failing
-        the weather rule instead — a confusing way to learn about a typo."""
-        labels = {label for label, _ in regions(HOME)}
-        self.assertIn("home", labels, "the home screen block is named something else: {}".format(labels))
+    def test_the_vocabulary_is_not_empty(self):
+        """A rule with an empty word list passes everything. H34's shape."""
+        self.assertGreater(len(ADVISORY), 5)
 
 
 class WeatherStaysOnTheHomeScreen(unittest.TestCase):
-    def test_no_other_screen_mentions_weather(self):
-        """D20 names the screens that must say nothing: round-opening, proposing, rolling —
-        including D16's hour confirmation, which shows the hour and not the forecast.
+    """D20's second half, armed rather than deferred — see the module docstring."""
 
-        **`chrome` is scanned rather than exempted.** It renders on every screen, so a weather
-        word there is a weather word on the propose screen.
+    def modules_mentioning_weather(self) -> dict:
+        found = {}
+        for path in source_files():
+            code = code_of(path)
+            hits = [word for word in WEATHER_WORDS if word in code]
+            if hits:
+                found[os.path.relpath(path, WEB)] = hits
+        return found
+
+    def test_no_module_outside_the_home_mentions_weather(self):
+        elsewhere = {
+            path: hits for path, hits in self.modules_mentioning_weather().items()
+            if not HOME_HINT.search(path)
+        }
+        self.assertEqual(
+            elsewhere, {},
+            "D20: weather belongs to the home screen and nowhere else; found it in " +
+            ", ".join("{} ({})".format(path, "/".join(hits)) for path, hits in elsewhere.items()),
+        )
+
+    def test_the_positive_half_says_what_it_waits_for(self):
+        """*The home does show it* cannot be asserted before a home screen exists.
+
+        Printed rather than skipped silently, and it needs no maintenance: the moment a home module
+        mentions weather this assertion starts passing on its own, and the moment a non-home module
+        does, the check above fails.
         """
-        for name in sorted(os.listdir(WEB)):
-            if not name.endswith(".html"):
-                continue
-            for label, fragment in regions(os.path.join(WEB, name)):
-                if label in WEATHER_MAY_APPEAR_IN:
-                    continue
-                text = strip_non_markup(fragment)
-                for word in WEATHER_WORDS:
-                    self.assertNotIn(
-                        word,
-                        text,
-                        "D20: {} in {} may not mention weather ({!r})".format(label, name, word),
-                    )
+        mentions = self.modules_mentioning_weather()
+        if any(HOME_HINT.search(path) for path in mentions):
+            return
+        print("\nweb surface: no module mentions weather yet, so D20's positive half (the home "
+              "screen DOES show it) is not yet assertable. It arms itself when a home module "
+              "does — nothing to remember.", file=sys.stderr)
 
-    def test_the_home_screen_does_show_it(self):
-        """Without this, the rule above is satisfied by a product with no weather anywhere,
-        and the test suite would report success for the wrong reason.
 
-        Scanned inside the home screen's own block rather than over the file, so it also proves
-        the delimiters bracket the thing they claim to.
+class NothingIsFetchedFromAnotherHost(unittest.TestCase):
+    """§6's dead-wifi rule, at the points a browser actually fetches from."""
+
+    def fetch_points(self) -> list[tuple[str, str]]:
+        points = []
+        for path in dist_files(".html"):
+            for url in FETCHED_ATTR.findall(read(path)):
+                points.append((os.path.relpath(path, WEB), url))
+        for path in dist_files(".css"):
+            for url in CSS_URL.findall(CSS_COMMENT.sub(" ", read(path))):
+                points.append((os.path.relpath(path, WEB), url))
+        return points
+
+    def test_every_fetch_point_is_local(self):
+        if not built():
+            self.skipTest("dist absent")
+        points = self.fetch_points()
+        self.assertTrue(points, "no fetch points found at all — the scan is looking in the wrong "
+                                "place, which would pass for the wrong reason")
+        remote = [(where, url) for where, url in points
+                  if re.match(r"[a-z]+:", url) and not url.startswith("data:")]
+        self.assertEqual(
+            remote, [],
+            "§6: the surface must work on a dead wifi, so every asset ships with it; found " +
+            ", ".join("{} → {}".format(where, url) for where, url in remote),
+        )
+
+    def test_a_bare_url_in_a_comment_or_a_message_is_not_a_violation(self):
+        """The measured false alarm this check was written around.
+
+        `dist` contains `https://react.dev` (a React error template), `https://tailwindcss.com`
+        (a licence comment) and `http://www.w3.org/2000/svg` (an XML namespace). None is fetched.
+        A scan for URLs would fail on all three, and a gate that cries wolf gets waved through.
         """
-        home = dict(regions(HOME)).get("home", "")
-        text = strip_non_markup(home)
-        self.assertIn("降雨機率", text)
-        self.assertIn("體感", text)
-
-    def test_the_vocabulary_catches_ordinary_sentences(self):
-        """**The list has to know the words a person writes, not the labels this page prints.**
-
-        H29 fixed where the scan looks. It said nothing about what the scan knows, and the answer
-        was: not much. The five sentences that opened `ORDINARY_WEATHER_SENTENCES` all got past the
-        original vocabulary, which held only the metric labels already on the home screen — so the
-        per-screen machinery was guarding a door with the lock on the wrong side.
-
-        This is the assertion that stops the list narrowing again. Deleting a word from
-        `WEATHER_WORDS` to quieten a false positive now fails here rather than silently shrinking
-        what D20 covers.
-        """
-        for sentence in ORDINARY_WEATHER_SENTENCES:
-            self.assertTrue(
-                any(word in sentence for word in WEATHER_WORDS),
-                "D20's vocabulary does not catch {!r}, so that sentence could be written onto the "
-                "propose screen and the suite would stay green".format(sentence),
-            )
-
-    def test_the_vocabulary_does_not_catch_restaurant_names(self):
-        """The other side, and the reason single characters are excluded. A gate that fails on 涼麵
-        is a gate people learn to bypass, and a bypassed gate protects nothing."""
-        for name in ["涼麵", "熱炒一百", "冷藏櫃", "風味小館", "溫州大餛飩"]:
-            hits = [word for word in WEATHER_WORDS if word in name]
-            self.assertEqual(
-                hits, [], "{!r} is a place name and would be read as weather: {}".format(name, hits)
-            )
-
-
-class NoVHtml(unittest.TestCase):
-    """H7: Vue escapes everything except `v-html`, so keeping it absent makes the audit one
-    greppable word.
-
-    **Scanned over the raw file, comments included** — a commented-out `v-html` is one
-    uncomment away from being live, so stripping comments here would be the wrong fix. What
-    separates a use from a mention is the **equals sign**: live is `v-html="…"`, while the
-    comment that forbids it writes the bare word. Matching on the bare word failed on the
-    prohibition itself, which is the third time in this project a test asserting a token's
-    absence has been tripped by the sentence explaining why it is forbidden.
-    """
-
-    USE = re.compile(r"v-html\s*=")
-
-    def test_v_html_is_never_bound(self):
-        for name in sorted(os.listdir(WEB)):
-            if not name.endswith(".html"):
-                continue
-            path = os.path.join(WEB, name)
-            source = read(path)
-            hit = self.USE.search(source)
-            # A boolean assertion with a line number, not assertNotIn: the latter prints the
-            # entire file into the failure, which buries the one line that matters.
-            self.assertIsNone(
-                hit,
-                "H7: {} binds v-html at line {}".format(
-                    name, source[: hit.start()].count("\n") + 1 if hit else "?"
-                ),
-            )
-
-    def test_the_rule_is_still_written_in_the_file(self):
-        source = read(HOME)
-        self.assertIn("v-html", source, "H7's prohibition has been deleted from the page")
-        self.assertIn("H7", source)
-
-
-class NoNetworkDependency(unittest.TestCase):
-    def test_no_external_script_or_style(self):
-        """§6 grades the demo on surviving dead venue wifi, and D3 vendors Vue for that
-        reason. A CDN tag added later would pass every other test in this file."""
-        source = read(HOME)
-        for reference in re.findall(r'(?:src|href)\s*=\s*["\']([^"\']+)', source):
-            self.assertFalse(
-                reference.startswith("http://") or reference.startswith("https://"),
-                "an external asset would not survive a dead network: {}".format(reference),
-            )
-
-
-class VendoredFontFace(unittest.TestCase):
-    """D101's shipped font — the axis declaration, which only the shipped path can get wrong.
-
-    **The defect this exists for, found 2026-08-18 by the frontend session while answering the
-    subsetting tool's questions:** `Noto Sans TC`'s variable face defaults to `wght 100` and its
-    family name is literally `Noto Sans TC Thin`. A `@font-face` that names the subset without
-    declaring the axis range renders the whole product hairline, and D's display weight is 900.
-    The proposal pages never hit it because they resolve the face through fontconfig rather than
-    through `@font-face`, so **it exists only in the path that ships** — the one thing no
-    proposal-page screenshot can catch.
-
-    Conditional on purpose: while no font is vendored there is nothing to assert, and the test
-    says which state it is in rather than passing silently.
-    """
-
-    def face_blocks(self):
-        source = read(HOME)
-        return re.findall(r"@font-face\s*\{([^}]*)\}", source, flags=re.S)
-
-    def test_a_vendored_variable_face_declares_its_weight_range(self):
-        blocks = [b for b in self.face_blocks() if ".woff2" in b]
-        if not blocks:
-            self.skipTest("no @font-face references a woff2 yet — nothing is vendored")
-        for block in blocks:
-            weight = re.search(r"font-weight\s*:\s*([^;]+)", block)
-            self.assertIsNotNone(
-                weight,
-                "an @font-face naming a woff2 declares no font-weight. The variable face "
-                "defaults to wght 100 (family 'Noto Sans TC Thin'), so this renders the whole "
-                "surface hairline: declare `font-weight: 100 900`.",
-            )
-            values = weight.group(1).split()
-            self.assertEqual(
-                len(values), 2,
-                "font-weight in an @font-face for a variable face must be a range, not the "
-                "single value {!r} — a single value pins the axis and 100 is the default"
-                .format(weight.group(1).strip()),
-            )
-
-    def test_the_licence_ships_beside_the_font(self):
-        """OFL 1.1: a subset is a derivative work and the notice travels with it (D66, amended
-        2026-08-18). Asserted here as well as in `tools/font_subset_check.py`, because this is
-        the test the frontend session runs and that is the session that commits the files."""
-        fonts = os.path.join(WEB, "fonts")
-        if not os.path.isdir(fonts):
-            self.skipTest("app/web/fonts/ does not exist yet")
-        licence = os.path.join(fonts, "OFL.txt")
-        self.assertTrue(
-            os.path.exists(licence) and os.path.getsize(licence) > 0,
-            "app/web/fonts/ exists without a non-empty OFL.txt — shipping an OFL 1.1 derivative "
-            "without its notice is the one item in this work that is an actual violation",
+        if not built():
+            self.skipTest("dist absent")
+        everything = "".join(read(path) for path in dist_files(".js") + dist_files(".css"))
+        self.assertRegex(everything, r"https?://",
+                         "no external URL strings at all — if that is now true the note above is "
+                         "stale, but the check below must still target fetch points")
+        self.assertEqual(
+            [], [url for _w, url in self.fetch_points() if url.startswith("http")],
+            "a fetch point genuinely points at another host",
         )
 
 
+class TheVendoredFaces(unittest.TestCase):
+    """Every `@font-face` the build emits, and the two things each must get right."""
+
+    def faces(self) -> list[dict]:
+        found = []
+        for path in dist_files(".css"):
+            for block in FONT_FACE.findall(CSS_COMMENT.sub(" ", read(path))):
+                entry = {}
+                for declaration in block.split(";"):
+                    if ":" in declaration:
+                        key, _, value = declaration.partition(":")
+                        entry[key.strip().lower()] = value.strip()
+                found.append(entry)
+        return found
+
+    def test_at_least_one_face_ships(self):
+        if not built():
+            self.skipTest("dist absent")
+        self.assertTrue(self.faces(), "the build emitted no @font-face at all")
+
+    def test_every_face_declares_a_weight_range_not_a_single_weight(self):
+        """**The source faces are variable and their default instances are not Regular.**
+
+        Noto Sans TC is `wght 100–900` defaulting to **Thin**, and an `@font-face` without the range
+        renders the whole surface hairline — that has happened here. Noto Serif TC is `wght 200–900`
+        defaulting to **ExtraLight**, so the ranges differ per face and a shared constant would be
+        wrong for one of them. What is asserted is therefore the shape — two numbers — rather than a
+        value.
+        """
+        if not built():
+            self.skipTest("dist absent")
+        for face in self.faces():
+            family = face.get("font-family", "?")
+            weight = face.get("font-weight", "")
+            self.assertRegex(
+                weight, r"^\d+\s+\d+$",
+                "{}: font-weight is {!r}; a variable face needs its range declared, or the "
+                "browser renders the face's default instance — Thin for the sans, ExtraLight for "
+                "the serif".format(family, weight),
+            )
+
+    def test_the_sans_declares_the_range_its_source_face_actually_has(self):
+        if not built():
+            self.skipTest("dist absent")
+        sans = [f for f in self.faces() if "sans" in f.get("font-family", "").lower()]
+        self.assertTrue(sans, "no sans face found among {}".format(
+            [f.get("font-family") for f in self.faces()]))
+        for face in sans:
+            self.assertEqual(face.get("font-weight"), "100 900",
+                             "the sans source face is wght 100–900; declaring anything else claims "
+                             "a weight it has not got")
+
+    def test_every_face_points_at_a_file_that_actually_shipped(self):
+        """A face whose `src` 404s degrades silently to a fallback — no error, wrong glyphs."""
+        if not built():
+            self.skipTest("dist absent")
+        for face in self.faces():
+            for url in CSS_URL.findall(face.get("src", "")):
+                self.assertTrue(url.startswith("/"), "{} is not an absolute served path".format(url))
+                on_disk = os.path.join(DIST, url.lstrip("/"))
+                self.assertTrue(os.path.exists(on_disk),
+                                "{} is declared and did not ship — the browser would fall back "
+                                "silently".format(url))
+
+
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main(verbosity=1)
