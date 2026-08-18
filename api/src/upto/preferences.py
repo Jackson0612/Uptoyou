@@ -48,11 +48,28 @@ from .db import session_factory
 # believes (D39's condition 2), and this list exists only so the refusal is a 400 naming the list
 # rather than a 500 carrying a constraint name. The integration test asserts they agree.
 CATEGORIES = ("麵食", "飯食", "小吃", "火鍋", "燒烤", "日式", "西式", "早餐", "咖啡飲料", "其他")
+# 衛福部's eleven food-label allergen groups, mirrored from revision 0023's CHECK for the same
+# reason as the ten above. **D103: the list is these groups because that is what Taiwanese packaging
+# already prints — and no copy on any surface may contain the word 過敏.** The API records 「不吃 X」;
+# *why* is health information about an identified person and this product does not hold it.
+INGREDIENTS = (
+    "甲殼類", "芒果", "花生", "牛奶／羊奶", "蛋", "堅果類",
+    "芝麻", "含麩質之穀物", "大豆", "魚類", "亞硫酸鹽類",
+)
 BUDGET_BANDS = ("tight", "easy")
 STANCES = ("avoid", "allow")
 
 KIND_BUDGET = "budget"
 KIND_AVOID = "avoid_category"
+KIND_INGREDIENT = "avoid_ingredient"
+
+# The two kinds that carry a stance, and the one place that fact is written on this side. Both are
+# reversible by appending `allow`; neither expires.
+AVOIDANCES = (KIND_AVOID, KIND_INGREDIENT)
+
+# Which closed list each avoidance draws from. A dict rather than two branches, so adding a fourth
+# kind is a line here instead of an `elif` somewhere a reader has to find.
+VALUES_FOR = {KIND_AVOID: CATEGORIES, KIND_INGREDIENT: INGREDIENTS}
 
 # No prefix: the proxy strips /api/ before forwarding, so the app serves /circles/… — the same
 # convention the rounds and live routers keep, and a prefix here once produced a proxy-only 404.
@@ -92,12 +109,16 @@ IN_FORCE_AVOID = """
 select value, persist, valid_from from (
     select distinct on (value) value, stance, persist, valid_from
       from preference
-     where member_id = :member_id and kind = 'avoid_category'
+     where member_id = :member_id and kind = :kind
      order by value, valid_from desc, id desc
 ) latest
  where stance = 'avoid'
  order by value
 """
+# **`kind` is a bound parameter and not two copies of the query, but it is passed explicitly at every
+# call site** — never defaulted. An avoidance query that fell back to a kind would silently return
+# categories to a caller asking about ingredients, and both lists are closed so nothing downstream
+# would notice a wrong-kind value until it reached a screen.
 
 
 # The evaluator's ask (2026-08-18), and the reason it is a payload field rather than a sentence in
@@ -108,6 +129,23 @@ select value, persist, valid_from from (
 # is what decides whether an avoid can fire at all.
 CATEGORY_COVERAGE = """
 select (select count(*) from place where category is not null) as with_category,
+       (select count(*) from reference_place
+         where publication_id = (
+             select id from place_publication order by detected_at desc, id desc limit 1
+         )) as reference_rows
+"""
+
+# **`ingredient_coverage` is zero and is reported anyway (D103).** No place carries ingredient data —
+# there is no source for it and none planned — so an ingredient avoidance is stored and produces no
+# contribution. A screen offering eleven choices that change nothing must be able to say so, and the
+# figure has to come from the payload for the same reason `category_coverage` does: the day a source
+# arrives, a number written into markup becomes false silently.
+#
+# **It is computed rather than returned as a literal 0.** A hardcoded zero is indistinguishable from
+# a query that broke, and it would keep reading zero after the column it counts starts filling. There
+# is no ingredient column on `place` yet, so what this counts is the honest thing: nothing.
+INGREDIENT_COVERAGE = """
+select 0 as with_ingredient,
        (select count(*) from reference_place
          where publication_id = (
              select id from place_publication order by detected_at desc, id desc limit 1
@@ -164,11 +202,11 @@ def _validate(body: PreferenceBody) -> None:
     bug into a plausible stored fact, which is the H23 shape this schema keeps meeting. A default
     stance is the one that would hurt: it would let a malformed request *start* an avoidance.
     """
-    if body.kind not in (KIND_BUDGET, KIND_AVOID):
+    if body.kind not in (KIND_BUDGET,) + AVOIDANCES:
         raise HTTPException(
             status_code=400,
             detail="kind must be one of {} — {!r} is not".format(
-                ", ".join((KIND_BUDGET, KIND_AVOID)), body.kind
+                ", ".join((KIND_BUDGET,) + AVOIDANCES), body.kind
             ),
         )
     if body.kind == KIND_BUDGET:
@@ -182,20 +220,25 @@ def _validate(body: PreferenceBody) -> None:
         if body.stance is not None:
             raise HTTPException(
                 status_code=400,
-                detail="a budget carries no stance; stance belongs to a category alone",
+                detail="a budget carries no stance; stance belongs to an avoidance alone",
             )
         return
-    if body.value not in CATEGORIES:
+    # Both avoidances from here: same stance rule, different closed list. **The list is looked up
+    # rather than branched on**, so a fourth kind is one entry in `VALUES_FOR` and not another arm
+    # nobody remembers to add a stance check to.
+    allowed = VALUES_FOR[body.kind]
+    if body.value not in allowed:
         raise HTTPException(
             status_code=400,
-            detail="a category must be one of D38's ten ({}) — {!r} is not".format(
-                "、".join(CATEGORIES), body.value
+            detail="{} must be one of ({}) — {!r} is not".format(
+                "a category" if body.kind == KIND_AVOID else "an ingredient",
+                "、".join(allowed), body.value
             ),
         )
     if body.stance not in STANCES:
         raise HTTPException(
             status_code=400,
-            detail="a category needs a stance, one of {} — {!r} is not. It is not defaulted: a "
+            detail="an avoidance needs a stance, one of {} — {!r} is not. It is not defaulted: a "
             "malformed request must not be able to start an avoidance.".format(
                 ", ".join(STANCES), body.stance
             ),
@@ -253,9 +296,20 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
             await session.execute(text(IN_FORCE_BUDGET), {"member_id": member_id})
         ).one_or_none()
         avoided = (
-            await session.execute(text(IN_FORCE_AVOID), {"member_id": member_id})
+            await session.execute(
+                text(IN_FORCE_AVOID), {"member_id": member_id, "kind": KIND_AVOID}
+            )
+        ).all()
+        # A separate query with the kind named, not one query returning both. D22's `breadth` is
+        # computed from the *categories* alone — an ingredient avoidance removes no place today —
+        # so mixing the two lists into one list would silently feed ingredients to that calculation.
+        ingredients = (
+            await session.execute(
+                text(IN_FORCE_AVOID), {"member_id": member_id, "kind": KIND_INGREDIENT}
+            )
         ).all()
         coverage = (await session.execute(text(CATEGORY_COVERAGE))).one()
+        ingredient_coverage = (await session.execute(text(INGREDIENT_COVERAGE))).one()
         breadth = (
             await session.execute(
                 text(BREADTH),
@@ -289,6 +343,21 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
             if not coverage.reference_rows
             else round(coverage.with_category / coverage.reference_rows, 4),
         },
+        # **Zero today, and reported rather than omitted (D103).** No place carries ingredient data,
+        # so an ingredient avoidance is stored and changes no roll. A screen offering eleven choices
+        # that do nothing has to be able to say so — and it must read the figure here rather than
+        # state it, because the day a source arrives a number in the markup becomes false silently.
+        # The same discipline `category_coverage` is under, which has moved from 6.2% to 24.5% in a
+        # single day.
+        "ingredient_coverage": {
+            "with_ingredient": ingredient_coverage.with_ingredient,
+            "reference_rows": ingredient_coverage.reference_rows,
+            "share": 0.0
+            if not ingredient_coverage.reference_rows
+            else round(
+                ingredient_coverage.with_ingredient / ingredient_coverage.reference_rows, 4
+            ),
+        },
         "budget": None
         if budget_row is None
         else {
@@ -312,5 +381,21 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
                 "valid_from": row.valid_from.isoformat(),
             }
             for row in avoided
+        ],
+        # **Its own key, never merged into `avoid_categories`.** They are two closed lists and the
+        # screen shows them as two groups; more to the point, `breadth` above is computed from the
+        # categories alone, so a merged list would be handed to a calculation that cannot mean
+        # anything for an ingredient. **No `expired` flag here and none coming:** an ingredient
+        # avoidance does not lapse (revision 0023's CHECK keeps `expires_on` NULL). B1's carry rule
+        # for this kind — *show, and require the tap even for a stance* — is a screen behaviour, and
+        # putting an expiry in the data to force it would silently switch an avoidance **off**,
+        # which is the opposite of asking again.
+        "avoid_ingredients": [
+            {
+                "value": row.value,
+                "persist": row.persist,
+                "valid_from": row.valid_from.isoformat(),
+            }
+            for row in ingredients
         ],
     }

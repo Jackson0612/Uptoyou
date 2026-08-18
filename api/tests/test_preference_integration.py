@@ -20,6 +20,8 @@ remembering.
 """
 
 import asyncio
+import ast
+import inspect
 import os
 import secrets as pysecrets
 import subprocess
@@ -524,6 +526,133 @@ async def scenario(test_url: str) -> None:
     check("the erasure job left the pinned version alone", survived == 1, survived)
     check("and left nothing else behind — every survivor is pinned by a round",
           unpinned_left == 0, unpinned_left)
+
+    # ---- D103's third kind: 「不吃 X」, recorded as a choice and never as a condition -----------
+    #
+    # **The list is 衛福部's eleven food-label allergen groups and the word 過敏 appears nowhere.**
+    # The API records what a person does not eat; *why* is health information about an identified
+    # person, and this product does not hold it. That rule binds the copy rather than the schema, so
+    # it is asserted against the modules' own text — a CHECK cannot enforce it.
+    from upto import preferences as preference_module  # noqa: PLC0415
+    from upto.engine import load as loader_module  # noqa: PLC0415
+
+    # **The rule is about user-facing strings, and the first version of this check got that wrong.**
+    # It scanned the whole module and failed — because the comment *stating* the rule names the word
+    # it forbids. That is the third time this repository has built a guard that fires on its own
+    # documentation (the font derivation demanding a `═` from a CSS comment; a string scan for
+    # `publish(` tripping on its own docstring), and the fix is the same one: walk the AST and look
+    # at what actually reaches a person. Comments are not in the AST at all, and docstrings are
+    # excluded by name.
+    #
+    # **Scope, stated so it is not mistaken for more than it is:** this covers the API's own strings —
+    # the 400 details and the payload's prose. The *screen's* copy lives in `app/web` and is the
+    # frontend session's to hold; no check here can reach it.
+    module_ast = ast.parse(inspect.getsource(preference_module))
+    docstrings = set()
+    for node in ast.walk(module_ast):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            first = node.body[0] if node.body else None
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
+                    and isinstance(first.value.value, str):
+                docstrings.add(id(first.value))
+    spoken = [n.value for n in ast.walk(module_ast)
+              if isinstance(n, ast.Constant) and isinstance(n.value, str)
+              and id(n) not in docstrings]
+    check("no string the API can utter contains 過敏 (D103)",
+          not [s for s in spoken if "過敏" in s],
+          [s for s in spoken if "過敏" in s])
+    check("and the check is looking at real strings rather than nothing",
+          any("must be one of" in s for s in spoken), len(spoken))
+    check("the eleven groups are the closed list", len(preference_module.INGREDIENTS) == 11,
+          preference_module.INGREDIENTS)
+
+    # **The loader's category pass names its kind, rather than taking every stance-bearing row.**
+    # This is the defect this ticket was escalated over: an ingredient compared against
+    # `place.category` matches nothing, which is the right answer by *type confusion*. Asserted in
+    # source because the failure has no runtime symptom until a source of ingredient data exists.
+    loader_source = inspect.getsource(loader_module)
+    check("the loader filters kind = 'avoid_category' explicitly",
+          "kind = 'avoid_category'" in loader_source)
+    check("and has its own ingredient pass rather than letting them fall through",
+          "kind = 'avoid_ingredient'" in loader_source)
+
+    async with Session() as session:
+        second_principal = (
+            await session.execute(text("insert into principal default values returning id"))
+        ).scalar_one()
+        second_member = (
+            await session.execute(
+                text("insert into member (principal_id, circle_id, nickname) "
+                     "values (:p, :c, 'Amy') returning id"),
+                {"p": second_principal, "c": circle},
+            )
+        ).scalar_one()
+        # Two members avoiding the same ingredient, and one of them avoiding two — the same
+        # per-(member, value) uniqueness the categories have, so a person may avoid 花生 and 甲殼類
+        # both rather than exactly one of the eleven.
+        for who, value in ((member, "花生"), (member, "甲殼類"), (second_member, "花生")):
+            await session.execute(
+                text("insert into preference (member_id, kind, value, stance, persist) "
+                     "values (:m, 'avoid_ingredient', :v, 'avoid', false)"),
+                {"m": who, "v": value},
+            )
+        await session.commit()
+    check("two members may avoid the same ingredient and one member two of them", True)
+
+    # The schema's three refusals, each its own transaction so a failure names which rule held.
+    for label, sql in (
+        ("a value outside the eleven is refused",
+         "insert into preference (member_id, kind, value, stance, persist) "
+         "values (:m, 'avoid_ingredient', '腰果', 'avoid', false)"),
+        ("an ingredient without a stance is refused",
+         "insert into preference (member_id, kind, value, persist) "
+         "values (:m, 'avoid_ingredient', '蛋', false)"),
+        ("an ingredient may not carry an expiry — it does not lapse, the screen asks again",
+         "insert into preference (member_id, kind, value, stance, persist, expires_on) "
+         "values (:m, 'avoid_ingredient', '蛋', 'avoid', false, current_date)"),
+    ):
+        async with Session() as session:
+            try:
+                await session.execute(text(sql), {"m": member})
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                check(label, True)
+            else:
+                check(label, False, "the insert was accepted")
+
+    # Reversible exactly as a category is: append `allow`, and it leaves the in-force set.
+    async with Session() as session:
+        await session.execute(
+            text("insert into preference (member_id, kind, value, stance, persist, valid_from) "
+                 "values (:m, 'avoid_ingredient', '甲殼類', 'allow', false, "
+                 "now() + interval '1 second')"),
+            {"m": member},
+        )
+        await session.commit()
+    async with Session() as session:
+        in_force = (
+            await session.execute(
+                text(preference_module.IN_FORCE_AVOID),
+                {"member_id": member, "kind": "avoid_ingredient"},
+            )
+        ).all()
+    check("an ingredient un-avoided by an `allow` leaves the in-force set",
+          [row.value for row in in_force] == ["花生"], [row.value for row in in_force])
+
+    # And the in-force query does not leak across kinds — the same query, the other kind, must not
+    # return an ingredient. Both lists are closed and disjoint, so a wrong-kind value would reach a
+    # screen before anything else noticed.
+    async with Session() as session:
+        categories_in_force = (
+            await session.execute(
+                text(preference_module.IN_FORCE_AVOID),
+                {"member_id": member, "kind": "avoid_category"},
+            )
+        ).all()
+    check("the category query returns no ingredient",
+          all(row.value in preference_module.CATEGORIES for row in categories_in_force),
+          [row.value for row in categories_in_force])
 
     await engine.dispose()
 

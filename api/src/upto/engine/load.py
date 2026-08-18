@@ -129,6 +129,15 @@ async def load_contributions(session, round_id: int) -> list[PinnedContribution]
                 "select member_id, value, id from ("
                 "  select distinct on (member_id, value) member_id, value, stance, id"
                 "    from preference"
+                # **`kind` named explicitly, never by omission.** Revision 0023 added
+                # `avoid_ingredient`, which carries a stance and a value from a different closed
+                # list; a query that selected every stance-bearing row would compare an ingredient
+                # against `place.category` and match nothing — right today, and right by *type
+                # confusion* rather than by design. The day a place carries ingredient data, whoever
+                # wires it up would find a contributor that had been comparing the wrong column for
+                # months, and the natural fix — widen the set — would start matching ingredients
+                # against categories. Owner-ruled 2026-08-18 (D103): the ingredient pass is its own,
+                # below, and inert for a stated reason instead of an accidental one.
                 "   where kind = 'avoid_category'"
                 "     and member_id in (select id from member where circle_id = :c)"
                 "   order by member_id, value, valid_from desc, id desc"
@@ -159,5 +168,49 @@ async def load_contributions(session, round_id: int) -> list[PinnedContribution]
                 )
             )
             next_id += 1
+
+    # --- A1 / D103: the private ingredient avoidances of this circle's members ---------------
+    #
+    # **A separate pass with its own comparison, and it produces nothing today.** No place carries
+    # ingredient data — there is no source for it and none planned — so this fetch returns the
+    # member's avoidances and there is nothing to compare them against. `GET
+    # /circles/{id}/preferences` reports `ingredient_coverage` as zero for exactly this reason.
+    #
+    # **Why it exists at all rather than being added when a source arrives.** The alternative was to
+    # let ingredient rows fall through the category pass above, where they match nothing because
+    # 芒果 is not one of D38's ten. That is the right answer reached by type confusion, and it hides
+    # the work rather than removing it — see the comment on the `kind` filter above.
+    #
+    # **What the comparison will be is not decided here.** A place's ingredients are not a single
+    # value like its category, so `avoid_contribution`'s shape does not carry over, and the
+    # contributor stays category-only until there is data to shape it against. What is settled is
+    # D45's absorbing zero: an ingredient a person does not eat is a veto, not a discount.
+    #
+    # **And this pass may never be applied by speak-for.** One person may roll for a circle, and they
+    # may not carry an absent person's ingredient avoidance into a round that person did not join.
+    # That is an API rule rather than a schema one, and it lands with the code that reads it.
+    ingredient_rows = (
+        await session.execute(
+            text(
+                "select member_id, value, id from ("
+                "  select distinct on (member_id, value) member_id, value, stance, id"
+                "    from preference"
+                "   where kind = 'avoid_ingredient'"
+                "     and member_id in (select id from member where circle_id = :c)"
+                "   order by member_id, value, valid_from desc, id desc"
+                ") latest where stance = 'avoid'"
+            ),
+            {"c": round_row.circle_id},
+        )
+    ).all()
+    if ingredient_rows:
+        # Deliberately not silent. A round whose members avoid ingredients and whose places carry no
+        # ingredient data produces no record for them, and a reader of a reveal panel would
+        # reasonably wonder why — so the absence is stated once per round rather than inferred.
+        print(
+            "engine: {} ingredient avoidance(s) in force for this circle and no place carries "
+            "ingredient data, so none contributed (D103)".format(len(ingredient_rows)),
+            flush=True,
+        )
 
     return pinned
