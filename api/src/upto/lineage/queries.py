@@ -267,7 +267,19 @@ async def run_detail(session, run_id: int) -> Answer:
     )
     written = None
     if publication_id is not None:
-        written = {"publication_id": publication_id, "rows_written": row["rows_written"]}
+        # **`rows_newly_stored`, not `rows_written`, and the rename is the point** (H32's second
+        # half, closed by ruling 2026-08-18). The column counts rows the database *accepted* as
+        # new. A rows-only replay rebuilds every row of a table and records `no_change` with a
+        # count of 0, because the claim short-circuits on a hash already held — so a reader
+        # summing "rows written" sees a backfill as a no-op. The ledger is not changing; what it
+        # is called here is, because this is the sentence a model reads back to a person.
+        written = {
+            "publication_id": publication_id,
+            "rows_newly_stored": row["rows_written"],
+            "rows_newly_stored_means": "rows the database accepted as new. A replay that rebuilt "
+                                       "an entire table reports 0 here and says what it did in "
+                                       "`verdict` — see the run's detail line, not this count.",
+        }
     return Answer(
         question="run detail",
         found=True,
@@ -278,7 +290,9 @@ async def run_detail(session, run_id: int) -> Answer:
             "outcome_meaning": {
                 "stored": "the source published content the ingest had not held before",
                 "no_change": "the source answered and republished nothing — a success, and the "
-                             "ordinary outcome for the forecast (D42)",
+                             "ordinary outcome for the forecast (D42). **A rows-only replay also "
+                             "records no_change**: the claim short-circuits on a hash already "
+                             "held, so the rebuild is in `verdict` and not in any count",
                 "failed": "the source did not answer usefully; this is not the same as no_change",
             }[row["outcome"]],
             "started_at": row["started_at"].isoformat(),
@@ -311,7 +325,9 @@ async def run_history(session, source: Optional[str] = None, limit: int = 20) ->
                 "run_id": row["id"],
                 "source": row["source"],
                 "outcome": row["outcome"],
-                "rows_written": row["rows_written"],
+                # Same rename as `run detail` above, same reason: a count of rows *newly
+                # stored*, which a replay leaves at 0 however much it rewrote.
+                "rows_newly_stored": row["rows_written"],
                 "invoked_by": row["invoked_by"],
                 "started_at": row["started_at"].isoformat(),
             }

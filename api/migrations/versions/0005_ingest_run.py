@@ -51,6 +51,16 @@ def upgrade() -> None:
         # failed     — the source did not answer usefully. Not the same as no_change, and the
         #              whole reason both are recorded rather than inferred from an absence.
         sa.Column("outcome", sa.Text, nullable=False),
+        # **Rows the database accepted as NEW — clarified 2026-08-18, H32's second half.** The
+        # name invites a wrong sum and the wrong sum has a name: a rows-only replay rebuilds every
+        # row of a table and records `no_change` with 0 here, because the claim short-circuits on
+        # a hash it already holds and `ck_ingest_run_rows_only_when_stored` refuses a count on any
+        # other outcome. So `sum(rows_written)` reads a backfill as a no-op, and the rebuild lives
+        # in `detail`. Ruled 2026-08-18: **this is documented rather than fixed** — a replay is a
+        # human recovery action and the human is the reader. **Flip condition:** the day a replay
+        # is automated, a separate `rows_rewritten integer` column (NULL, not 0, on runs that
+        # replayed nothing) becomes the right answer — not a new `outcome` value, which would make
+        # this column answer two independent questions.
         sa.Column("rows_written", sa.Integer, nullable=False, server_default="0"),
         # The verdict the runner printed, stored so the lineage answer quotes the run rather
         # than reconstructing it. Nothing downstream may compute this.
