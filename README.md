@@ -183,6 +183,29 @@ queue latency is 0.05 s at p50 and 4.2 s at its worst across all 361 task instan
 answers is the fetch / parse / store split: nothing records it, and measuring it would mean
 per-phase timers and a schema to hold them.
 
+*And the freshness bound, derived from the same ledger rather than from each source's claimed
+cadence* — how long after a source republishes we are guaranteed to have noticed (ours, bounded
+by the poll) plus how often it actually republishes (theirs, observed):
+
+| Source | Detected within | Republishes every | So the data is |
+|---|---|---|---|
+| CWA township forecast | 62 min | 4.3 h median, 8.1 h worst | at most 9.1 h old |
+| CWA station observation | 62 min | 60 min median, 62 min worst | at most 2.1 h old |
+| 營業稅籍 registry | 24.0 h | 24.0 h median, 36.2 h worst | at most 2.5 d old |
+| FDA 餐飲場所 reference | 24.0 h | insufficient history: 1 publication | not yet derivable |
+| 食材登錄 brands | 24.0 h | insufficient history: 1 publication | not yet derivable |
+| 衛生評核 signs | 24.0 h | insufficient history: 1 publication | not yet derivable |
+| 商業登記 status | 24.0 h | insufficient history: 1 publication | not yet derivable |
+
+**The four incomplete rows are the honest state, not a gap in the work.** A source seen once has
+published once in this history, and *n* publications yield *n−1* intervals; the cell fills itself
+as the DAGs run. What it will not do is borrow the number the publisher advertises — the roster
+calls itself monthly and the tax extract is cut monthly, and neither is something this pipeline
+observed. A cell sourced from a webpage would wear the same formatting as the measured seconds
+beside it and mean something entirely different. The half that *is* ours is a real bound and
+holds for all seven: no poll was missed in the window, and the longest stretch with no successful
+run was 62 minutes on the hourly sources and one day on the daily ones.
+
 **8. The cloud serves; the home box computes; the ledger is the clock.**
 *Chosen:* a small EC2 instance runs the API and database; model batches run overnight on a home
 server and land through the same ingest ledger. *Rejected:* a resident model on EC2; all-cloud
