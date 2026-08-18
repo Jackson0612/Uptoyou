@@ -24,6 +24,16 @@ floor, and the self-mutant test still proves the measurement can fail. Only the 
 moved — the spec came from the frontend session, which measured every pair above its floor
 on the proposal pages.
 
+**The D87 spec and the palette selector that carried the handover are deleted (2026-08-18,
+on the frontend's "port stable" signal).** They existed for the length of one commit,
+because the palette lives in `app/web/index.html` and this test lives here, so the two
+could not move together. `--accent` now appears in the shipped file only inside a comment
+explaining why `--pipred` is its own token, and a comment declares nothing — so the branch
+was unreachable, and a test file that keeps describing a retired design is how the next
+reader learns the wrong palette. What still protects a half-finished file is `load_modes`,
+which refuses anything but exactly two colour-declaring `:root` blocks, and the
+token-present assertion, which names the first missing token rather than passing quietly.
+
 **Two things about the numbers, so they do not read as mistakes.** The `flood-*` tokens
 differ by mode on purpose: in light mode they equal their hues, and in dark mode they are
 four separate darker values chosen so a landed flood lifts the room about 11× rather than
@@ -39,23 +49,6 @@ import unittest
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "web")
 HOME = os.path.join(WEB, "index.html")
-
-RETIRED_TOKENS = ("ink", "paper", "muted", "line", "edge", "raised", "accent",
-                  "pip", "pipred", "diefill")
-
-RETIRED_PAIRS = [
-    ("ink", "paper", 4.5, "body text on the page"),
-    ("ink", "raised", 4.5, "body text on a card"),
-    ("muted", "paper", 4.5, "secondary text on the page"),
-    ("muted", "raised", 4.5, "secondary text on a card"),
-    ("paper", "ink", 4.5, "button label on a filled button"),
-    ("accent", "paper", 4.5, "the winner and the dice on the page"),
-    ("accent", "raised", 4.5, "the hit row inside the allocation table"),
-    ("edge", "paper", 3.0, "an unselected pill's only boundary"),
-    ("edge", "raised", 3.0, "the same boundary if pills move onto a card"),
-    ("pipred", "diefill", 3.0, "the red 1 and 4 pips on a die face"),
-    ("pip", "diefill", 3.0, "a black pip on a die face"),
-]
 
 TOKENS = (
     "ink", "paper", "muted",
@@ -136,40 +129,12 @@ def contrast(a: str, b: str) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
-D_MARKER = "hot"
-
-
-def spec_for(tokens: dict) -> tuple:
-    """Which palette the shipped file actually declares — D's, or D87's on the way out.
-
-    **This selection exists for one handover and is scheduled for deletion.** D87 is retired and
-    direction D replaces it, but the palette lives in `app/web/index.html` (the frontend session's
-    file) while this test lives here (backend's), so for the length of one commit the two cannot
-    move together. Rather than leave the suite red across that gap — a red suite teaches people to
-    ignore it — the test asserts *whichever complete palette is present* and refuses a file that
-    declares neither.
-
-    **How to know it is time to delete `RETIRED_*` and this function:** `--accent` no longer
-    appears in `index.html`. At that point the D87 branch is unreachable and keeping it is how a
-    test file starts describing a design nobody ships.
-    """
-    if D_MARKER in tokens:
-        return TOKENS, PAIRS
-    if "accent" in tokens:
-        return RETIRED_TOKENS, RETIRED_PAIRS
-    raise AssertionError(
-        "index.html declares neither palette: no --hot (direction D) and no --accent (D87). "
-        "A file with no recognised palette is not a passing file — it is an unmeasured one."
-    )
-
-
 class EveryLoadBearingPairClearsItsFloor(unittest.TestCase):
     def test_both_modes(self):
         for mode_name, tokens in zip(("light", "dark"), load_modes()):
-            expected_tokens, expected_pairs = spec_for(tokens)
-            for token in expected_tokens:
+            for token in TOKENS:
                 self.assertIn(token, tokens, f"{mode_name}: --{token} missing from :root")
-            for fg, bg, floor, where in expected_pairs:
+            for fg, bg, floor, where in PAIRS:
                 ratio = contrast(tokens[fg], tokens[bg])
                 self.assertGreaterEqual(
                     round(ratio, 2), floor,
