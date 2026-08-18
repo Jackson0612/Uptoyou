@@ -78,7 +78,14 @@ async def scenario(test_url: str) -> None:
             )
         ).scalar_one()
         await session.execute(
-            text("insert into device_secret (principal_id, secret_sha256) values (:p, :h)"),
+            # **An operator's device (D105), because this test asserts D72's allocation table.** The
+            # reveal payload's shape follows the credential since revision 0025: a member sees what
+            # happened, an operator also sees how the odds got there. Asserting the allocation from a
+            # member token would be asserting a leak — and the allocation is *the* statement this
+            # test needs, since D72's table is the truth of the draw and a zero-weight place holding
+            # 0 of 36 outcomes is a property rather than luck.
+            text("insert into device_secret (principal_id, secret_sha256, operator) "
+                 "values (:p, :h, true)"),
             {"p": principal, "h": sha256(token.encode()).hexdigest()},
         )
         for code, name in (("63000020", "信義區"),):
