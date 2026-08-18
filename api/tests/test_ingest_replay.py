@@ -428,12 +428,48 @@ async def shape_b(Session, test_url, paths, baseline, results, findings):
         test_url, "delete from place_publication where id = :p", {"p": old_id}
     )
 
-    # Route 2: TRUNCATE CASCADE. What it takes is measured, not assumed.
+    # Route 2: TRUNCATE CASCADE. **This assertion was inverted 2026-08-18 and the inversion is
+    # the point.** Until revision 0020 this phase *measured a bypass*: `truncate place_publication
+    # cascade` was allowed and it emptied `ingest_run` for every source at once, because all seven
+    # publication foreign keys live on that one table. H32 recorded it; the owner ruled the guard;
+    # 0020's `BEFORE TRUNCATE` trigger on `ingest_run` now aborts the whole statement. So the test
+    # that found the hole is the test that holds it shut, and what it asserts is the refusal.
     before = await runs_per_source(Session)
     refusal = await run_sql(test_url, "truncate place_publication")
     findings["truncate_publication_plain"] = refusal
+    guarded = await run_sql(test_url, "truncate place_publication cascade")
+    findings["truncate_cascade_guarded"] = guarded
+    assert guarded is not None, (
+        "truncate place_publication cascade was ALLOWED — revision 0020's guard on ingest_run is "
+        "missing or disabled, and H32's silent path is open again: this statement empties the "
+        "ledger for every source at once"
+    )
+    assert "H32" in guarded[1], (
+        "the cascade was refused by something other than 0020's guard: {}".format(guarded)
+    )
+    assert await runs_per_source(Session) == before, (
+        "the refused cascade still moved the ledger — a BEFORE TRUNCATE trigger must abort the "
+        "whole statement, not part of it"
+    )
+    assert await count_rows(Session, "reference_place") > 0, (
+        "the refused cascade still emptied reference_place"
+    )
+
+    # The deliberate door, typed out on purpose. 0020 claims to stop the accident, not the intent
+    # (`cannot be done by accident, not cannot be done`), and shape B needs the publication gone to
+    # measure a from-scratch rebuild. So the route is: disable the guard, truncate, re-enable — and
+    # the fact that it takes three statements and names the trigger is the mitigation working.
+    disabled = await run_sql(test_url, "alter table ingest_run disable trigger upto_no_truncate")
+    assert disabled is None, "could not disable the guard for the deliberate route: {}".format(
+        disabled
+    )
     refusal = await run_sql(test_url, "truncate place_publication cascade")
-    assert refusal is None, "truncate cascade was refused: {}".format(refusal)
+    assert refusal is None, "truncate cascade was refused with the guard disabled: {}".format(
+        refusal
+    )
+    restored = await run_sql(test_url, "alter table ingest_run enable trigger upto_no_truncate")
+    assert restored is None, "the guard was not restored: {}".format(restored)
+    findings["deliberate_route"] = "guard disabled, truncated, guard re-enabled"
     after = await runs_per_source(Session)
     findings["truncate_cascade"] = {
         "ledger_before": before,
@@ -615,12 +651,49 @@ async def weather_pin(Session, test_url, findings):
         ),
         "contributions_after_delete": await count_rows(Session, "weight_contribution"),
     }
+    # The worse half of H32, and now the guarded half. `truncate forecast_publication cascade`
+    # used to remove `weight_contribution` rows through the five-column composite key — D14's
+    # permanent rows, silently, where the same DELETE is refused. 0020 puts the guard on
+    # `weight_contribution` itself, so the cascade is aborted from the far end.
     truncate = await run_sql(test_url, "truncate forecast_publication cascade")
     findings["weather"]["truncate_cascade"] = truncate
     findings["weather"]["contributions_after_truncate"] = await count_rows(
         Session, "weight_contribution"
     )
     findings["weather"]["readings_after_truncate"] = await count_rows(Session, "forecast_reading")
+    assert truncate is not None, (
+        "truncate forecast_publication cascade was ALLOWED — 0020's guard on weight_contribution "
+        "is missing, and D14's permanent rows are removable by a statement the schema refuses in "
+        "its DELETE form"
+    )
+    assert "H32" in truncate[1], (
+        "the weather cascade was refused by something other than 0020's guard: {}".format(truncate)
+    )
+    assert findings["weather"]["contributions_after_truncate"] == 1, (
+        "the refused cascade still cost the contribution row"
+    )
+
+    # **And now the guard that the statement above did NOT exercise.** `truncate
+    # forecast_publication cascade` reaches `ingest_run` as well (it holds a
+    # `forecast_publication_id`), so the refusal above came from the ledger's trigger and says so
+    # in its message — which leaves 0020's *second* trigger unproven. `forecast_reading` is
+    # referenced by `weight_contribution` and by nothing in the ledger, so a cascade from there
+    # can only be stopped by the guard on the contributions themselves. Measured separately
+    # because one refusal standing in for two is how a half-installed mitigation reads as whole.
+    contribution_guard = await run_sql(test_url, "truncate forecast_reading cascade")
+    findings["weather"]["truncate_reading_cascade"] = contribution_guard
+    assert contribution_guard is not None, (
+        "truncate forecast_reading cascade was ALLOWED — 0020's guard on weight_contribution is "
+        "missing, and D14's permanent rows go with the reading they pin"
+    )
+    assert "weight_contribution" in contribution_guard[1], (
+        "the reading cascade was refused, but not by the contribution guard: {}".format(
+            contribution_guard
+        )
+    )
+    assert await count_rows(Session, "weight_contribution") == 1, (
+        "the refused reading cascade still cost the contribution row"
+    )
 
     assert findings["weather"]["delete_publication"] is not None, (
         "deleting a forecast publication that a weight_contribution pins through its reading "
@@ -713,7 +786,11 @@ def report(results, findings, keys):
         "REFUSED — {}: {}".format(*findings["truncate_publication_plain"])
         if findings["truncate_publication_plain"] else "allowed"
     ))
-    print("  TRUNCATE place_publication CASCADE: allowed, and it also emptied ingest_run —")
+    print("  TRUNCATE place_publication CASCADE: {}".format(
+        "REFUSED by 0020's guard — {}: {}".format(*findings["truncate_cascade_guarded"])
+        if findings["truncate_cascade_guarded"] else "ALLOWED — H32's path is open again"
+    ))
+    print("  the deliberate route ({}) then emptied it —".format(findings["deliberate_route"]))
     print("    ledger rows before: {}".format(findings["truncate_cascade"]["ledger_before"]))
     print("    ledger rows after:  {}".format(findings["truncate_cascade"]["ledger_after"]))
     print("    other sources' row tables, untouched: {}".format(
@@ -751,6 +828,14 @@ def report(results, findings, keys):
     print("  TRUNCATE forecast_publication CASCADE: {}".format(
         "REFUSED — {}: {}".format(*weather["truncate_cascade"])
         if weather["truncate_cascade"] else "ALLOWED",
+    ))
+    # Printed separately because the statement above is refused by the *ledger's* guard — a
+    # forecast publication is pinned by `ingest_run` too — so it proves nothing about the guard on
+    # the contributions. This one can only be refused by that second trigger.
+    print("  TRUNCATE forecast_reading CASCADE: {}".format(
+        "REFUSED by the contribution guard — {}: {}".format(
+            *weather["truncate_reading_cascade"])
+        if weather.get("truncate_reading_cascade") else "ALLOWED",
     ))
     print("  weight_contribution rows: 1 before, {} after the refused DELETE, {} after the "
           "cascade".format(
