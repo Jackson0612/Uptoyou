@@ -108,9 +108,13 @@ class TheTwoReadmesAgree(unittest.TestCase):
             "README.md's opening does not say it is canonical — which one wins has to be stated "
             "where a reader arrives, not inferred from filenames",
         )
+        # Before the first `##` section, mirroring the English check rather than counting
+        # paragraphs. The paragraph-index version broke the moment the head grew a language
+        # switcher and a badge row — a check that depends on how many paragraphs precede a
+        # sentence is a check that fails on formatting.
         self.assertIn(
-            "英文版為準", chinese.split("\n\n")[1] if "\n\n" in chinese else chinese,
-            "README.zh-TW.md does not say the English is authoritative near the top",
+            "英文版為準", chinese.split("\n## ")[0],
+            "README.zh-TW.md does not say the English is authoritative before the first section",
         )
 
     def test_the_check_can_fail(self):

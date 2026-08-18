@@ -1,5 +1,47 @@
 # Up to you（由你決定）
 
+[English](README.md) | [繁體中文](README.zh-TW.md)
+
+[![frontend](https://img.shields.io/badge/frontend-Vue%203%20(vendored)-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/) [![backend](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/) [![db](https://img.shields.io/badge/db-PostgreSQL%2017-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![vector](https://img.shields.io/badge/vector-pgvector-4169E1?logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector) [![orchestration](https://img.shields.io/badge/orchestration-Airflow-017CEE?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/) [![AI](https://img.shields.io/badge/AI-gemma2%3A2b%20%2B%20arctic--embed2-000000?logo=ollama&logoColor=white)](https://ollama.com/) [![data](https://img.shields.io/badge/data-36%2C499%20places-555555)](#資料管線)
+
+**一群人一起決定一餐，由一對加了權重的骰子公平地選出來。** 每一個推動過店家機率的因素都是一列存下來
+的資料，並釘住它是從哪一筆讀數來的，所以結果是一個可以查帳的決定，而不是一個憑空出現的數字。
+
+**Demo：** 本機（`docker compose up`）—— 雲端網址在十月。
+
+### 三分鐘可以先試試的兩件事
+
+```sh
+docker compose up -d --wait                                  # 整個 stack，一行指令
+docker compose exec api python -m upto.issue 1 Kevin         # 一組裝置 token，只印一次
+#   → 打開 localhost:8080，貼上 token 和 circle id，提一家店，擲骰
+python3 probes/m2_freshness.py                                # 帳本對「新鮮度」知道些什麼
+```
+
+第一件把產品從頭走到尾。第二件讀執行帳本，逐個來源印出「來源重新發佈之後，我們保證多久內會注意到」
+以及「它實際上多久重新發佈一次」—— 這條管線用它自己的紀錄解釋自己。
+
+### 專案速覽
+
+| | |
+|---|---|
+| **核心想法** | 五個朋友、一餐飯，沒有人想當那個做決定的人。這個 app 來決定，然後把它的計算過程攤開。 |
+| **決策方式** | 加權骰子，不是排名。每個因素都乘上機率，被避開的類型乘以零，而揭曉面板會把每個因素連同它貢獻的數字一起列出來。 |
+| **資料規模** | 7 個發佈來源、6 個 DAG，目前 226 次發佈與 356 列帳本，36,499 家臺北店家。 |
+| **技術重點** | 以內容定址的 ingest 加一本幂等的帳本；被丟掉的表可以從帳本留下的東西重播出來；三層的名稱推導；一個帶凍結評估集的 RAG 分類器。 |
+| **量測成果** | 儲存要 15.0 秒、沒有變化的日子 1.6 秒，所以那個短路是被標上價的。本地 RAG 分類器 66.0%，對上託管模型的 60.5%。分類目前覆蓋全市 9.70%，每次回填往上走。 |
+| **技術選用** | 一個 compose 檔、一個資料庫同時做關聯式和向量的工作，沒有任何一個服務是 2 GB 的機器跑不動的。 |
+
+### 功能展示
+
+這份文件裡還沒有截圖。介面正在改寫中 —— 出貨的前端是內附的 Vue 3 build，而 D104 用 Vite + React 19
++ Tailwind 4 取代它 —— 而一個即將被換掉的畫面的截圖會很快過期。在那之前，跑完上面兩行指令之後打開
+`localhost:8080` 才是誠實的版本。
+
+*模型跑在一個 compose profile 後面：`gemma2:2b` 負責生成，`snowflake-arctic-embed2` 負責檢索。
+今天實際出貨的前端是內附的 Vue 3 global build，沒有 build 步驟；它正在被改寫成 Vite + React 19 +
+Tailwind 4，**進行中**，而在它真的進到 repository 之前不會有徽章。*
+
 *本頁是 [README.md](README.md) 的繁體中文版。**英文版為準**：兩邊若有出入，以英文版為正確。*
 
 一個自架的小工具，給一小群人決定今天去哪裡吃。開一輪、提出店家、擲兩顆骰子 —— 然後在揭曉面板上，

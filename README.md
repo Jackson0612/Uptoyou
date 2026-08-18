@@ -1,7 +1,52 @@
 # Up to you
 
-*A Traditional Chinese copy of this page is at [README.zh-TW.md](README.zh-TW.md). This English
-version is canonical: where the two disagree, this one is right.*
+[English](README.md) | [繁體中文](README.zh-TW.md)
+
+[![frontend](https://img.shields.io/badge/frontend-Vue%203%20(vendored)-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/) [![backend](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/) [![db](https://img.shields.io/badge/db-PostgreSQL%2017-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![vector](https://img.shields.io/badge/vector-pgvector-4169E1?logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector) [![orchestration](https://img.shields.io/badge/orchestration-Airflow-017CEE?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/) [![AI](https://img.shields.io/badge/AI-gemma2%3A2b%20%2B%20arctic--embed2-000000?logo=ollama&logoColor=white)](https://ollama.com/) [![data](https://img.shields.io/badge/data-36%2C499%20places-555555)](#the-pipeline)
+
+**A group decides one meal together, and a weighted pair of dice does the choosing fairly.** Every
+factor that moved a place's odds is a stored row, pinned to the reading it came from, so the result
+is an auditable decision rather than a number that appeared.
+
+**Demo:** local (`docker compose up`) — cloud URL in October.
+
+### Two things to try in three minutes
+
+```sh
+docker compose up -d --wait                                  # the stack, one command
+docker compose exec api python -m upto.issue 1 Kevin         # a device token, printed once
+#   → open localhost:8080, paste token + circle id, propose a place, roll
+python3 probes/m2_freshness.py                                # what the ledger knows about freshness
+```
+
+The first walks the product end to end. The second reads the run ledger and prints, per source, how
+long after a republication we are guaranteed to notice and how often the source actually
+republishes — the pipeline explaining itself from its own records.
+
+### 專案速覽
+
+| | |
+|---|---|
+| **The idea** | Five friends, one meal, nobody wants to be the one who chose. The app chooses, and then shows its work. |
+| **How it decides** | Weighted dice, not a ranking. Every factor multiplies the odds, an avoided category multiplies by zero, and the reveal panel names each factor beside the number it contributed. |
+| **Data** | 7 published sources through 6 DAGs, 226 publications and 356 ledger rows so far, 36,499 Taipei places. |
+| **Engineering** | Content-addressed ingest with an idempotent ledger; a dropped table replays from what the ledger kept; a three-layer name derivation; a RAG classifier with a frozen evaluation set. |
+| **Measured** | Storing costs 15.0 s and a no-change day 1.6 s, so the short-circuit is priced. The local RAG classifier scores 66.0% against the hosted model's 60.5%. Categories now cover 9.70% of the city and rise per backfill. |
+| **Why this stack** | One compose file, one database doing both relational and vector work, no service that cannot be run on a 2 GB instance. |
+
+### 功能展示
+
+Screenshots are not in this file yet. The surface is mid-rewrite — the shipping front end is a
+vendored Vue 3 build and D104 replaces it with Vite + React 19 + Tailwind 4 — and a screenshot of a
+screen about to be replaced would age badly. `localhost:8080` after the two commands above is the
+honest version until then.
+
+*Models run behind a compose profile: `gemma2:2b` generates, `snowflake-arctic-embed2` retrieves.
+The front end shipping today is the vendored Vue 3 global build with no build step; it is being
+rewritten on Vite + React 19 + Tailwind 4, **in progress**, and gets no badge until it is in the
+repository.*
+
+*This English page is canonical: where the two languages disagree, this one is right.*
 
 A self-hosted app for a small group deciding where to eat. Open a round, propose places, roll two
 dice — and read, on a reveal panel, exactly how the odds got that way. Every factor that moved a
