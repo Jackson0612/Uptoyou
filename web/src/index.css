@@ -7,10 +7,13 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* shadcn drives dark mode from a `.dark` ancestor. This surface has always followed the
-   reader's system setting, so the class hook is kept AND `prefers-color-scheme` is honoured;
-   every dark value below is declared in both places. */
-@custom-variant dark (&:is(.dark *));
+/* There is no dark mode — owner-ruled 2026-08-18; design.md §1 carries the ruling and its cost.
+   This line is NOT dead code. Tailwind 4 ships a built-in `dark` variant driven by
+   `prefers-color-scheme`, and shadcn's own parts carry nine dark: utilities. Deleting our dark
+   blocks without redefining the variant would hand those utilities straight back to the OS
+   setting — the same half-removal the ruling warns about, one level down. Pointed at an attribute
+   nothing sets, they still compile and can never match. */
+@custom-variant dark (&:where([data-scheme="dark"] *));
 
 /* ─────────────────────────────────────────────────────────────────────────────
    design.md §0 — shadcn is adopted for its BEHAVIOUR, not its appearance. `init`
@@ -60,51 +63,6 @@
   --ring: #D95204;
   /* §3 — radius 0 EVERYWHERE. Set in the theme, never per component. */
   --radius: 0px;
-}
-
-.dark,
-:root:has(.dark) {
-  --background: #101114;
-  --foreground: #FFFDF7;
-  --card: #101114;
-  --card-foreground: #FFFDF7;
-  --popover: #101114;
-  --popover-foreground: #FFFDF7;
-  --primary: #FFFDF7;
-  --primary-foreground: #101114;
-  --secondary: #101114;
-  --secondary-foreground: #FFFDF7;
-  --muted: #101114;
-  --muted-foreground: #A8ABB3;
-  --accent: #101114;
-  --accent-foreground: #FFFDF7;
-  --destructive: #FF875C;
-  --border: #FFFDF7;
-  --input: #FFFDF7;
-  --ring: #FF875C;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    --background: #101114;
-    --foreground: #FFFDF7;
-    --card: #101114;
-    --card-foreground: #FFFDF7;
-    --popover: #101114;
-    --popover-foreground: #FFFDF7;
-    --primary: #FFFDF7;
-    --primary-foreground: #101114;
-    --secondary: #101114;
-    --secondary-foreground: #FFFDF7;
-    --muted: #101114;
-    --muted-foreground: #A8ABB3;
-    --accent: #101114;
-    --accent-foreground: #FFFDF7;
-    --destructive: #FF875C;
-    --border: #FFFDF7;
-    --input: #FFFDF7;
-    --ring: #FF875C;
-  }
 }
 
 /* shadcn's own mapping, kept so its parts compose — minus `--color-muted`, which
@@ -168,14 +126,14 @@
   --color-on-jade: #101114;
   --color-on-sun: #101114;
 
-  /* the flood — the landed reveal's ground. The dark values are NOT the raw hues and
-     must not be "fixed" to match them: a landed dark flood is capped at luminance ≤ 0.08.
-     `flood-sun` reads olive at that ceiling, which is the ruled outcome, measured. */
+  /* the flood — the landed reveal's ground. With the dark scheme gone these are the raw hues
+     and the L <= 0.08 ceiling went with it, along with the olive `flood-sun` compromise. They
+     stay their own tokens because §1 still names the flood as its own table; that they are now
+     byte-identical to the four accents is worth knowing before anyone "tidies" them away. */
   --color-flood-hot: #FF875C;
   --color-flood-cobalt: #2547E8;
   --color-flood-jade: #00A870;
   --color-flood-sun: #FFC300;
-  --color-on-flood-dark: #FFFDF7;
 
   /* the die is an OBJECT, not a surface — identical in both schemes. `pipred` is its
      own token and never follows an accent that flips (reusing the accent measured
@@ -210,31 +168,6 @@
   --bar-h: calc(76px + env(safe-area-inset-bottom, 0px));
 }
 
-/* §1 · dark, for the PROJECT tokens. These were absent: the file carried dark values for
-   shadcn's semantic layer only, so `bg-paper` / `text-ink` / `text-muted` never flipped and
-   `.text-muted` measured 2.83 on the dark ground. Unlayered on purpose — an unlayered rule
-   beats anything in `@layer theme`, so no specificity trick is needed.
-   The die tokens are deliberately absent: a die is an object and its paint does not change
-   when the lights go off. */
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    --color-ink: #FFFDF7;
-    --color-paper: #101114;
-    --color-muted: #A8ABB3;
-    --color-hot: #FF875C;
-    --color-hot-ink: #FF875C;
-    --color-cobalt: #314FDC;
-    --color-jade: #0A9E6D;
-    --color-sun: #F0BB0F;
-    /* L 0.0609 against the 0.08 ceiling, x10.8 from the ground, paper on it 9.31. #8A3300 also
-       passes at L 0.0777 and was rejected for sitting on the ceiling. */
-    --color-flood-hot: #7A2E00;
-    --color-flood-cobalt: #0026DB;
-    --color-flood-jade: #005338;
-    --color-flood-sun: #5B4500;
-  }
-}
-
 /* §2 · the ladder, tier 2. `html[lang]` and not `html`: Tailwind emits the theme on
    `:root`, which is (0,1,0), and a bare `html` is (0,0,1) — it loses at every width and
    the ladder silently never leaves tier 1. The attribute selector lifts this to (0,1,1). */
@@ -255,7 +188,9 @@
     @apply border-border outline-ring/50;
   }
   html {
-    color-scheme: light dark;
+    /* declared, not omitted: left out, form controls and scrollbars still follow the OS and the
+       removal is half-done in the one place nobody screenshots. */
+    color-scheme: light;
     @apply font-sans;
   }
   body {
