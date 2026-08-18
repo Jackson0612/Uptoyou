@@ -39,7 +39,8 @@ ink/paper measured higher on that ground.
 | ink | `--color-ink` | `#101114` | `#FFFDF7` |
 | paper | `--color-paper` | `#FFFDF7` | `#101114` |
 | muted | `--color-muted` | `#5A5C63` | `#A8ABB3` |
-| hot | `--color-hot` | `#FF4438` | `#F34F44` |
+| hot | `--color-hot` | `#FF875C` | `#FF875C` |
+| hot-ink | `--color-hot-ink` | `#D95204` | `#FF875C` |
 | cobalt | `--color-cobalt` | `#2547E8` | `#314FDC` |
 | jade | `--color-jade` | `#00A870` | `#0A9E6D` |
 | sun | `--color-sun` | `#FFC300` | `#F0BB0F` |
@@ -47,12 +48,30 @@ ink/paper measured higher on that ground.
 **On-colours** (unchanged between schemes): `on-hot` `on-jade` `on-sun` = `#101114`;
 `on-cobalt` = `#FFFDF7`.
 
+**`hot` is a GROUND. `hot-ink` is the same accent as TEXT or a MARK. They are not interchangeable,
+and this is the reason** — owner-ruled 2026-08-18, the reference demo's orange:
+
+| use | token | measured | floor |
+|---|---|---|---|
+| pinned bar, badge fill, the count tag — ground with ink on it | `hot` `#FF875C` | **7.98** | 4.5 |
+| the headline's second line — large text on paper | `hot-ink` `#D95204` | **4.00** | 3.0 |
+| **focus ring, the star, any mark on paper** | `hot-ink` | **4.00** | 3.0 |
+| ~~`hot` used as text or a mark on paper~~ | — | **2.33** | **fails** |
+
+**The focus ring must take `hot-ink`.** It currently takes `hot`; on the new palette that is 2.33
+against a 3.0 graphic floor, so leaving it would trade an accessibility guarantee for a colour.
+**In dark mode `hot-ink` becomes `#FF875C`** — the light orange reads as text on the dark ground at
+**7.98** — so one accent flips role between schemes rather than needing a third value.
+
+**The reference itself fails this pair.** Its own display headline sets that orange on cream at
+**2.33**; a marketing page nobody measured. We take its colour and not its mistake.
+
 **The flood — the landed reveal's ground.** The dark values are **not** the raw hues and must not be
 "fixed" to match them; a landed dark flood's relative luminance is capped at **≤ 0.08**.
 
 | face | light | dark | on-flood (dark) |
 |---|---|---|---|
-| hot | `#FF4438` | `#950900` | `#FFFDF7` |
+| hot | `#FF875C` | `#7A2E00` | `#FFFDF7` |
 | cobalt | `#2547E8` | `#0026DB` | `#FFFDF7` |
 | jade | `#00A870` | `#005338` | `#FFFDF7` |
 | sun | `#FFC300` | `#5B4500` | `#FFFDF7` |
@@ -75,8 +94,17 @@ the pinned bar against a landed flood of the same family.
 
 Two vendored families: **`UpTo Sans`** (Noto Sans TC, variable, `font-weight: 100 900` **declared** —
 the face's default instance is Thin and without the range the whole surface renders hairline) and
-**`UpTo Serif`** (Noto Serif TC subset, display only; its source face defaults to ExtraLight, same
-hazard). `Archivo Black` is loaded for **Latin numerals only**.
+**`UpTo Serif`** (Noto Serif TC subset, display only; its source face defaults to **ExtraLight**,
+so it is declared `font-weight: 200 900` — the same hazard as the sans's Thin).
+
+**`UpTo Serif` must ship in `app/web`. It does not yet.** The approved page draws its headline in it
+from a proposal-only subset; the shipped set is sans-only, so a React build would fall back to a
+system serif on the largest object on the screen. **Subsetting it against the home's characters and
+teaching the subset gate's manifest a second face is part of the home build, not of the scaffold.**
+
+**There is no third face.** An earlier version of this section named `Archivo Black` for Latin
+numerals; **nothing loads it and nothing ever did** — the approved page draws `36,499` in `UpTo
+Sans` at weight 900, and that is the rule.
 
 **The declared fallback chain is part of the design:** `"Noto Sans TC", "PingFang TC",
 "Microsoft JhengHei", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK TC",
