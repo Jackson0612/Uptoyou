@@ -50,10 +50,36 @@ OBSERVATION_MEASURES = {
     "weather_text": ("Weather", None),
     "wind_speed_ms": ("WindSpeed", None),
 }
+# **No `weather_code` here, and that is the source's limit rather than an omission.** The station
+# dataset's elements are AirPressure · AirTemperature · DailyExtreme · GustInfo · Now ·
+# RelativeHumidity · Weather · WindDirection · WindSpeed — measured 2026-08-18 — and none of them
+# is a code. So an observation answer carries `weather_text` and no `weather_code`, and a surface
+# keyed to the code draws no icon from an observation. Stated here because the absence would
+# otherwise read as a mapping someone forgot.
 FORECAST_MEASURES = {
     "temperature_c": ("溫度", "Temperature"),
     "humidity_pct": ("相對濕度", "RelativeHumidity"),
     "weather_text": ("天氣現象", "Weather"),
+    # **A classification, not a measurement, and it sits here anyway.** Added 2026-08-18 for the
+    # home screen's weather icon, which the owner ruled with five states keyed to CWA's code.
+    # `measures` already carries `weather_text` and `comfort_text`, so the dict has never been
+    # measurements-only and a separate home for this one would split the same element across two
+    # places in the payload for no reader's benefit.
+    #
+    # **The raw two-character string — `"01"`, `"15"` — never an integer.** The leading zero is part
+    # of the value everywhere CWA publishes it, and a surface that had to reconstruct it would be
+    # deriving a key from a number this API had thrown information away from.
+    #
+    # **Why the text cannot serve instead**, measured on the current publication: code `15` publishes
+    # under two different strings — 短暫陣雨或雷雨 (153 rows) and 午後短暫雷陣雨 (24) — so a
+    # text→icon map is many-to-one and open-ended, and a phrase CWA has not published yet falls
+    # through to nothing. Code 15 is also the *most common* condition here (177 of 384), so the
+    # ambiguous case is the majority rather than a tail. The code→icon map is one-to-one and closed.
+    #
+    # **D20 still holds and this does not bend it.** The API hands over the value the source
+    # published; which glyph a code becomes is the surface's decision, and nothing here
+    # characterises the weather.
+    "weather_code": ("天氣現象", "WeatherCode"),
     "wind_speed_ms": ("風速", "WindSpeed"),
     "rain_probability_pct": ("3小時降雨機率", "ProbabilityOfPrecipitation"),
     "apparent_temperature_c": ("體感溫度", "ApparentTemperature"),

@@ -73,7 +73,8 @@ async def plant_observation(session, hour, temperature, detected_at, sha, weathe
     return publication
 
 
-async def plant_forecast(session, hour, temperature, detected_at, sha, weather=None):
+async def plant_forecast(session, hour, temperature, detected_at, sha, weather=None,
+                         weather_code=None):
     result = await session.execute(
         text(
             "insert into forecast_publication (dataset_id, content_sha256, detected_at, payload_bytes) "
@@ -85,6 +86,11 @@ async def plant_forecast(session, hour, temperature, detected_at, sha, weather=N
     rows = [("溫度", "Temperature", temperature)]
     if weather is not None:
         rows.append(("天氣現象", "Weather", weather))
+    # `WeatherCode` shares the 天氣現象 element with `Weather` and is planted separately, because
+    # the two are separately absent in principle — even though the current publication pairs them
+    # perfectly (384 slots each, zero mismatches in either direction, measured 2026-08-18).
+    if weather_code is not None:
+        rows.append(("天氣現象", "WeatherCode", weather_code))
     for element, measure, value in rows:
         await session.execute(
             text(
@@ -120,6 +126,40 @@ async def scenario(test_url):
     assert reading.measures["temperature_c"] == "31"
     assert reading.provenance.time_label == "detected", "a forecast stamp is a detection time (D42)"
     print("  window: the previous hour's observation was not offered")
+
+    # ---- the home screen's weather icon reads a code, not a phrase (2026-08-18) -----------
+    #
+    # **The raw two-character string, never an integer.** The leading zero is part of the value
+    # everywhere CWA publishes it, so a surface reconstructing it would be recovering information
+    # this API had thrown away. **And the text cannot substitute:** code 15 publishes under two
+    # different strings in the current publication — 短暫陣雨或雷雨 and 午後短暫雷陣雨 — and it is
+    # that publication's *most common* condition, so a text→icon map is many-to-one on the majority
+    # case rather than on a tail.
+    coded = SEVEN + timedelta(hours=2)
+    uncoded = SEVEN + timedelta(hours=3)
+    async with Session() as session:
+        await plant_forecast(session, coded, "30", SIX, "d" * 64, weather="晴",
+                             weather_code="01")
+        await plant_forecast(session, uncoded, "30", SIX, "e" * 64, weather="陰")
+    async with Session() as session:
+        reading = await reading_for(session, SHILIN, coded)
+    assert reading.measures["weather_code"] == "01", reading.measures
+    assert reading.measures["weather_text"] == "晴", reading.measures
+    assert reading.measures["weather_code"] != 1, "the code must not have been made numeric"
+
+    # **Separately absent — and the key is still there, holding `None`.** That is this payload's
+    # existing contract for every measure the source did not publish, and it was asserted the wrong
+    # way round here first: the test expected the key to be missing. Keeping the shape fixed is the
+    # better contract for a surface, because a caller checks one thing (is the value null) rather
+    # than two (is the key present, and is it null) — so a code-keyed icon draws nothing on a null
+    # instead of guessing a glyph from a phrase.
+    async with Session() as session:
+        reading = await reading_for(session, SHILIN, uncoded)
+    assert reading.measures["weather_text"] == "陰", reading.measures
+    assert reading.measures["weather_code"] is None, reading.measures
+    assert "weather_code" in reading.measures, "the key stays; only the value goes"
+    print("  weather_code: the raw two-character code is passed through, and absent when the "
+          "source omits it")
 
     # ---- the ordinary case: the observation has landed ------------------------------------
     async with Session() as session:
