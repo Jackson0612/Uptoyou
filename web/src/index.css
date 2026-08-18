@@ -51,10 +51,13 @@
   --muted-foreground: #5A5C63;
   --accent: #FFFDF7;
   --accent-foreground: #101114;
-  --destructive: #FF4438;
+  --destructive: #D95204;
   --border: #101114;
   --input: #101114;
-  --ring: #FF4438;
+  /* hot-ink, NOT hot: the ring is a mark on paper, and `hot` there measures 2.33 against a
+     3.0 graphic floor. A focus ring only exists while something is tabbed to, so no visual
+     review can catch this one. */
+  --ring: #D95204;
   /* §3 — radius 0 EVERYWHERE. Set in the theme, never per component. */
   --radius: 0px;
 }
@@ -75,10 +78,10 @@
   --muted-foreground: #A8ABB3;
   --accent: #101114;
   --accent-foreground: #FFFDF7;
-  --destructive: #F34F44;
+  --destructive: #FF875C;
   --border: #FFFDF7;
   --input: #FFFDF7;
-  --ring: #F34F44;
+  --ring: #FF875C;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -97,10 +100,10 @@
     --muted-foreground: #A8ABB3;
     --accent: #101114;
     --accent-foreground: #FFFDF7;
-    --destructive: #F34F44;
+    --destructive: #FF875C;
     --border: #FFFDF7;
     --input: #FFFDF7;
-    --ring: #F34F44;
+    --ring: #FF875C;
   }
 }
 
@@ -149,7 +152,14 @@
   --color-ink: #101114;
   --color-paper: #FFFDF7;
   --color-muted: #5A5C63;
-  --color-hot: #FF4438;
+  /* `hot` is a GROUND — pinned bar, badge fill, count tag — and is the same in both schemes.
+     `hot-ink` is the same accent as TEXT or a MARK on paper, and it DOES flip: the light orange
+     reads as text on the dark ground, so one accent changes role rather than needing a third
+     value. They are not interchangeable. Owner-ruled 2026-08-18; every figure re-measured here
+     rather than copied — ink on hot 7.98 · hot-ink on paper 4.00 · hot on paper 2.33, which is
+     the use this pair exists to forbid. */
+  --color-hot: #FF875C;
+  --color-hot-ink: #D95204;
   --color-cobalt: #2547E8;
   --color-jade: #00A870;
   --color-sun: #FFC300;
@@ -161,7 +171,7 @@
   /* the flood — the landed reveal's ground. The dark values are NOT the raw hues and
      must not be "fixed" to match them: a landed dark flood is capped at luminance ≤ 0.08.
      `flood-sun` reads olive at that ceiling, which is the ruled outcome, measured. */
-  --color-flood-hot: #FF4438;
+  --color-flood-hot: #FF875C;
   --color-flood-cobalt: #2547E8;
   --color-flood-jade: #00A870;
   --color-flood-sun: #FFC300;
@@ -198,6 +208,31 @@
   /* §4 · BAR reserves its own height in ONE declaration, so a screen carrying one sets
      `padding-bottom: calc(var(--bar-h) + 16px)` and nothing else. */
   --bar-h: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+/* §1 · dark, for the PROJECT tokens. These were absent: the file carried dark values for
+   shadcn's semantic layer only, so `bg-paper` / `text-ink` / `text-muted` never flipped and
+   `.text-muted` measured 2.83 on the dark ground. Unlayered on purpose — an unlayered rule
+   beats anything in `@layer theme`, so no specificity trick is needed.
+   The die tokens are deliberately absent: a die is an object and its paint does not change
+   when the lights go off. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --color-ink: #FFFDF7;
+    --color-paper: #101114;
+    --color-muted: #A8ABB3;
+    --color-hot: #FF875C;
+    --color-hot-ink: #FF875C;
+    --color-cobalt: #314FDC;
+    --color-jade: #0A9E6D;
+    --color-sun: #F0BB0F;
+    /* L 0.0609 against the 0.08 ceiling, x10.8 from the ground, paper on it 9.31. #8A3300 also
+       passes at L 0.0777 and was rejected for sitting on the ceiling. */
+    --color-flood-hot: #7A2E00;
+    --color-flood-cobalt: #0026DB;
+    --color-flood-jade: #005338;
+    --color-flood-sun: #5B4500;
+  }
 }
 
 /* §2 · the ladder, tier 2. `html[lang]` and not `html`: Tailwind emits the theme on
