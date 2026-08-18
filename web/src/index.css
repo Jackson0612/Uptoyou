@@ -126,10 +126,14 @@
   --color-on-jade: #101114;
   --color-on-sun: #101114;
 
-  /* the flood — the landed reveal's ground. With the dark scheme gone these are the raw hues
-     and the L <= 0.08 ceiling went with it, along with the olive `flood-sun` compromise. They
-     stay their own tokens because §1 still names the flood as its own table; that they are now
-     byte-identical to the four accents is worth knowing before anyone "tidies" them away. */
+  /* The flood — the ground the WHOLE viewport takes when that face wins. With the dark scheme
+     gone these are the raw hues, and the L <= 0.08 ceiling went with it along with the olive
+     `flood-sun` compromise.
+     **They are byte-identical to the four accents and they stay separate anyway — ruled, with
+     today as the proof.** The owner changed the accent from red to orange. Had these been one
+     token, the reveal's flood would have changed silently as a side effect of a decision about a
+     button, and the flood is the product's signature moment. Same argument as `pipred`: a token
+     exists to keep two facts that currently coincide from being forced to move together. */
   --color-flood-hot: #FF875C;
   --color-flood-cobalt: #2547E8;
   --color-flood-jade: #00A870;

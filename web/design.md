@@ -75,6 +75,14 @@ We take its colour and not its mistake.
 | jade | `#00A870` | `#101114` |
 | sun | `#FFC300` | `#101114` |
 
+**The four `flood-*` tokens stay separate even though they now hold the same values as the
+accents.** They are different facts that happen to coincide: `hot` is the accent, `flood-hot` is the
+ground the entire viewport takes when the hot face wins. **Today is the proof.** The owner changed
+the accent from red to orange; had the two been one token, the reveal's flood — the product's
+signature moment — would have changed silently as a side effect of a decision about a button. **The
+same argument that keeps `pipred` separate keeps these four.** Collapsing them is a design ruling,
+not tidying.
+
 ### The die is an object, not a surface
 
 `pip #101114` · `pipred #FF4438` · `diefill #FFFDF7` · `dieedge #101114`.
@@ -113,6 +121,19 @@ ring) **≥ 3.0**. **Nine pairs stand, measured once each.**
 > **What removing it costs, stated rather than hidden:** someone choosing dinner at night gets a
 > bright screen — and the flood ruling itself said this product is used *「often at night, often in
 > bed」*. Some readers expect an app to follow the system setting and read its refusal as unfinished.
+>
+> **Deleting the blocks is not the removal. Tailwind 4 ships a built-in `dark` variant driven by
+> `prefers-color-scheme`, and shadcn's own parts carry `dark:` utilities** — `button` `input`
+> `select` `badge` among them. **Delete our blocks without redefining that variant and those
+> utilities are handed straight back to the OS setting**: a live rule that fires on a reader's
+> laptop and never on ours. `@custom-variant dark` therefore points at `[data-scheme="dark"]`,
+> which nothing sets, so the utilities compile and can never match. **That line is load-bearing and
+> reads as dead code — the next person to tidy it is the person who re-enables dark mode by
+> accident.**
+>
+> **Verify a removal by rendering, not by grepping.** The check that counts is the page rendering
+> **pixel-identical under emulated light, dark and no-preference**. Asserting that the source no
+> longer contains the word would not have caught the variant.
 >
 > **Do not re-add a dark variant of a token to be helpful.** If dark mode returns it is a design
 > project — a photographic home on a near-black ground is a different product, and it would need
