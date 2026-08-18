@@ -219,17 +219,42 @@ class ParseResult:
         )
 
 
+# H33's second trap, mitigated here 2026-08-18. The 食品業者登錄 file carries private-use-area
+# codepoints inside its name column: `A-200168458-00001-2` reads 松日日式料理店 in both the FDA
+# file and the 食材登錄 file and still fails a byte comparison, because the FDA string ends in
+# `U+F57F`. A PUA codepoint has no agreed meaning — it renders as whatever the publisher's own
+# font decided — so it is not part of the name, and it breaks the one join that has to work on
+# exact strings: `foodtracer`'s company column exists to equal `reference_place.name` (that
+# module's own header says so). Stripped at the boundary, with the raw string kept beside it as
+# H24 requires, so nothing is lost and the corrupted codepoint stays investigable.
+#
+# **The BMP block only** — U+E000–U+F8FF. Planes 15 and 16 hold PUA too and are not stripped,
+# because nothing has been measured carrying them and a strip nobody can point at a row for is
+# a guess. Measured 2026-08-18: 16 of 36,499 stored `reference_place.name` carry a BMP PUA
+# codepoint, 0 addresses do.
+_PRIVATE_USE = re.compile("[\ue000-\uf8ff]")
+
+
 def normalise(text: Optional[str]) -> str:
     """One function, applied at the boundary, before any row is written (H24).
 
-    Full-width folded, administrative 台 folded to 臺, whitespace collapsed. The BOM is not
-    handled here because it is handled where it belongs — in the decode.
+    Full-width folded, administrative 台 folded to 臺, private-use codepoints dropped (H33),
+    whitespace collapsed. The BOM is not handled here because it is handled where it belongs —
+    in the decode.
+
+    **If dropping the PUA would leave nothing, the folded string is kept as it was.** An empty
+    name is not a safer wrong answer than a corrupted one: it would join to every other empty
+    name and it would read as a row with no name at all. Same rule as R-6's footnote strip in
+    `upto.naming` — a strip that empties the field does not fire.
     """
     if not text:
         return ""
     folded = text.translate(FULLWIDTH_FOLD)
     for written, canonical in ADMINISTRATIVE_FOLD:
         folded = folded.replace(written, canonical)
+    stripped = _PRIVATE_USE.sub("", folded)
+    if stripped.strip():
+        folded = stripped
     return " ".join(folded.split())
 
 

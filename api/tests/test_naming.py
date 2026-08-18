@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
-from upto.naming import derive_names, location, strip_registry_footnote  # noqa: E402
+from upto.naming import core, derive_names, location, squeeze, strip_registry_footnote  # noqa: E402
 
 FAILURES = []
 
@@ -94,8 +94,35 @@ check("unknown marker untouched", strip_registry_footnote("(新開)小吃店") =
 check("D92 bracket untouched", strip_registry_footnote("麥當勞（內湖舊宗路1段）") == "麥當勞（內湖舊宗路1段）")
 check("None passes through", strip_registry_footnote(None) is None)
 
+# --- H33: the comparator cuts at the LAST legal-form token, never with a tail regex
+HAIDILAO_BRANCH = "新加坡商海底撈國際食品有限公司台灣分公司"
+HAIDILAO_HQ = "新加坡商海底撈國際食品有限公司"
+check("branch and head office share one core",
+      core(HAIDILAO_BRANCH) == core(HAIDILAO_HQ), repr(core(HAIDILAO_BRANCH)))
+check("and the core is the company, not a bitten-off stem",
+      core(HAIDILAO_BRANCH) == "新加坡商海底撈國際食品", repr(core(HAIDILAO_BRANCH)))
+check("a 股份有限公司 branch folds the same way",
+      core("王品餐飲股份有限公司台中分公司") == core("王品餐飲股份有限公司") == "王品餐飲",
+      repr(core("王品餐飲股份有限公司台中分公司")))
+check("a shop name with no legal form is left whole",
+      core("松日日式料理店") == "松日日式料理店")
+check("a name that is nothing but its legal form is not emptied",
+      core("有限公司") == "有限公司")
+check("(股) is read as the legal form it abbreviates",
+      core("大成長城(股)公司") == core("大成長城股份有限公司"),
+      "{!r} vs {!r}".format(core("大成長城(股)公司"), core("大成長城股份有限公司")))
+check("H33's PUA tail cannot separate two names any more",
+      core("松日日式料理店\uf57f") == core("松日日式料理店"))
+check("None compares as the empty string rather than raising", core(None) == "")
+
+# --- squeeze is the rung below: same string, nobody's spacing
+check("squeeze drops spacing and punctuation", squeeze(" 阿  婆 - 麵店 ") == "阿婆麵店")
+check("squeeze keeps the legal form core removes",
+      squeeze("王品餐飲股份有限公司") == "王品餐飲股份有限公司")
+
 if FAILURES:
     print("\n{} failing: {}".format(len(FAILURES), ", ".join(FAILURES)))
     sys.exit(1)
-print("\nnaming: D92's three layers hold — {} checks".format(
+print("\nnaming: D92's three layers hold, and H33's comparator cuts at the last legal-form "
+      "token — {} checks".format(
     open(__file__).read().count("\ncheck(")))

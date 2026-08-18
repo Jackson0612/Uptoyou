@@ -81,6 +81,68 @@ def strip_registry_footnote(name: Optional[str]) -> Optional[str]:
     return name
 
 
+# H33's first trap, mitigated here 2026-08-18 — and it lives at *read* time, not at the ingest
+# boundary, for one reason: the registered name must stay stored exactly as the registry
+# published it. D92's three layers and R-6's strip both read the full registered string, and
+# 「新加坡商海底撈國際食品有限公司台灣分公司」 is what 商業登記 actually filed. Folding the branch
+# label into the stored value would destroy a fact the display layer needs, so this is a
+# comparator: it answers "are these two strings the same business", and it never writes.
+#
+# **The branch strip is deliberately not a regex on the tail.** A pattern like `.{0,8}?分公司$`
+# matches leftmost-first and eats into the company name — the 海底撈 string above loses
+# 「限公司台灣分公司」 and stops matching its own FDA row. Measured, not theorised: that version
+# reported 39 pairs as name disagreements which are the same company (M5, 2026-08-17). The rule
+# that works is the one the naming convention actually uses — **a branch label is whatever
+# follows the last legal-form token** — so the cut is made there.
+#
+# **No caller in `src` yet, and that is stated rather than hidden.** The only comparison that
+# wants this today is `probes/m5_cross_source.py`, which carries its own copy for the same
+# reason `foodtracer` imports `normalise` rather than copying it. Its first real caller arrives
+# when M5's cross-source disagreement check moves out of the probe and into the API. It lands
+# now because H33 is a measured hazard and a mitigation that exists is findable; one that waits
+# for its caller is re-derived from scratch.
+_COMPARE_PUNCT = re.compile(r"[\s()（）\[\]【】．。、,，\-‐‑‒–—―ー_·・「」『』/\\&＆'\"“”]+")
+_LEGAL_TAIL = re.compile(
+    r"(股份有限公司|有限股份公司|兩合公司|無限公司|有限公司|股份公司|公司|"
+    r"股份有限|商業有限)$"
+)
+_LEGAL_ANY = re.compile(r"股份有限公司|有限股份公司|兩合公司|無限公司|有限公司|股份公司|公司")
+_STOCK_TOKEN = re.compile(r"\(股\)|（股）|\(有\)|（有）")
+_BRANCH = "分公司"
+
+
+def squeeze(text: Optional[str]) -> str:
+    """Normalised (H24's fold, H33's PUA strip) and then stripped of all spacing and punctuation.
+
+    The rung below `core`: it answers "are these the same string once nobody's spacing habits
+    are in the way", which is a different question from "are these the same business".
+    """
+    from .ingest.fda import normalise
+
+    return _COMPARE_PUNCT.sub("", normalise(text or ""))
+
+
+def core(text: Optional[str]) -> str:
+    """`squeeze`, minus any 分公司 branch label, minus the legal form. Never stored.
+
+    Returns `squeeze(text)` unchanged when stripping would leave nothing — a company whose whole
+    name is its legal form is not usefully compared to the empty string, and every other such
+    company would match it.
+    """
+    from .ingest.fda import normalise
+
+    value = _COMPARE_PUNCT.sub("", _STOCK_TOKEN.sub("", normalise(text or "")))
+    if value.endswith(_BRANCH):
+        stem = value[: -len(_BRANCH)]
+        # The last legal-form token is where the company name ends and the branch label begins.
+        ends = [match.end() for match in _LEGAL_ANY.finditer(stem)]
+        if ends:
+            stem = stem[: max(ends)]
+        value = stem
+    value = _LEGAL_TAIL.sub("", value)
+    return value or squeeze(text)
+
+
 def location(address: Optional[str]) -> Location:
     match = _ADDRESS.match(address or "")
     if match is None:

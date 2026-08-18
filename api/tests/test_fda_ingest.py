@@ -96,6 +96,32 @@ class Normalisation(unittest.TestCase):
         self.assertEqual(fda.normalise("舞台餐廳"), "舞台餐廳")
         self.assertEqual(fda.normalise("平台食品"), "平台食品")
 
+    def test_a_private_use_codepoint_is_dropped(self):
+        """H33: the file's own name column carries PUA, and it breaks an exact-string join.
+
+        `A-200168458-00001-2` reads 松日日式料理店 in both the FDA file and 食材登錄's, and still
+        failed a byte comparison because the FDA string ends in U+F57F. A PUA codepoint renders
+        as whatever the publisher's font decided and means nothing outside it.
+        """
+        self.assertEqual(fda.normalise("松日日式料理店\uf57f"), "松日日式料理店")
+        self.assertEqual(fda.normalise("松日\ue000日式料理店"), "松日日式料理店")
+
+    def test_the_strip_does_not_empty_the_field(self):
+        """A name that is nothing but PUA keeps what it had.
+
+        An empty name is not a safer wrong answer: it joins to every other empty name. Same
+        rule as R-6's footnote strip in `upto.naming`, which also refuses to empty a field.
+        """
+        self.assertEqual(fda.normalise("\uf57f"), "\uf57f")
+
+    def test_planes_fifteen_and_sixteen_are_left_alone(self):
+        """The admitted scope of the strip, asserted so it stays visible.
+
+        The supplementary PUA planes are not stripped: nothing measured carries them, and a
+        strip nobody can point at a row for is a guess rather than a mitigation.
+        """
+        self.assertEqual(fda.normalise("松日\U000F0000"), "松日\U000F0000")
+
 
 class TownshipFromAddress(unittest.TestCase):
     """D27: the township is read out of the address text. No coordinate is involved."""
@@ -238,6 +264,19 @@ class Parsing(unittest.TestCase):
         parsed = fda.parse_places(zip_bytes(csv_bytes(DEFAULT_ROWS)))
         for place in parsed.rows:
             self.assertEqual(place.origin, "reference")
+
+    def test_a_pua_name_is_stored_clean_with_the_corrupted_string_beside_it(self):
+        """H33 through the parse, not just through the function.
+
+        The stored `name` is what a join reads and it must be clean; `name_raw` keeps the
+        codepoint, because H24's rule is strip-and-keep and an unexplained difference between
+        two files has to stay investigable without re-fetching.
+        """
+        rows = [row("松日日式料理店\uf57f", "臺北市信義區松高路11號", "A-200168458-00001-2")]
+        parsed = fda.parse_places(zip_bytes(csv_bytes(rows)))
+        self.assertEqual(len(parsed.rows), 1)
+        self.assertEqual(parsed.rows[0].name, "松日日式料理店")
+        self.assertEqual(parsed.rows[0].name_raw, "松日日式料理店\uf57f")
 
     def test_the_address_is_stored_normalised_with_the_raw_string_beside_it(self):
         parsed = fda.parse_places(zip_bytes(csv_bytes(DEFAULT_ROWS)))
