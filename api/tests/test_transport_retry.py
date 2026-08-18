@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The model client's bounded retry — owner-ruled 2026-08-18, and it must not be silent.
+"""The shared bounded retry — owner-ruled 2026-08-18, and it must not be silent.
 
-Run: python3 app/api/tests/test_model_retry.py    (no network, no database, no model)
+Run: python3 app/api/tests/test_transport_retry.py    (no network, no database, no model)
 
 **Why this file exists.** 松山's backfill died at row 400 of 3,324 on
 `http.client.RemoteDisconnected: Remote end closed connection without response`, raised inside
@@ -36,7 +36,9 @@ import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
+from upto.classify import embed as embedder  # noqa: E402
 from upto.classify import model  # noqa: E402
+from upto.classify import transport  # noqa: E402
 
 
 class FakeResponse:
@@ -83,14 +85,14 @@ class TheRetry(unittest.TestCase):
     def setUp(self):
         self.real_urlopen = urllib.request.urlopen
         self.slept = []
-        self.real_sleep = model.time.sleep
-        model.time.sleep = self.slept.append
-        model.reset_retries()
+        self.real_sleep = transport.time.sleep
+        transport.time.sleep = self.slept.append
+        transport.reset_retries()
 
     def tearDown(self):
         urllib.request.urlopen = self.real_urlopen
-        model.time.sleep = self.real_sleep
-        model.reset_retries()
+        transport.time.sleep = self.real_sleep
+        transport.reset_retries()
 
     def door(self, script) -> Door:
         opened = Door(script)
@@ -103,15 +105,15 @@ class TheRetry(unittest.TestCase):
         opened = self.door([ConnectionResetError("reset"), ANSWER])
         self.assertEqual(model.ask("prompt"), "麵食")
         self.assertEqual(opened.calls, 2)
-        self.assertEqual(model.retries_spent(), 1)
-        self.assertEqual(self.slept, [model.BACKOFF_S[0]])
+        self.assertEqual(transport.retries_spent(), 1)
+        self.assertEqual(self.slept, [transport.BACKOFF_S[0]])
 
     def test_remote_disconnected_is_retried(self):
         """The exact failure that killed 松山 at row 400. Named so the regression has a name."""
         opened = self.door([http.client.RemoteDisconnected("closed without response"), ANSWER])
         self.assertEqual(model.ask("prompt"), "麵食")
         self.assertEqual(opened.calls, 2)
-        self.assertEqual(model.retries_spent(), 1)
+        self.assertEqual(transport.retries_spent(), 1)
 
     def test_a_timeout_is_retried(self):
         opened = self.door([socket.timeout("timed out"), ANSWER])
@@ -124,8 +126,8 @@ class TheRetry(unittest.TestCase):
         )
         self.assertEqual(model.ask("prompt"), "麵食")
         self.assertEqual(opened.calls, 3)
-        self.assertEqual(model.retries_spent(), 2)
-        self.assertEqual(self.slept, list(model.BACKOFF_S))
+        self.assertEqual(transport.retries_spent(), 2)
+        self.assertEqual(self.slept, list(transport.BACKOFF_S))
 
     # --- it stops, and it raises what actually happened ---------------------------------
 
@@ -135,13 +137,13 @@ class TheRetry(unittest.TestCase):
         Raising a new exception type would have broken every caller's `except` and would have hidden
         which link failed. The pass still dies; it dies after three tries instead of one.
         """
-        opened = self.door([ConnectionResetError("reset")] * model.RETRIES)
+        opened = self.door([ConnectionResetError("reset")] * transport.RETRIES)
         with self.assertRaises(ConnectionResetError):
             model.ask("prompt")
-        self.assertEqual(opened.calls, model.RETRIES)
+        self.assertEqual(opened.calls, transport.RETRIES)
         # Two sleeps for three attempts: the last failure is raised rather than waited on.
-        self.assertEqual(model.retries_spent(), model.RETRIES - 1)
-        self.assertEqual(len(self.slept), model.RETRIES - 1)
+        self.assertEqual(transport.retries_spent(), transport.RETRIES - 1)
+        self.assertEqual(len(self.slept), transport.RETRIES - 1)
 
     # --- it refuses to retry an answer --------------------------------------------------
 
@@ -151,7 +153,7 @@ class TheRetry(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             model.ask("prompt")
         self.assertEqual(opened.calls, 1)
-        self.assertEqual(model.retries_spent(), 0)
+        self.assertEqual(transport.retries_spent(), 0)
         self.assertEqual(self.slept, [])
 
     def test_an_unparseable_body_is_not_retried(self):
@@ -160,14 +162,14 @@ class TheRetry(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.ask("prompt")
         self.assertEqual(opened.calls, 1)
-        self.assertEqual(model.retries_spent(), 0)
+        self.assertEqual(transport.retries_spent(), 0)
 
     def test_a_reply_without_the_expected_field_is_not_retried(self):
         opened = self.door([json.dumps({"error": "no such model"}).encode(), ANSWER])
         with self.assertRaises(KeyError):
             model.ask("prompt")
         self.assertEqual(opened.calls, 1)
-        self.assertEqual(model.retries_spent(), 0)
+        self.assertEqual(transport.retries_spent(), 0)
 
     # --- the question is not a request --------------------------------------------------
 
@@ -180,7 +182,7 @@ class TheRetry(unittest.TestCase):
         opened = self.door([ConnectionResetError("reset")])
         self.assertFalse(model.available())
         self.assertEqual(opened.calls, 1)
-        self.assertEqual(model.retries_spent(), 0)
+        self.assertEqual(transport.retries_spent(), 0)
         self.assertEqual(self.slept, [])
 
     # --- the counter is a counter -------------------------------------------------------
@@ -188,14 +190,55 @@ class TheRetry(unittest.TestCase):
     def test_reset_clears_the_counter(self):
         self.door([ConnectionResetError("reset"), ANSWER])
         model.ask("prompt")
-        self.assertEqual(model.retries_spent(), 1)
-        model.reset_retries()
-        self.assertEqual(model.retries_spent(), 0)
+        self.assertEqual(transport.retries_spent(), 1)
+        transport.reset_retries()
+        self.assertEqual(transport.retries_spent(), 0)
+
+    # --- the embedding client, which the ruling covers for its own reason ----------------
+
+    def test_a_dropped_embed_call_is_retried_and_the_vectors_survive(self):
+        """The embedder matters more than it looks: one blip here costs a whole commit batch.
+
+        Since the backfill began asking for all 25 names of a batch in one request, a dropped embed
+        call loses 25 rows rather than one — which is why the owner extended the policy here rather
+        than leaving it on the generator alone.
+        """
+        reply = json.dumps({"embeddings": [[0.1, 0.2], [0.3, 0.4]]}).encode()
+        opened = self.door([ConnectionResetError("reset"), reply])
+        got = embedder.embed(["甲", "乙"], model="stub-embed:test")
+        self.assertEqual(got, [[0.1, 0.2], [0.3, 0.4]])
+        self.assertEqual(opened.calls, 2)
+        self.assertEqual(transport.retries_spent(), 1)
+
+    def test_an_exhausted_embed_call_still_raises_embed_unavailable(self):
+        """What this raises is unchanged — three attempts instead of one, same exception.
+
+        `EmbedUnavailable` is what a caller catches to record a *skipped* pass rather than a broken
+        one, so a retry that changed the type would turn a wait into a failure.
+        """
+        opened = self.door([ConnectionResetError("reset")] * transport.RETRIES)
+        with self.assertRaises(embedder.EmbedUnavailable):
+            embedder.embed(["甲"], model="stub-embed:test")
+        self.assertEqual(opened.calls, transport.RETRIES)
+        self.assertEqual(transport.retries_spent(), transport.RETRIES - 1)
+
+    def test_the_count_is_one_number_across_both_clients(self):
+        """The reason the policy is one module and not two copies.
+
+        A pass that dropped one generation call and one embedding call spent **two** retries. Two
+        separate counters would report one and one, and a reader chasing a flaky tunnel would have
+        to add them up — or, more likely, would read whichever number the summary happened to print.
+        """
+        reply = json.dumps({"embeddings": [[0.1, 0.2]]}).encode()
+        self.door([ConnectionResetError("reset"), ANSWER, ConnectionResetError("reset"), reply])
+        model.ask("prompt")
+        embedder.embed(["甲"], model="stub-embed:test")
+        self.assertEqual(transport.retries_spent(), 2)
 
     def test_the_bound_is_three(self):
         """Pinned, because the ruling named the number and a drifting bound changes the cost."""
-        self.assertEqual(model.RETRIES, 3)
-        self.assertEqual(len(model.BACKOFF_S), model.RETRIES - 1)
+        self.assertEqual(transport.RETRIES, 3)
+        self.assertEqual(len(transport.BACKOFF_S), transport.RETRIES - 1)
 
 
 if __name__ == "__main__":

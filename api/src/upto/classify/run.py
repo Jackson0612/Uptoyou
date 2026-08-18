@@ -58,7 +58,8 @@ from sqlalchemy import text
 
 from upto.api_common import SINGLE_BRAND, STOREFRONT
 from upto.classify.classify import Classified, NoSignal, classify_name, classify_name_rag
-from upto.classify.model import MODEL, available, ask, reset_retries, retries_spent
+from upto.classify.model import MODEL, available, ask
+from upto.classify.transport import reset_retries, retries_spent
 from upto.classify.prompt import PROMPT_VERSION, RAG_PROMPT_VERSION
 from upto.db import dispose_all, session_factory
 

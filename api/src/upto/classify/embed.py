@@ -39,6 +39,8 @@ import os
 import urllib.error
 import urllib.request
 
+from upto.classify.transport import fetch
+
 # D88's embedder slate, owner-ruled 2026-08-17: one CLI key per model, the string pinned
 # here and written into every row and every round file. Same shape and same reason as
 # `run_round.LOCAL_MODELS` — a round is a measurement of one named model, and a key that
@@ -102,7 +104,15 @@ def embed(texts: list[str], model: str | None = None) -> list[list[float]]:
     Order is load-bearing and unstated by the API's docs, so the count is asserted: a reply
     holding fewer vectors than it was asked about would silently pair a name with its
     neighbour's embedding, and every crib after it would be wrong in a way no test of the
-    SQL could catch.
+    SQL could catch. **The count is not the same guarantee as the order**, and since the
+    backfill began asking for a whole commit batch at once there is an order to get wrong —
+    `tests/test_batched_retrieval_integration.py` holds the pairing shut from the caller's side.
+
+    **A dropped call is retried three times (owner-ruled 2026-08-18, see `transport`).** It
+    matters more here than it looks: a commit batch asks for 25 names in one request, so one
+    blip on this call costs 25 rows rather than one. The retries are connection-level only, and
+    what this function raises is unchanged — `EmbedUnavailable` for a service that did not
+    answer, after three attempts instead of one.
     """
     if not texts:
         return []
@@ -112,8 +122,12 @@ def embed(texts: list[str], model: str | None = None) -> list[list[float]]:
         f"http://{HOST}/api/embed", data=body, headers={"Content-Type": "application/json"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
-            reply = json.load(response)
+        reply = fetch(request, TIMEOUT_S, "embed")
+    # The caught tuple is deliberately unchanged from before the retry landed. `transport` may also
+    # raise a bare `http.client.HTTPException` — that is not caught here, and was not caught before
+    # either, so it still surfaces as a traceback rather than as "the service did not answer".
+    # Widening it would file an odd protocol error under `EmbedUnavailable`, which means *ordinary,
+    # exit 3, wait and re-run* — the one thing an unexplained error is not.
     except (urllib.error.URLError, OSError, ValueError) as error:
         raise EmbedUnavailable(f"{model} at {HOST} did not answer: {error}") from None
     vectors = reply.get("embeddings")
