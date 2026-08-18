@@ -354,5 +354,59 @@ class NoNetworkDependency(unittest.TestCase):
             )
 
 
+class VendoredFontFace(unittest.TestCase):
+    """D101's shipped font — the axis declaration, which only the shipped path can get wrong.
+
+    **The defect this exists for, found 2026-08-18 by the frontend session while answering the
+    subsetting tool's questions:** `Noto Sans TC`'s variable face defaults to `wght 100` and its
+    family name is literally `Noto Sans TC Thin`. A `@font-face` that names the subset without
+    declaring the axis range renders the whole product hairline, and D's display weight is 900.
+    The proposal pages never hit it because they resolve the face through fontconfig rather than
+    through `@font-face`, so **it exists only in the path that ships** — the one thing no
+    proposal-page screenshot can catch.
+
+    Conditional on purpose: while no font is vendored there is nothing to assert, and the test
+    says which state it is in rather than passing silently.
+    """
+
+    def face_blocks(self):
+        source = read(HOME)
+        return re.findall(r"@font-face\s*\{([^}]*)\}", source, flags=re.S)
+
+    def test_a_vendored_variable_face_declares_its_weight_range(self):
+        blocks = [b for b in self.face_blocks() if ".woff2" in b]
+        if not blocks:
+            self.skipTest("no @font-face references a woff2 yet — nothing is vendored")
+        for block in blocks:
+            weight = re.search(r"font-weight\s*:\s*([^;]+)", block)
+            self.assertIsNotNone(
+                weight,
+                "an @font-face naming a woff2 declares no font-weight. The variable face "
+                "defaults to wght 100 (family 'Noto Sans TC Thin'), so this renders the whole "
+                "surface hairline: declare `font-weight: 100 900`.",
+            )
+            values = weight.group(1).split()
+            self.assertEqual(
+                len(values), 2,
+                "font-weight in an @font-face for a variable face must be a range, not the "
+                "single value {!r} — a single value pins the axis and 100 is the default"
+                .format(weight.group(1).strip()),
+            )
+
+    def test_the_licence_ships_beside_the_font(self):
+        """OFL 1.1: a subset is a derivative work and the notice travels with it (D66, amended
+        2026-08-18). Asserted here as well as in `tools/font_subset_check.py`, because this is
+        the test the frontend session runs and that is the session that commits the files."""
+        fonts = os.path.join(WEB, "fonts")
+        if not os.path.isdir(fonts):
+            self.skipTest("app/web/fonts/ does not exist yet")
+        licence = os.path.join(fonts, "OFL.txt")
+        self.assertTrue(
+            os.path.exists(licence) and os.path.getsize(licence) > 0,
+            "app/web/fonts/ exists without a non-empty OFL.txt — shipping an OFL 1.1 derivative "
+            "without its notice is the one item in this work that is an actual violation",
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
