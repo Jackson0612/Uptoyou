@@ -16,9 +16,13 @@ absolute, and `private`'s range `[0, 1]` exists precisely so this channel may ze
 lift.
 
 **A place with no category produces nothing, and that is neutrality rather than a penalty.** Only
-6.2% of the reference list carries a category today — 2,267 rows of 36,499, because one township
-has been classified (measured 2026-08-18) — so this contributor is correct and nearly inert until
-the backfill covers more. Treating "unknown category" as "not avoided" is the same choice the
+a small share of the reference list carries a category yet — **8.92%, 3,254 rows of 36,499, with
+one township classified and a second running (measured 2026-08-18)** — so this contributor is
+correct and nearly inert until the backfill covers more. **The number in this sentence is stale
+the moment a township lands and is here as an order of magnitude, not as a fact to read from.**
+The live figure is `category_coverage` on `GET /circles/{id}/preferences`, computed per request,
+and it moved from 6.2% to 8.92% within the same day this paragraph was first written — which is
+exactly why no screen may hard-code it. Treating "unknown category" as "not avoided" is the same choice the
 loader already makes for a `circle-local` place with no township (D28's ruling, read through
 `upto.engine.load`): the absence of a fact is not evidence against the place.
 
