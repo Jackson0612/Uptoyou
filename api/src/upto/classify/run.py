@@ -75,7 +75,7 @@ class CribUnavailable(Exception):
 
 
 async def crib_retriever(session, embed_key: str, k: int):
-    """Return `async retrieve(name) -> list[tuple]`, or raise `CribUnavailable`.
+    """Return `async retrieve_many(names) -> list[list[tuple]]`, or raise `CribUnavailable`.
 
     Everything that can be wrong is checked **before the first row is asked**, because a
     backfill that discovers on row 900 that its crib was stale has written 900 rows whose
@@ -115,18 +115,50 @@ async def crib_retriever(session, embed_key: str, k: int):
             )
         )
 
-    async def retrieve(name: str) -> list:
-        """The k nearest labelled names, nearest first, **never including this one**."""
-        vector = embedding.embed([name], model=embed_model)[0]
-        rows = await example_store.nearest(
-            session, vector, embed_model, k=k, exclude_name=name
-        )
-        # (name, label, subtype) — the third slot is what `prompt._example_line` prints as
-        # 「類別（細分類）」 when the store holds one, so passing it costs nothing and keeps the
-        # backfill's prompt byte-identical to the evaluated one.
-        return [(row["name"], row["label"], row.get("subtype")) for row in rows]
+    async def retrieve_many(names: list[str]) -> list[list]:
+        """The k nearest labelled names for each of `names`, in order, one embedding request.
 
-    return retrieve, embed_model
+        **One request for the whole batch, and M12 measured what that is worth: 10.8× on this
+        half** (0.481 → 0.045 s/name at 25 names per request, 2026-08-18, `probes/m12_inflight.py`).
+        The cost gpu-imggen found on the model box is ~430 ms of per-*request* load on a model
+        that never leaves the GPU, against ~170 ms of real work — so asking once for 25 names pays
+        it once instead of 25 times. **It buys that without concurrency**: no second connection,
+        no second in-flight request, and the rows are still decided in the order `pending`
+        returned them, so D75's resume-at-the-first-undecided-row frontier is untouched. That is
+        why this is a build decision and `--in-flight` is a ruling.
+
+        **`embed` is the reason this is safe to batch at all.** It asserts that the reply holds one
+        vector per input and that every vector has the expected width, because the API does not
+        document that order is preserved — and a reply one vector short would silently pair every
+        later name with its neighbour's embedding, which no test of the SQL could catch. The count
+        assertion is what turns "probably in order" into "in order or it raises".
+
+        **The k-NN stays per name, and that is not an oversight.** `exclude_name` is D88's
+        leave-one-out rule and it is per name by definition; only the embedding is batched, so the
+        prompt each name gets is byte-identical to the one it got before this change. The verdicts
+        are therefore comparable across the change, which matters because 松山 and 南港 were
+        classified either side of it.
+
+        **What did change, and it is small:** a batch's embeddings are all fetched before its first
+        generation, so a pass that dies mid-batch has spent up to 25 embeddings rather than as many
+        as it had reached. Nothing is committed until the batch completes either way, so the blast
+        radius of a failure is the same 25 rows it always was.
+        """
+        if not names:
+            return []
+        vectors = embedding.embed(names, model=embed_model)
+        out = []
+        for name, vector in zip(names, vectors):
+            rows = await example_store.nearest(
+                session, vector, embed_model, k=k, exclude_name=name
+            )
+            # (name, label, subtype) — the third slot is what `prompt._example_line` prints as
+            # 「類別（細分類）」 when the store holds one, so passing it costs nothing and keeps the
+            # backfill's prompt byte-identical to the evaluated one.
+            out.append([(row["name"], row["label"], row.get("subtype")) for row in rows])
+        return out
+
+    return retrieve_many, embed_model
 
 
 async def clear_superseded(session, township_code: str, version: str) -> int:
@@ -226,7 +258,7 @@ async def pending(session, township_code: str) -> list[tuple[int, str]]:
 async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
                k: int = 5) -> int:
     Session = session_factory()
-    retrieve = None
+    retrieve_many = None
     embed_model = None
     try:
         if not available():
@@ -244,7 +276,7 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
         if rag:
             async with Session() as session:
                 try:
-                    retrieve, embed_model = await crib_retriever(session, embed_key, k)
+                    retrieve_many, embed_model = await crib_retriever(session, embed_key, k)
                 except CribUnavailable as failure:
                     print(str(failure), file=sys.stderr)
                     return 3
@@ -262,12 +294,19 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
         done = no_signal = refused = 0
         for start in range(0, len(todo), BATCH):
             batch = todo[start : start + BATCH]
+            # One embedding request for the whole batch (M12: 10.8× on that half). The commit
+            # batch and the embedding batch are deliberately the same 25: one knob, and the
+            # figure above was measured at 25.
+            neighbours = (
+                None if retrieve_many is None
+                else await retrieve_many([name for _, name in batch])
+            )
             results = []
-            for place_id, name in batch:
-                if retrieve is None:
+            for index, (place_id, name) in enumerate(batch):
+                if neighbours is None:
                     outcome = classify_name(name, ask)
                 else:
-                    outcome = classify_name_rag(name, ask, await retrieve(name))
+                    outcome = classify_name_rag(name, ask, neighbours[index])
                 if isinstance(outcome, Classified):
                     results.append((place_id, name, outcome.category, outcome.prompt_version))
                 elif isinstance(outcome, NoSignal):
