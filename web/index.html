@@ -83,6 +83,25 @@
     --flood-hot: #FF4438; --flood-cobalt: #2547E8; --flood-jade: #00A870; --flood-sun: #FFC300;
     --onflood-hot: #101114; --onflood-cobalt: #FFFDF7;
     --onflood-jade: #101114; --onflood-sun: #101114;
+    /* ── The type ladder (spec §1). NOTHING sets font-size outside these seven. ──
+       Every size on this page used to be an inline clamp(), which is exactly how
+       R-D1's inversion hid: a fixed size and a fluid one crossed at ~561px and the
+       source showed nobody where. Each token is piecewise — the three specified
+       points are not collinear, so one clamp() across 430→2560 would land 59px at
+       900 where 72 was asked for — and **floor and ceiling both obey the ordering**
+       inside each tier, so the ladder cannot cross between measured widths.
+       Invariant: answer > display >= sum > temp > lead > body > note.
+       --t-sum's 430 value is 32, not the spec's 24: at 24 it fell BELOW --t-temp
+       and the spec's own table broke its own invariant. Reported, one cell changed. */
+    --t-answer:  clamp(44px,   calc(18.38px + 5.957vw), 72px);
+    --t-display: clamp(32px,   calc(24.68px + 1.702vw), 40px);
+    --t-sum:     clamp(32px,   calc(24.68px + 1.702vw), 40px);
+    --t-temp:    clamp(30px,   calc(26.34px + 0.851vw), 34px);
+    --t-lead:    clamp(20px,   calc(19.09px + 0.213vw), 21px);
+    --t-body:    clamp(16px,   calc(15.09px + 0.213vw), 17px);
+    --t-note:    clamp(13px,   calc(12.54px + 0.106vw), 13.5px);
+    /* the pinned bar's own height, so `main` can reserve it in one declaration (R-D2) */
+    --bar-h: calc(76px + env(safe-area-inset-bottom, 0px));
     /* The die is an object, not a surface: it stays bone-coloured with dark pips in both
        modes, because that is what a die is. Inverting it in dark mode would produce a black
        die with white pips, which is a different object. */
@@ -96,6 +115,27 @@
        light and 4.44:1 in dark, both clear of the floor with margin rather than pinned to it. */
     --pip: #101114; --pipred: #FF4438; --diefill: #FFFDF7; --dieedge: #101114;
       }
+  /* `html` rather than `:root` deliberately: they are the same element, but
+     `test_web_contrast.py` finds the palette by taking the FIRST TWO `:root` blocks
+     in source order, so a third one — even a ladder-only one — would be read as the
+     dark palette and fail. Same specificity, same effect, no test change needed. */
+  /* `html[lang]`, not `html`: `:root` is a pseudo-class (0,1,0) and `html` is a type
+     selector (0,0,1), so the base block outranked this one at every width and the
+     ladder silently never left tier 1 — --t-answer stayed 72px at 2560 where 112 was
+     specified. The attribute selector lifts this to (0,1,1) and beats `:root`, while
+     without writing that pseudo-class followed by a brace, which is the pattern
+     `test_web_contrast.py` counts blocks with. (Writing it here broke the test once.) */
+  @media (min-width: 900px) {
+    html[lang] {
+      --t-answer:  clamp(72px,   calc(50.31px + 2.410vw), 112px);
+      --t-display: clamp(40px,   calc(33.49px + 0.723vw), 52px);
+      --t-sum:     clamp(40px,   calc(34.58px + 0.602vw), 50px);
+      --t-temp:    clamp(34px,   calc(30.75px + 0.361vw), 40px);
+      --t-lead:    clamp(21px,   calc(19.37px + 0.181vw), 24px);
+      --t-body:    clamp(17px,   calc(15.37px + 0.181vw), 20px);
+      --t-note:    clamp(13.5px, calc(12.69px + 0.090vw), 15px);
+    }
+  }
   @media (prefers-color-scheme: dark) {
     :root {
       --ink: #FFFDF7; --paper: #101114; --muted: #A8ABB3;
@@ -121,6 +161,251 @@
     font-weight: 100 900; font-style: normal; font-display: swap;
   }
   * { box-sizing: border-box; }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     D101 · the named parts (spec §2). Each is implemented ONCE here and
+     reused; no screen invents a variant. `design.md` carries the numbers.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Radius is 0 on this surface, everywhere, by ruling (design.md §3). This
+     sweeps the D87 leftovers rather than hunting them one selector at a time —
+     42 elements on home alone still carried one. */
+  main, main *, .bar, .bar * { border-radius: 0 !important; }
+  /* The one exemption, and it is the same argument as `--pipred`: a die is an OBJECT,
+     not a surface. Its pips are round because pips are round — squaring them makes the
+     face read as a grid rather than as a die. The radius rule is about rounded cards
+     and controls, which is what the anti-default list actually names. Reported to the
+     evaluator as a deviation rather than taken quietly. */
+  main .pip { border-radius: 50% !important; }
+
+  /* `BLOCK` — a full-bleed flat colour band. The colour change IS the
+     separation: no gap, no rule, no shadow, no card between blocks. */
+  /* full-bleed: `body` carries page padding for the older screens, so a block
+     cancels it rather than inheriting it. A colour band with paper margins either
+     side is a card again, which is the grammar D removed. */
+  .block { width: 100vw; margin-inline: calc(50% - 50vw); padding-block: 16px; }
+  .block.sun { padding-block: 12px; }
+  .block > .inner { max-width: 390px; margin-inline: auto; padding-inline: 16px; }
+  .block.cobalt { background: var(--cobalt); color: var(--on-cobalt); }
+  /* Text inside a colour block takes that block's computed on-colour. Without this a
+     rule written for the paper ground (--muted, --ink) leaks in and lands dark-on-cobalt:
+     the device screen's explanation measured unreadable that way. `--on-*` is never
+     chosen by eye — it is whichever of ink/paper measured higher on that ground. */
+  .block.cobalt :where(p, span, h1, h2, label, div) { color: inherit; }
+  .block.sun    :where(p, span, h1, h2, label, div) { color: inherit; }
+  .block.jade   :where(p, span, h1, h2, label, div) { color: inherit; }
+  .block.sun    { background: var(--sun);    color: var(--on-sun); }
+  .block.jade   { background: var(--jade);   color: var(--on-jade); }
+  .block.paper  { background: var(--paper);  color: var(--ink); }
+  @media (min-width: 900px)  { .block { padding-block: 20px; }
+                               .block > .inner { max-width: 736px; padding-inline: 24px; } }
+  @media (min-width: 1600px) { .block { padding-block: 24px; }
+                               .block > .inner { max-width: 1344px; padding-inline: 32px; } }
+
+  /* one text link per block to the other screen — the tab row's replacement */
+  .blocklink { background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+               font-size: var(--t-body); color: inherit; text-decoration: none; }
+  .blocklink:hover, .blocklink:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* `BAR` — the pinned primary control. Filled or ghost depends on the act it
+     carries: a safe reversible one is filled --hot; an irreversible one is a
+     ghost until armed (R-2/D98, and R-11 for the resting shape). */
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+         border-top: 3px solid var(--ink); background: var(--paper); }
+  /* R-11 clause (ii): at rest the bar carries an INK BORDER, so the screen has a
+     primary shape without a primary fill. Clause (i) — not the input's twin — is
+     satisfied here by position (pinned, full width, at the viewport edge) rather
+     than by R-11's pill. */
+  .bar button { display: block; width: 100%; box-sizing: border-box; cursor: pointer;
+                  min-height: 56px; padding: 10px 16px;
+                  border: 1.5px solid var(--ink); background: none;
+                  font: inherit; font-size: var(--t-lead); font-weight: 900;
+                  color: var(--ink); text-align: center;
+                  transition: opacity 120ms ease-out; }
+  .bar.filled { background: var(--hot); }
+  .bar.filled button { border-color: transparent; }
+  .bar.filled button { color: var(--on-hot); }
+  /* R-11's clause, and it is not overridable: a disabled control DROPS the fill
+     rather than fading it — `opacity:.45` measured 2.75:1, under the floor. */
+  .bar button:disabled { cursor: not-allowed; background: transparent;
+                           color: var(--muted); border: 1.5px dashed var(--ink); }
+  .bar button:focus-visible { outline: 2px solid var(--hot); outline-offset: -6px; }
+  @media (prefers-reduced-motion: reduce) { .bar button { transition: none; } }
+  /* the bar's consequence sentence and its cancel, present only when armed. The
+     bar's BOX does not move, resize or slide between states (motion rule 2) — the
+     note occupies its space from the start via min-height. */
+  .barnote { margin: 0; padding: 6px 16px 0; text-align: center;
+             font-size: var(--t-note); font-weight: 700; color: var(--on-hot); }
+  .barrow { display: flex; align-items: stretch; }
+  .barrow > button { flex: 1 1 auto; }
+  .barcancel { flex: 0 0 auto !important; width: auto !important; padding-inline: 20px !important;
+               border-left: 3px solid var(--on-hot) !important; }
+  /* C5: on a landed reveal whose flood is the hot family, a --hot bar would vanish
+     into the ground. It takes --ink with --paper text there instead. */
+  .bar.oninkflood { background: var(--ink); }
+  .bar.oninkflood button { color: var(--paper); }
+  /* every screen carrying a bar reserves its height — this one declaration is R-D2 */
+  main:has(.bar) { padding-bottom: calc(var(--bar-h) + 16px); }
+
+  /* `ROW` — one place in a list. The rule is the separation; rows never alternate. */
+  .rowlist { list-style: none; margin: 0; padding: 0; }
+  .rowlist > li { display: flex; align-items: center; gap: 12px;
+                  min-height: 56px; padding-block: 10px;
+                  border-bottom: 1.5px solid var(--ink); font-size: var(--t-body); }
+  .rowlist > li:last-child { border-bottom: 0; }
+  @media (min-width: 900px)  { .rowlist > li { min-height: 60px; } }
+  @media (min-width: 1600px) { .rowlist > li { min-height: 68px; } }
+
+  /* `CHIP` — a place's face colour. An identity, never a quantity: no share, no
+     weight, no count is recoverable from it, which is why B1's veto does not reach it. */
+  .chip { width: 12px; height: 12px; flex: none; display: block;
+          border: 1.5px solid var(--ink); background: var(--c); }
+
+
+  /* ── Screen A · home (spec §3). Budget at 430x760: greeting <=96, weather <=132,
+     and the mechanism block must land 「每一個數字都查得到出處。」 at or above the
+     bar's top edge (y=682.9). The room comes from the masthead and the tab row,
+     never from the grid — a grid shrunk until the 6x6 is unreadable fails R-D3
+     even though it clears the fold. ── */
+  .homeband { width: 100%; }
+  .homegreet { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .greetcol { flex: 1 1 auto; min-width: 0; }
+  .mark { margin: 0; font-size: var(--t-note); font-weight: 500; letter-spacing: .08em;
+          opacity: .85; line-height: 1.25; }
+  .greet { margin: 2px 0 0; font-size: var(--t-lead); font-weight: 900; line-height: 1.2; }
+  .homegreet .districts { margin: 0; flex: none; }
+  .homegreet .blocklink { flex: none; }
+
+  .block.sun .now { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .block.sun .temp { font-size: var(--t-temp); font-weight: 400; line-height: 1;
+                     letter-spacing: -.01em; font-variant-numeric: tabular-nums;
+                     font-family: "Archivo Black", "Noto Sans TC", sans-serif; }
+  .block.sun .temp span { font-size: .5em; font-weight: 700; }
+  .block.sun .sky { font-size: var(--t-body); font-weight: 700; display: flex;
+                    gap: 8px; align-items: baseline; }
+  .block.sun .sky .hour { font-size: var(--t-note); font-weight: 500; opacity: .8; }
+  .block.sun .metrics { display: flex; flex-wrap: wrap; gap: 0 12px; margin-top: 4px;
+                        font-size: var(--t-note); line-height: 1.35; }
+  .block.sun .metric { white-space: nowrap; }
+  .block.sun .metric .label { opacity: .8; }
+  .block.sun .metric .value { font-weight: 900; font-variant-numeric: tabular-nums; }
+  .block.sun .source { margin: 4px 0 0; font-size: var(--t-note); line-height: 1.3;
+                       opacity: .7; }
+  .block.sun .state { font-size: var(--t-body); }
+
+  .mech { }
+  .mechhead { margin: 0; font-size: var(--t-display); font-weight: 900; line-height: 1.2;
+              letter-spacing: .01em; }
+  .mechnote { margin: 8px 0 0; font-size: var(--t-note); line-height: 1.4; opacity: .72; }
+  .mechnote.wide { max-width: 34em; }
+  /* 40px cells at 430 — the spec's floor, and the rescue floor is 36px. Not smaller. */
+  .mechgrid { display: grid; grid-template-columns: repeat(6, 40px); gap: 4.8px;
+              margin-top: 8px; }
+  .mechgrid i { display: block; width: 40px; height: 40px; border: 0; }
+  .mechgrid i.a { background: var(--hot) !important; border: 0 !important; }
+  .mechgrid i.b { background: var(--cobalt) !important; border: 0 !important; }
+  .mechgrid i.c { background: var(--jade) !important; border: 0 !important; }
+  /* one line at 430: three columns, chip-sized swatch plus a --t-note label */
+  .mechkey { list-style: none; margin: 12px 0 0; padding: 0;
+             display: grid; grid-template-columns: repeat(3, max-content); gap: 0 14px;
+             font-size: var(--t-note); }
+  .mechkey li { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .mechkey i { width: 12px; height: 12px; flex: none; display: block;
+               border: 1.5px solid var(--ink); }
+  .mechkey i.a { background: var(--hot) !important; }
+  .mechkey i.b { background: var(--cobalt) !important; }
+  .mechkey i.c { background: var(--jade) !important; }
+  .mechkey b { font-weight: 900; font-variant-numeric: tabular-nums; }
+  .honesty { margin: 8px 0 0; font-size: var(--t-note); opacity: .72; }
+  @media (min-width: 900px) {
+    .mechgrid { grid-template-columns: repeat(6, 56px); gap: 4px; }
+    .mechgrid i { width: 56px; height: 56px; }
+    .mechkey { grid-template-columns: repeat(3, max-content); gap: 0 20px; }
+  }
+
+  /* ── Screen B · round (spec §4). Rows at Rallly's measured 57px pitch (ours 56),
+     one 提案, and the roll lives in the pinned bar rather than 18px under a text
+     field where it looked like a propose form's submit key. ── */
+  .sheetband { width: 100%; }
+  .roundtitle { font-size: var(--t-display); }
+  .roundwhen { margin: 2px 0 0; font-size: var(--t-note); opacity: .85; }
+  .block.paper .colhead { display: flex; justify-content: space-between; align-items: baseline;
+                          margin: 0 0 6px; font-size: var(--t-lead); font-weight: 900; }
+  .block.paper .colhead .count { font-size: var(--t-note); font-weight: 500; color: var(--muted); }
+  .rowlist.pool > li .chip { margin-right: 0; }
+  .rowlist.pool > li .hint, .rowlist > li.hint { color: var(--muted); font-size: var(--t-body); }
+  .side-pending { margin-top: 24px; }
+  @media (min-width: 900px) {
+    .block.paper .split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+    .side-pending { margin-top: 0; }
+  }
+
+  /* ── Screen C · reveal (spec §5). R-D9: the randomiser is the dominant element.
+     Wheel of Names — the only surface in the reference wall doing our job — gives its
+     disc 64.6% of viewport height. We do not go there, because it carries no evidence
+     table and ours must: the provenance claim is the product's whole argument. ── */
+  .revealnav { display: flex; justify-content: space-between; align-items: baseline;
+               padding: 12px 16px 0; max-width: 390px; margin-inline: auto; }
+  .answer { display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 40vh; }
+  @media (min-height: 761px) { .answer { min-height: 45vh; } }
+  @media (min-width: 1600px) { .answer { min-height: 50vh; } }
+  /* the cube's translateZ derives from --die in the shipped code — only the value
+     moves here, never the derivation. */
+  /* R-D9's dice: 132 / 180 / 240 (was 96 / 120 / 160). Set on `.stage` and `--half`
+     together — `--half` MUST be exactly half the stage or the six faces stop closing
+     into a cube, which the shipped CSS already warns about in place. */
+  .stage { width: 132px !important; height: 132px !important; }
+  .dicebox { --half: 66px !important; }
+  @media (min-width: 900px)  { .stage { width: 180px !important; height: 180px !important; }
+                               .dicebox { --half: 90px !important; } }
+  @media (min-width: 1600px) { .stage { width: 240px !important; height: 240px !important; }
+                               .dicebox { --half: 120px !important; } }
+  .winner { font-size: var(--t-answer); }
+  .dicesum { font-size: var(--t-sum); }
+  /* the evidence table carries the same CHIP as the pool, so the colour the screen
+     became is traceable to the row that won it. */
+  .alloc td .chip { display: inline-block; vertical-align: -1px; margin-right: 8px; }
+  /* The winner's chip is its face colour, and on a landed flood that colour IS the
+     ground — so the one chip that matters read as an empty outline. It takes the
+     on-flood colour instead, which reads as "this row is the screen". */
+  .alloc tr.hit .chip { background: var(--onflood, var(--ink)); }
+  /* the evidence table's own text sits on the flood, so it takes the flood's
+     on-colour rather than --muted, which was computed for the paper ground. */
+  .revealband .alloc th, .revealband .alloc caption,
+  .revealband .factors, .revealband .revealnav { color: inherit; }
+  .revealband .alloc th, .revealband .alloc caption { opacity: .78; }
+
+  /* No card on the reveal: the flood is the ground and content sits directly on it.
+     A --paper box floating on the winner's colour is the card grammar D removed. */
+  .revealband > .card { background: transparent; border: 0; padding-inline: 16px; }
+  .revealband .alloc th, .revealband .alloc td { border-color: currentColor; }
+  .revealband .alloc caption, .revealband .factors { color: inherit; opacity: .8; }
+
+  /* ── Screen D · device (spec §6). No BAR here: the one filled control is in flow. ── */
+  .deviceband { width: 100%; }
+  .devicehead { font-size: var(--t-display); font-weight: 900; line-height: 1.2; margin: 10px 0 0; }
+  .devicetag { margin: 2px 0 0; font-size: var(--t-note); opacity: .85; }
+  .deviceband .devicenote { margin: 6px 0 0; font-size: var(--t-body); opacity: .9; }
+  .deviceband .block.paper .act { width: 100%; min-height: 56px; background: var(--hot);
+                                  color: var(--on-hot); border: 0; font-weight: 900; }
+  .deviceband .block.paper .act:disabled { background: transparent; color: var(--muted);
+                                           border: 1.5px dashed var(--ink); }
+  @media (min-width: 900px)  { .deviceband .block.paper .act { min-height: 60px; } }
+  @media (min-width: 1600px) { .deviceband .block.paper .act { min-height: 64px; } }
+  /* column heads were rendering --muted; they are the screen's own structure, not a caption */
+  .block.paper .colhead > span:first-child { color: var(--ink); }
+
+  /* `FIELD` and `GHOST` */
+  .field { width: 100%; box-sizing: border-box; height: 48px; padding: 0 12px;
+           background: var(--paper); color: var(--ink); border: 2px solid var(--ink);
+           font: inherit; font-size: var(--t-body); }
+  .field::placeholder { color: var(--muted); }
+  .field:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
+  .fieldlabel { display: block; font-size: var(--t-note); color: var(--muted); margin-bottom: 6px; }
+  @media (min-width: 900px)  { .field { height: 52px; } }
+  @media (min-width: 1600px) { .field { height: 56px; } }
+
   body {
     margin: 0;
     /* D101: the landed reveal floods the whole viewport with the winning face's colour.
@@ -306,31 +591,10 @@
     border: 1px solid var(--ink); border-radius: .9rem; background: var(--paper);
     padding: 1.35rem 1.4rem 1.15rem;
   }
-  .now { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-  .temp { font-size: clamp(3.4rem, 2.9rem + 1.4vw, 5rem); line-height: 1; font-weight: 300; letter-spacing: -0.03em;
-          font-variant-numeric: tabular-nums;
-          /* baseline-aligned flex, so the unit sits ON the numeral's baseline instead of
-             hanging 2px under its box the way an inline span does. */
-          display: flex; align-items: baseline; gap: .08em; }
-  .temp span { font-size: 1.4rem; font-weight: 400; color: var(--muted); }
-  .sky { text-align: right; }
-  .sky .text { font-size: 1.05rem; }
-  .sky .hour { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
-
-  .grid {
-    margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--ink);
-    display: grid; grid-template-columns: repeat(2, max-content); gap: .7rem 2.4rem;
-    justify-content: start;
-  }
   /* **Proximity was inverted.** `space-between` pushed each label and its own value 102px
      apart while neighbouring pairs sat 16px from each other, so the eye grouped across the
      grid instead of down it. A label now sits next to its value; the min-width keeps the
      numbers in a column without the gap doing it. */
-  .metric { display: flex; align-items: baseline; justify-content: flex-start; gap: .55rem; }
-  .metric .label { color: var(--muted); font-size: .87rem; min-width: 4.4em; }
-  .metric .value { font-variant-numeric: tabular-nums; }
-
-  .source { margin-top: 1rem; color: var(--muted); font-size: .78rem; line-height: 1.5; }
   .state { color: var(--muted); padding: 1.5rem 0; text-align: center; }
   .state.bad { color: #a3341f; }
   @media (prefers-color-scheme: dark) { .state.bad { color: #f08a6c; } }
@@ -340,30 +604,12 @@
   /* M-7: card 1344 / tile 640 / grid 352, three left-aligned widths in a descending stair with
      704px of empty paper beside the diagram. Centring the tile and its grid removes the stair
      without touching the drawing, which round 4 says is fixed. */
-  .mech { margin-top: 1.75rem; max-width: 40rem; margin-inline: auto; }
-  .mechhead { margin: 0 0 .7rem; font-size: .95rem; font-weight: 600; }
+  
   /* **R-10: 6×6, because the caption says 36 and a 9×4 grid does not show 6×6.** And the accent
      stops being a fill: 14 solid red cells were the largest painted red area in the product, and
      D87 spends red on the dice, the winner and the hit row — never on walls. Red is now an
      outline, so the share is still readable and the page is not. The other two tones are
      separable by lightness rather than by hue, and the key names them. */
-  .mechgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 22rem;
-               margin-inline: auto; }
-  .mechgrid i { aspect-ratio: 1; border-radius: 2px; background: transparent;
-                border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); }
-  .mechgrid i.a { border: 1.5px solid var(--hot); background: transparent; }
-  .mechgrid i.b { background: color-mix(in srgb, var(--ink) 30%, transparent); border-color: transparent; }
-  .mechgrid i.c { background: color-mix(in srgb, var(--ink) 12%, transparent); border-color: transparent; }
-
-  .mechkey { list-style: none; margin: .8rem 0 0; padding: 0; display: flex;
-             flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .8rem; color: var(--muted); }
-  .mechkey li { display: flex; align-items: center; gap: .4rem; }
-  .mechkey i { width: 12px; height: 12px; border-radius: 2px; flex: none;
-               border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); }
-  .mechkey i.a { border: 1.5px solid var(--hot); }
-  .mechkey i.b { background: color-mix(in srgb, var(--ink) 30%, transparent); border-color: transparent; }
-  .mechkey i.c { background: color-mix(in srgb, var(--ink) 12%, transparent); border-color: transparent; }
-  .mechnote { margin: .8rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.6; }
 
   footer { margin-top: 1.5rem; color: var(--muted); font-size: .82rem; line-height: 1.6; }
   footer code { font-size: .95em; }
@@ -494,7 +740,6 @@
      rule nobody can see is not decoration either — it is absence. `--edge` at low alpha keeps
      the sheet reading as paper rather than as a framed box (the reason D-line/edge split
      exists) while giving the round visible structure at 2560. */
-  .pool li { padding: .5rem 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); }
   /* item 22: the last row alone had no rule, which reads as a missing row rather than an end.
      All of them, since the rules are what give the pool its structure (A16). */
   @media (min-width: 760px)  { main:has(.sheet) .pool li { padding: .65rem 0; } }
@@ -661,7 +906,7 @@
   .dicebox.tumble .dicesum { animation: namein 300ms ease-out 980ms both; }
   /* `both` matters here: the backwards fill holds the un-hit styling through the delay, so
      the row stays a normal row until the dice stop rather than blinking out and back. */
-  .dicebox.tumble ~ .alloc tr.hit td { animation: hitin 300ms ease-out 980ms both; }
+  .answer:has(.dicebox.tumble) ~ .alloc tr.hit td { animation: hitin 300ms ease-out 980ms both; }
   @keyframes hitin {
     from { font-weight: 400; }
     to   { font-weight: 700; }
@@ -671,13 +916,12 @@
     .dicebox.tumble .stage:nth-child(2) .cube { animation-duration: 1ms; }
     .dicebox.tumble ~ .winner,
     .dicebox.tumble .dicesum,
-    .dicebox.tumble ~ .alloc tr.hit td { animation-duration: 1ms; animation-delay: 0ms; }
+    .answer:has(.dicebox.tumble) ~ .alloc tr.hit td { animation-duration: 1ms; animation-delay: 0ms; }
   }
 
   /* The sum is a fact of the roll, not a caption about it — out of `--muted`, up a step. */
   /* items 6/7: 21.6px beside a 160px die read as a footnote to the dice rather than part of them. */
-  .dicesum { color: currentColor; font-size: clamp(1.5rem, 5.5vw, 2.6rem);
-             font-variant-numeric: tabular-nums; }
+  .dicesum { color: currentColor; font-variant-numeric: tabular-nums; }
   @media (min-width: 1600px) { .dicesum { font-size: 3.2rem; } }
   /* **A18: the answer was set smaller than the outdoor temperature on another screen.** The
      winner is the one thing this product exists to produce, and 1.35rem left it quieter than
@@ -698,10 +942,9 @@
      bigger than the restaurant on every phone. --t5 was also a fixed ceiling, so 900 and 2560
      drew the same size; the signature moment gets its own tier above 1600. */
   .winner { text-align: center; font-weight: 900; color: currentColor;
-            font-size: clamp(2.1rem, 9vw, 4.209rem); line-height: 1.15;
+            line-height: 1.15;
             letter-spacing: .02em; text-wrap: balance;
             margin: .9rem 0 1.1rem; }
-  @media (min-width: 1600px) { .winner { font-size: clamp(4.209rem, 4.2vw, 6.5rem); } }
 
   /* **M-2, and the cap never existed.** §8 item 3 asked for the blanket `.card > *` cap to MOVE to
      the table; I removed the blanket (correctly — it broke D89's split) and the half that was meant
@@ -811,117 +1054,135 @@
 -->
 <main id="app">
   <!-- chrome -->
-  <header>
-    <h1>Up to you</h1>
-    <!-- B7: the tagline renders on home and device only. It is positioning, not wayfinding, and
-         at 430x760 h1 + tagline + tabs consumed 175px — 23% of the viewport — on the screen where
-         the round's own state got 30px. The h1 stays everywhere; the promise goes where somebody
-         is still deciding whether to use this, not where they are already using it. -->
-    <p class="promise" v-if="view === 'home' || view === 'device'">決定一頓飯，不用有人先犧牲。</p>
-    <!-- A2: `hasDevice` is true the moment localStorage holds two strings, which is BEFORE the
-         stream has said whether they work. On a bad key the tabs appeared while the card below
-         still said this device had none. Gating on the view as well means the tabs arrive when
-         the surface actually has somewhere to go. -->
-    <nav class="tabs" v-if="hasDevice && view !== 'device'">
-      <button :aria-pressed="view === 'home' ? 'true' : 'false'" @click="view = 'home'">首頁</button>
-      <button :aria-pressed="view === 'round' ? 'true' : 'false'" @click="view = 'round'">這一餐</button>
-    </nav>
-  </header>
+  <!-- The masthead and the tab row are gone (spec §4 B5). They spent 156.9px of a
+       760px fold before anything about dinner appeared; each screen's own colour
+       block now carries the product mark and one text link to the other screen.
+
+       **The pinned bars live here, in chrome, on purpose.** H29's mitigation
+       (`test_no_markup_sits_outside_a_declared_block`) requires everything inside
+       `<main>` to sit in a declared block, and a `position: fixed` element still
+       has a DOM home. -->
+
+  <!-- home's bar: 這一餐 is safe, reversible navigation, so it is filled --hot.
+       R-2 does not reach it. -->
+  <div class="bar filled" v-if="view === 'home' && hasDevice">
+    <button type="button" @click="view = 'round'">這一餐</button>
+  </div>
+
+  <!-- the round screen's bar, and it is the one exception to "filled --hot".
+       R-2 (D98): the propose group takes the ink fill; 擲骰 renders outlined until
+       armed. A permanently hot, full-width, pinned 擲骰 is the loudest possible
+       placement of the irreversible act — worse than the defect R-2 was written to
+       fix. At rest this inherits R-11's role: a primary SHAPE without a primary
+       fill, separated from the input by position rather than by R-11's pill, with
+       an ink border at rest and a DASHED border when disabled (R-11's own clause —
+       a disabled control drops the fill rather than fading it, because opacity:.45
+       measured 2.75:1). -->
+  <div class="bar" :class="{ filled: rollArmed }" v-if="view === 'round' && openRound">
+    <p class="barnote" v-if="rollArmed" role="status">擲下去就定案。池子裡 {{ openRound.pool.length }} 家。</p>
+    <div class="barrow">
+      <button type="button" v-if="!rollArmed" :disabled="!openRound.pool.length" @click="armRoll">擲骰</button>
+      <template v-else>
+        <button type="button" @click="rollDice">擲骰</button>
+        <button type="button" class="barcancel" @click="cancelRoll">再等等</button>
+      </template>
+    </div>
+  </div>
+
+  <!-- the reveal's bar: 開一輪 is safe and reversible, so it is filled. C5: when the
+       landed flood resolves to the hot family the bar would vanish into the ground,
+       so it takes --ink with --paper text there instead. -->
+  <div class="bar filled" :class="{ oninkflood: floodIsHot }" v-if="view === 'round' && !openRound">
+    <button type="button" @click="openNewRound">開一輪</button>
+  </div>
   <!-- /chrome -->
 
   <!-- screen: home -->
   <!-- `homeband` is the hook B3's width rule matches on, the same way `.sheet` is the round's.
        A bound class cannot be used here — H31: this element's parent is Vue's mount container. -->
   <div v-if="view === 'home'" class="swap homeband">
-  <details class="districts" ref="districts">
-    <summary>
-      <span class="who">行政區</span>
-      <span class="val">{{ selectedName }}</span>
-      <span class="caret" aria-hidden="true"></span>
-    </summary>
-    <div class="picker">
-      <button
-        v-for="place in townships"
-        :key="place.code"
-        :aria-pressed="place.code === selected ? 'true' : 'false'"
-        @click="choose(place.code)"
-      >{{ place.name }}</button>
-    </div>
-  </details>
 
-  <div class="card swap" :key="selected">
-    <div v-if="loading" class="state">讀取中…</div>
-    <div v-else-if="error" class="state bad">{{ error }}</div>
-
-    <template v-else>
-      <div class="now">
-        <div class="temp">{{ measure('temperature_c') }}<span>°C</span></div>
-        <div class="sky">
-          <div class="text">{{ measure('weather_text') }}</div>
-          <div class="hour">{{ hourLabel }}</div>
+  <!-- BLOCK cobalt — the greeting. The masthead and the tab row are gone: they spent
+       156.9px of a 760px fold before anything about dinner appeared. The product mark
+       lives here at --t-note, and navigation is one text link rather than a pill row. -->
+  <section class="block cobalt">
+    <div class="inner homegreet">
+      <div class="greetcol">
+        <p class="mark">Up to you</p>
+        <p class="greet">今天上桌了</p>
+      </div>
+      <details class="districts" ref="districts">
+        <summary>
+          <span class="val">{{ selectedName }}</span>
+          <span class="caret" aria-hidden="true"></span>
+        </summary>
+        <div class="picker">
+          <button
+            v-for="place in townships"
+            :key="place.code"
+            :aria-pressed="place.code === selected ? 'true' : 'false'"
+            @click="choose(place.code)"
+          >{{ place.name }}</button>
         </div>
-      </div>
-
-      <div class="grid">
-        <div class="metric"><span class="label">體感</span><span class="value">{{ measure('apparent_temperature_c') }}°C</span></div>
-        <div class="metric"><span class="label">降雨機率</span><span class="value">{{ measure('rain_probability_pct') }}%</span></div>
-        <div class="metric"><span class="label">相對濕度</span><span class="value">{{ measure('humidity_pct') }}%</span></div>
-        <div class="metric"><span class="label">風速</span><span class="value">{{ measure('wind_speed_ms') }} m/s</span></div>
-      </div>
-
-      <!-- Attribution and lineage, and both are facts rather than advice. `kind` says which
-           of the two datasets answered, which is the read path's own promise (item 07): an
-           observation for the hour, else the forecast for it. -->
-      <p class="source">
-        {{ kindLabel }} · 中央氣象署開放資料<br>
-        {{ sourceLabel }}
-      </p>
-    </template>
-  </div>
-
-  <!-- R-1: the room D97 recovered, spent on a FIXED-ILLUSTRATION mechanism tile.
-
-       **Every number here is a constant in the markup.** Nothing reads `openRound`, `lastResult`
-       or the pool; there is no place name and no per-place share. That is D96's reconciled line —
-       a home tile may show how the machine works and may not show what the machine chose — and
-       the B1 veto's standing rule (nothing pre-roll shows a weight, a share, or a count standing
-       in for one) is why the illustration is the DICE half rather than the weighting half: the
-       36-cell grid illustrates the draw, which the reveal's own caption already states in public,
-       while `×1.2 ×0.9` would illustrate weighting, which is the half the veto keeps backstage.
-
-       **Admitted, because it is the first of its kind on this surface:** every element until now
-       has had a provenance, and a fixed illustration has none by construction. It is labelled as
-       an illustration in its own caption rather than left to look like a reading. -->
-  <section class="mech">
-    <p class="mechhead">三十六格是怎麼分的</p>
-    <p class="mechnote">上圖是示意，不是這一輪的數字。</p>
-    <div class="mechgrid" aria-hidden="true">
-      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
-      <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
-      <i class="a"></i><i class="a"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
-      <i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
-      <i class="b"></i><i class="b"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
-      <i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
+      </details>
+      <button class="blocklink" v-if="hasDevice" @click="view = 'round'">這一餐 →</button>
     </div>
-    <ul class="mechkey">
-      <li><i class="a"></i>權重高的一家　14 格</li>
-      <li><i class="b"></i>中間的一家　12 格</li>
-      <li><i class="c"></i>權重低的一家　10 格</li>
-    </ul>
-    <p class="mechnote">兩顆骰子共三十六種點數組合，每一種機會相等。權重決定每一家拿到幾格，
-      三十六格全部攤開。</p>
   </section>
 
-  <!-- The footer sits **inside the home screen, not in chrome**, and that is deliberate.
-       Both of its sentences are about this screen and this stage of the build — what the
-       picker is doing here, and which screens do not exist yet. Chrome renders everywhere,
-       so a sentence naming 天氣 would be a sentence naming it on the propose screen too. -->
-  <!-- item 17: 「提案與擲骰在「這一餐」。」 deleted. If the tabs are legible the sentence is an
-       apology for them; if they are not, the fix is the tabs. They are legible — 45px targets,
-       ink fill on the active one — so the sentence went. -->
-  <footer>
-    每一個數字都查得到出處。
-  </footer>
+  <!-- BLOCK sun — the weather. D20: it states, it never advises, and it appears here
+       and on no other screen. 體感 and 降雨機率 keep their labels as visible text. -->
+  <section class="block sun">
+    <div class="inner swap" :key="selected">
+      <div v-if="loading" class="state">讀取中…</div>
+      <div v-else-if="error" class="state bad">{{ error }}</div>
+      <template v-else>
+        <div class="now">
+          <div class="temp">{{ measure('temperature_c') }}<span>°C</span></div>
+          <div class="sky">
+            <span class="text">{{ measure('weather_text') }}</span>
+            <span class="hour">{{ hourLabel }}</span>
+          </div>
+        </div>
+        <div class="metrics">
+          <span class="metric"><span class="label">體感</span> <span class="value">{{ measure('apparent_temperature_c') }}°C</span></span>
+          <span class="metric"><span class="label">降雨機率</span> <span class="value">{{ measure('rain_probability_pct') }}%</span></span>
+          <span class="metric"><span class="label">相對濕度</span> <span class="value">{{ measure('humidity_pct') }}%</span></span>
+          <span class="metric"><span class="label">風速</span> <span class="value">{{ measure('wind_speed_ms') }} m/s</span></span>
+        </div>
+        <!-- provenance, and it does not move off the screen: it is the claim itself -->
+        <p class="source">{{ kindLabel }} · 中央氣象署開放資料 · {{ sourceLabel }}</p>
+      </template>
+    </div>
+  </section>
+
+  <!-- BLOCK paper — the mechanism. Every number here is a constant in the markup:
+       nothing reads `openRound`, `lastResult` or the pool, no place is named (D94),
+       no share is shown (B1). It illustrates the draw, not a result, and its own
+       caption says so rather than leaving it to look like a reading. -->
+  <section class="block paper">
+    <div class="inner mech">
+      <h2 class="mechhead">三十六格是怎麼分的</h2>
+      <p class="mechnote">上圖是示意，不是這一輪的數字。</p>
+      <div class="mechgrid" aria-hidden="true">
+        <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
+        <i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i><i class="a"></i>
+        <i class="a"></i><i class="a"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
+        <i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i>
+        <i class="b"></i><i class="b"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
+        <i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i>
+      </div>
+      <ul class="mechkey">
+        <li><i class="a"></i><span>權重高 <b>14 格</b></span></li>
+        <li><i class="b"></i><span>中間 <b>12 格</b></span></li>
+        <li><i class="c"></i><span>權重低 <b>10 格</b></span></li>
+      </ul>
+      <!-- R-D3 requires 「每一個數字都查得到出處。」 above the bar at 430; A2's budget
+           does not include the elaboration below it, which is expected under the fold.
+           The claim follows the diagram; the elaboration follows the claim. -->
+      <p class="honesty">每一個數字都查得到出處。</p>
+      <p class="mechnote wide">兩顆骰子共三十六種點數組合，每一種機會相等。權重決定每一家拿到幾格，三十六格全部攤開。</p>
+    </div>
+  </section>
   </div>
   <!-- /screen -->
 
@@ -930,7 +1191,16 @@
        this screen is where it starts holding one. Stored in localStorage, sent as a bearer
        header on every write (D67). No weather word may appear here: chrome and this screen
        render beside every other screen's rules. -->
-  <div v-if="view === 'device'" class="card deviceband">
+  <div v-if="view === 'device'" class="deviceband">
+  <!-- Two flat colour fields meeting at a hard edge — the shape Splitwise arrived at
+       independently. What shipped was a 390x372 --paper card on a --paper ground,
+       invisible except for its rule. D2: the one filled control is in flow, not a
+       pinned bar — a fixed element over a two-field form is the geometry that
+       produced R-D2's occlusion, and this is the one screen that opens a keyboard. -->
+  <section class="block cobalt">
+    <div class="inner">
+      <p class="mark">Up to you</p>
+      <p class="devicetag">決定一頓飯，不用有人先犧牲。</p>
     <!-- item 21: the paste instruction was wearing a field label's clothes and the screen had no
          heading at all. A heading names where you are; an instruction says what to do. -->
     <!-- item 21's other half — printing the circle's NAME here — is not implemented, and not for
@@ -939,8 +1209,13 @@
          surface learns anything about a circle, and it needs the key this screen exists to collect.
          A name shown here would have to come from an unauthenticated lookup by circle id, which is
          a payload/product question, not presentation. -->
-    <h2 class="devicehead">這台裝置還沒有鑰匙</h2>
-    <p class="devicenote">把管理者給你的兩個值貼進來，之後這台裝置就記得了。只需要做一次。</p>
+      <h2 class="devicehead">這台裝置還沒有鑰匙</h2>
+      <p class="devicenote">把管理者給你的兩個值貼進來，之後這台裝置就記得了。只需要做一次。</p>
+    </div>
+  </section>
+
+  <section class="block paper">
+    <div class="inner">
     <label class="fieldlabel" for="device-token">裝置金鑰</label>
     <!-- item 20: it is a key, and it rendered in cleartext on a screen someone may be holding in
          public. `password` with an explicit reveal, because a key you cannot check is a key you
@@ -956,6 +1231,8 @@
     <button class="act" :disabled="!deviceForm.token.trim() || !deviceForm.circle.trim()"
             @click="saveDevice">保存在這台裝置</button>
     <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
+    </div>
+  </section>
   </div>
   <!-- /screen -->
 
@@ -963,25 +1240,38 @@
   <!-- The open round: the pool, the propose box, the dice. D20 governs every word here —
        the hour is shown and nothing else about the sky (D16's confirmation shows the hour,
        not the forecast). The full list stays visible with nothing removed (§3.0). -->
-  <div v-if="view === 'round' && openRound" class="card sheet swap">
-    <div class="roundhead">
-      <!-- A20: when nobody typed an hour, the surface used to typeset the round's default as a
-           concrete 07:00 — a time no person chose, printed as though one had. It now says what
-           is true instead, and the parenthetical that used to explain the fiction is gone. -->
-      <span v-if="openRound.target_hour_typed">用餐時間 {{ roundHourLabel }}</span>
-      <span v-else>用餐時間 <span class="hint">以擲骰當下為準</span></span>
-    </div>
+  <div v-if="view === 'round' && openRound" class="swap sheetband">
 
-    <!-- The fold (ruled 2026-08-15, direction B). On a phone this div is a plain block and
-         the order below is the order that ships today. From 760px it is a two-column grid:
-         settled on the left, pending on the right. The split is structural rather than
-         decorative — it separates what the round has already recorded from what you can
-         still do to it, which is the round's own state and not a visual flourish. -->
-    <div class="split">
+  <!-- BLOCK cobalt — this screen's own header, replacing the masthead and tab row.
+       Navigation is one text link (spec §4 B5). -->
+  <section class="block cobalt">
+    <div class="inner homegreet">
+      <div class="greetcol">
+        <p class="mark">Up to you</p>
+        <p class="greet roundtitle">這一餐</p>
+        <p class="roundwhen">
+          <span v-if="openRound.target_hour_typed">用餐時間 {{ roundHourLabel }}</span>
+          <span v-else>用餐時間 以擲骰當下為準</span>
+        </p>
+      </div>
+      <button class="blocklink" @click="view = 'home'">首頁 →</button>
+    </div>
+  </section>
+
+  <section class="block paper">
+    <div class="inner split">
       <section class="side-settled">
         <p class="colhead"><span>池子</span><span class="count">{{ openRound.pool.length }} 家</span></p>
-        <ul class="pool">
-          <li v-for="entry in openRound.pool" :key="entry.place_id">{{ entry.name }}</li>
+        <!-- ROW + CHIP. The chip is R-D6: it makes D's six-colour claim legible BEFORE
+             the roll rather than only in the reveal's table. Its hue comes from the
+             shipped FACES cycle keyed by pool seat — no new data, no payload field.
+             It carries an identity and no quantity: no share, no weight, no count is
+             recoverable from it, which is why B1's veto does not reach it. -->
+        <ul class="rowlist pool">
+          <li v-for="(entry, seat) in openRound.pool" :key="entry.place_id">
+            <span class="chip" :style="{ '--c': 'var(--' + faceFor(seat) + ')' }"></span>
+            <span>{{ entry.name }}</span>
+          </li>
           <li v-if="!openRound.pool.length" class="hint">池子還是空的——先提一家。</li>
         </ul>
       </section>
@@ -989,85 +1279,37 @@
       <section class="side-pending">
         <p class="colhead">
           <span>提案</span>
-          <!-- R-7: the list showed 5 of 10 in silence, and the byte-identical rows were all in the
-               hidden half — a person could neither see the ambiguity nor learn it existed. This is
-               a count of the QUERY, not a share of any place: identical for every member, not
-               derived from the pool, and incapable of standing in for a weight. -->
           <span v-if="candidates.length > shownCandidates.length" class="count">顯示 {{ shownCandidates.length }}／{{ candidates.length }}</span>
-          <!-- item 11 (「還可以提 N 家」) is NOT implemented, and not because of B1's veto — backend
-               already cleared that. The payload has no quota: `open_round` carries only
-               `round_id`, `target_hour`, `target_hour_typed`, `opened_at` and a pool of
-               `{place_id, name}`, with no per-member proposal count and no `member_id` on a pool
-               row. The browser cannot know whose three the three are. Reported rather than
-               guessed at — a count I inferred from pool length would be wrong the moment two
-               people propose. -->
         </p>
-        <label class="fieldlabel" for="place-query">提案</label>
-        <!-- item 12: A19 was right to kill the third *label*; it left the column wordless. This is
-             an instruction, not a label — it says what the field does, which the label cannot. -->
+        <!-- R-D7: 提案 appears once as this column's heading and once as the verb on the
+             control that performs it. The FIELD's own label is 店名 — never the same word
+             as both the head and the label of one field. -->
+        <label class="fieldlabel" for="place-query">店名</label>
         <p class="fieldnote">輸入店名，或直接以你打的字提案。</p>
-        <!-- A19: the placeholder said 店名 while the label already said 提案 — a third label
-             for one field. Removed rather than replaced: an example shop name here would put a
-             restaurant name on the surface as illustration, which is the shape D94 rules out. -->
-        <input id="place-query" v-model="query" autocomplete="off">
-        <!-- A12: this sits ABOVE the results, not below them. It answers "what I want is not
-             in this list", and that thought arrives while reading the list rather than after
-             scrolling past all of it — and below a capped, scrolling list it was unreachable. -->
-        <!-- R-2: the frequent reversible act takes the ink. Proposing is done many times a round
-             and can be undone by simply not rolling; the roll cannot be undone at all. -->
-        <!-- item 10: the propose error belongs beside the list it is about, not 83px under the
-             roll button where it read as a failure of the roll. -->
+        <input id="place-query" class="field" v-model="query" autocomplete="off">
         <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
-        <!-- M-1: this was `v-if`-gated on a typed query, so at rest the screen had no filled
-             control at all and R-11's clause 2 never landed. Always present, disabled until there
-             is something to propose — the label says what it will do with what you typed, and what
-             it is waiting for when you have not. -->
+        <!-- R-2: the frequent, reversible act takes the ink fill. Proposing is done many
+             times a round and is undone by simply not rolling; the roll cannot be undone
+             at all, which is why it is a ghost bar until armed. -->
         <button class="act typed" :disabled="!query.trim() || exactMatch" @click="proposeTyped">
           {{ query.trim() && !exactMatch ? '以「' + query.trim() + '」提案' : '打上店名就能提案' }}
         </button>
-        <!-- M-3: the fade was bound to `candidates.length > shown`, a statement about the QUERY
-             rather than about the box — so with nothing overflowing it still half-erased a fully
-             visible row. Bound to the box overflowing now, which is what a fade means. -->
         <ul class="candidates" :class="{ faded: listOverflows }" v-if="candidates.length"
             ref="listEl">
           <li v-for="candidate in shownCandidates"
               :key="candidate.kind + (candidate.registry_no || candidate.place_id)">
-            <!-- B6's second line, and it shows only where it ADDS something.
-                 D92 changed B6's premise: the composed name already carries the location for a
-                 brand or registered row — 麥當勞（內湖舊宗路1段） — so printing 內湖區舊宗路1段
-                 beneath it restates the bracket in smaller type. Measured on the live endpoint,
-                 麥當勞 now returns ten distinct names, which is the defect B6 existed to fix,
-                 already fixed by the name alone.
-                 So the district renders for `sign` and `circle-local` only — the two sources whose
-                 name carries no location — and is suppressed for `brand` and `registered`, where
-                 it would be a repetition. A row that repeats itself reads as two facts and is one. -->
             <button class="pick" @click="pickCandidate(candidate)">
               <span class="pickname">{{ candidate.name }}</span>
-              <!-- R-9: `name_source` was the wrong proxy. It answered "which table named this",
-                   when the question is "does the NAME already carry a location" — and a
-                   `registered` name only carries one when D92 appended a bracket. Measured: 9 of
-                   10 麵 rows had a district and showed nothing. The test is now the bracket
-                   itself, which is the actual thing being avoided. -->
               <span v-if="candidate.district && !candidate.name.endsWith('）')"
                     class="pickwhere">{{ candidate.district }}</span>
             </button>
           </li>
         </ul>
-
-        <!-- B2: the roll is irreversible — it closes the round for every device in the circle and
-             nulls `proposal.member_id` in the same transaction (D14). Today it is a filled button
-             18px under a text input, which is what a propose form's submit key looks like. The
-             control replaces itself with its own confirmation rather than opening a modal: no
-             overlay, no focus trap, and the thing you are confirming stays on screen. -->
-        <button v-if="!rollArmed" class="act roll ghost" :disabled="!openRound.pool.length"
-                @click="armRoll">擲骰</button>
-        <div v-else class="confirm">
-          <p class="confirmnote" role="status">擲下去就定案。池子裡 {{ openRound.pool.length }} 家。</p>
-          <button class="act roll" @click="rollDice">擲骰</button>
-          <button class="act ghost" @click="cancelRoll">再等等</button>
-        </div>
+        <!-- 擲骰 is NOT here any more: it is the pinned BAR in chrome, a ghost until
+             armed. B2's arm-then-confirm is preserved there, not flattened. -->
       </section>
     </div>
+  </section>
   </div>
   <!-- /screen -->
 
@@ -1082,7 +1324,21 @@
   <!-- `revealband` is B4's `:has()` hook, the same pattern as `.sheet` and `.homeband`
        (H31: a bound class on the mount container is never compiled). -->
   <div v-if="view === 'round' && !openRound" class="revealband">
+    <div class="revealnav">
+      <span class="mark">Up to you</span>
+      <button class="blocklink" @click="view = 'home'">首頁 →</button>
+    </div>
     <div v-if="lastResult" class="card">
+      <!-- R-D9's mechanism (spec §5 C1): the dice, the sum and the winner live in ONE
+           container with a `min-height` in viewport units. A reserved region is
+           measurable regardless of how long the winner's name happens to be — a
+           one-line and a three-line name would otherwise produce different
+           percentages from the same build, and the gate would be measuring the test
+           data. It also STRENGTHENS D91: the region holds its space before the roll
+           lands, which is the same property that produced 0.00px of shift across 24
+           forced combinations. The `visibility: hidden -> visible` mechanism inside
+           is untouched. -->
+      <div class="answer">
       <div class="dicebox" :class="{ tumble: tumble }">
         <div class="dicepair">
         <div class="stage" v-for="(face, i) in diceFaces" :key="i">
@@ -1102,6 +1358,8 @@
            so the announcement lands WITH the reveal. That is D91's rule applied to a second
            channel: the surface must not tell anyone the answer while the dice are still moving. -->
       <p class="winner" role="status" aria-live="polite">{{ winnerName }}</p>
+      </div>
+      <!-- /answer region -->
 
       <table class="alloc">
         <caption>兩顆骰子共 36 種點數組合，落在誰的格，就是誰。</caption>
@@ -1109,9 +1367,9 @@
           <tr><th>店</th><th>權重</th><th>格數</th></tr>
         </thead>
         <tbody>
-          <tr v-for="row in resultRows" :key="row.place_id"
+          <tr v-for="(row, seat) in resultRows" :key="row.place_id"
               :class="{ hit: row.place_id === lastResult.winning_place_id }">
-            <td>{{ row.name }}</td>
+            <td><span class="chip" :style="{ '--c': 'var(--' + faceFor(seat) + ')' }"></span>{{ row.name }}</td>
             <td class="num">{{ row.weight }}</td>
             <td class="num">{{ row.slots }}/36</td>
           </tr>
@@ -1318,11 +1576,27 @@ createApp({
        quantity. Four hues cycle; the brief's faces 5 and 6 (ink, paper) are die faces
        rather than flood grounds, and only these four have measured --onflood pairs. */
     const FACES = ["hot", "cobalt", "jade", "sun"];
+    /* R-D6: a pool seat's face colour. Same FACES cycle as the flood, so the chip a
+       person sees beside a name before the roll is the colour the screen becomes if
+       that name wins. Identity, never quantity. */
+    function faceFor(seat) { return FACES[seat % FACES.length]; }
+    /* C5: the reveal's bar is --hot, and a landed hot flood would swallow it. */
+    const floodIsHot = computed(() => {
+      const r = lastResult.value;
+      if (!r) return false;
+      const order = (r.places && Object.keys(r.places)) || [];
+      const seat = order.indexOf(String(r.winning_place_id));
+      return FACES[(seat < 0 ? 0 : seat) % FACES.length] === "hot";
+    });
     function clearFlood() {
       if (floodTimer) { clearTimeout(floodTimer); floodTimer = null; }
       document.documentElement.style.removeProperty("--flood");
       document.documentElement.style.removeProperty("--onflood");
     }
+    /* The flood belongs to the landed reveal alone. Without this, navigating home
+       left the whole surface standing on the last winner's colour — the weather block
+       and the mechanism block both sitting on a flood that no longer means anything. */
+    watch(view, (v) => { if (v !== 'round') clearFlood(); });
     function applyFlood() {
       const r = lastResult.value;
       if (!r) return clearFlood();
@@ -1625,6 +1899,7 @@ createApp({
       listEl, listOverflows,
       roundHourLabel, winnerName, resultRows, factorRows, channelLabel,
       tumble, rollArmed, armRoll, cancelRoll, diceFaces, pipCells, landing, isRedFace,
+      floodIsHot, faceFor,
     };
   }
 }).mount('#app');

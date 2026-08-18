@@ -150,8 +150,8 @@ width, **3px `--ink` top rule**. Content box **56px** plus **10px** padding top 
 --bar-h: calc(76px + env(safe-area-inset-bottom));
 ```
 
-Label at `--t-lead`, weight 900, centred. **Exactly one `BAR` per screen, and it is the only filled
-control on that screen.** Every screen carrying one sets:
+Label at `--t-lead`, weight 900, centred. **At most one `BAR` per screen.** Whether it is filled
+depends on the act it carries — see the fill rule below. Every screen carrying one sets:
 
 ```
 main { padding-bottom: calc(var(--bar-h) + 16px); }
@@ -159,6 +159,24 @@ main { padding-bottom: calc(var(--bar-h) + 16px); }
 
 **On a landed reveal whose flood is the hot family, the `BAR` takes `--ink` ground and `--paper`
 text** so it does not vanish into the ground.
+
+**The fill follows reversibility, not the bar — `R-2`.** A bar carrying a safe, reversible act is
+filled `--hot`. **A bar carrying an irreversible act is a ghost bar at rest** — `--paper` ground,
+`--ink` label, `GHOST`'s border, keeping the 3px top rule — and fills to `--hot` only once armed, at
+which moment whatever else was filled on that screen drops to `GHOST`. The frequent undoable act is
+the loud one; the irreversible one is quiet until you confirm it.
+
+**The rule is *at most one* filled control per screen, asserted over every reachable state — not
+*exactly one*, and not about the resting state alone.** A screen may legitimately rest with **none**:
+where the primary act does not exist yet (a submit with nothing typed), the screen carries one
+primary **shape** instead of a primary fill — an `--ink` border, no ground — so it still reads as
+having a primary without stealing the fill the frequent act owns. `R-11`
+
+**A disabled control is never "filled".** The disabled treatment **drops the ground**: transparent,
+`--muted` label, **dashed `--ink` border**, `cursor: not-allowed`. Fading a fill instead
+(`opacity: .45`) measured **2.75:1** and failed the floor, which is why the fill is removed rather
+than dimmed. **A dead control must not be the loudest thing on the screen, and it must not be
+pixel-identical to a live one.**
 
 ### `ROW` — one place in a list
 `min-height` **56 / 60 / 68 px**. **1.5px `--ink` bottom rule**; the last row has none. Name at
