@@ -171,6 +171,30 @@ a coffee chain's 245 branches register under a wholesale code, so a code alone w
 one of them. The join itself is safe — 99.78% name agreement once the legal-form suffix is
 stripped — and the address is not: 89.8% differ, 13.7% are registered outside the city.
 
+*Measured again on the set that is actually scored, which is a harder test than the city-wide
+join* — the 200-row frozen evaluation set, against the best model configuration on record
+(gemma2:2b + retrieval, 66.0% pooled; the hosted yardstick is 60.5%):
+
+- **142 of 200 rows join a tax row**, and **75 of those 142 are a chain's HQ registry number** —
+  so the guardrail that forbids ruling a multi-site company non-food by code alone is the
+  majority case here, not an edge case.
+- **The two largest codes settle nothing by construction.** 餐廳 covers 39 rows and the teacher
+  spread them over four labels; 麵店、小吃店 covers 16 and straddles two categories the code
+  cannot split.
+- **The upper bound on a code rule is +13 rows of 200, and it is an oracle bound** — each code's
+  label was chosen by looking at the answers it would then be scored against. Strip the codes
+  that appear on fewer than four rows, where a "majority label" is one or two observations, and
+  the defensible upside is **+4 rows, 2 points**.
+- The instructive row is 茶葉批發: a wholesale code, all four rows a chain's HQ number, and three
+  of the four are drinks shops. The code describes the company's trade; the shop is still a shop.
+  A non-food verdict there would have been wrong three times in four, which is the guardrail
+  earning its place rather than merely being cautious.
+
+So the honest form of this decision is that the codes **sharpen** the pipeline and cannot replace
+the classifier — the same conclusion the city-wide join reached, now with the model's own score on
+the other side of the comparison. Which codes may decide, and what they may decide, is a mapping
+that has to be argued from the registry's semantics rather than fitted to 200 rows.
+
 **7. Every source is content-addressed and its no-change days are recorded.**
 *Chosen:* a publication row per fetched file (hashed, deduplicated), a data row per record, and a
 run ledger where a no-change day writes a heartbeat. *Rejected:* overwrite-in-place; schedules
