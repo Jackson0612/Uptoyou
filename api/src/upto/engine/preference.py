@@ -26,6 +26,25 @@ loader already makes for a `circle-local` place with no township (D28's ruling, 
 hands it one place's category and the set this member avoids; which preference row that set came
 from is the loader's pin, not this function's concern.
 
+**Two rules for whoever builds the budget half, because B1's ruling binds it and there is no
+other code to write them in yet.** `budget` is stored and produces nothing today (no place carries
+a price band), so a budget contributor is a later build — and when it arrives:
+
+1. **An expired band must not contribute** (D25's third amendment, 2026-08-18: *carry = show, not
+   act*). A persisted band whose month has ended is pre-filled and flagged on the screen and
+   contributes again **only after the member taps once**, which appends a fresh row. Auto-renewing
+   was rejected by name: a `persist` flag would become a perpetual constraint nobody re-chose this
+   month. So the budget query filters `expires_on >= current_date`, and the GET's `expired` flag is
+   what the screen uses to ask for the tap.
+2. **A stance does not expire and must not be filtered that way.** `expires_on` is `NULL` on a
+   category row by CHECK, and D25 says a stance stands until changed — so the avoided-set query
+   deliberately has no date condition, and adding one would silently switch every avoidance off.
+
+**And one that is already true and easy to break: `persist = false` rows still act.** D17 says such
+a row is *used for the round in force* and erased afterwards, so the avoided-set query does not
+filter on `persist` — the flag governs retention, not effect. Filtering on it would make "do not
+remember this" mean "do not apply this", which is a different promise.
+
 **The reason names the category, deliberately.** `reason` exists to explain a number to whoever
 may see it (D13), and for a `private` row that is the represented member alone —
 `reason_visibility = 'represented_member'`, and the reveal panel shows channel-only labels for
