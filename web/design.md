@@ -280,7 +280,31 @@ scale are borrowed, never its layout or density.
 
 ---
 
-## 9 · Working rules for this directory
+## 9 · Writing a check against this surface
+
+**A probe that asserts a mechanism it did not read is not a check — it is a coincidence.** Four
+measurement errors were made in one day against this page, by two independent people, and every one
+was the same shape: the probe assumed how something worked instead of reading how it works. Each
+would have been reported as a product defect, and one of them was a **false pass** that let a real
+defect through.
+
+Read the rule before you assert against it. The four that have already bitten:
+
+| the assumption | what the page actually does |
+|---|---|
+| the answer is hidden with `visibility` | it is hidden with **`opacity: 0 → 1`**, holding its box the whole time — which is what makes the shift 0.00 px. `checkVisibility()` **ignores opacity by spec**, so it calls an invisible answer "visible". |
+| the hit row is hidden like the answer | it is gated by **`font-weight`**, not opacity. An opacity-based probe cannot see it leak. |
+| a custom property's value is a length | `getPropertyValue('--t-answer')` returns the **declared** `clamp(...)` **string**. `parseFloat` of that is `NaN`, which reads as "not declared" when the token is fine. Resolve it by applying it to a probe element and reading the computed value. |
+| a filled control is a `<button>` | the pinned bar puts the fill on the **container** (`div.bar.filled`) with a transparent button inside. A `button`-only filter reports "0 filled controls" on a screen that has one. |
+
+Two more that are not probe bugs but will mislead the same way: **`innerText` is empty for anything
+inside a closed `<details>`** even though its box exists (use `textContent` plus a real visibility
+test), and **a disabled control is not a faded filled control** — the disabled treatment drops the
+ground entirely, so counting "things with a background" already excludes it.
+
+---
+
+## 10 · Working rules for this directory
 
 - **Nothing here is bind-mounted.** After any edit to `app/web/` or `app/proxy/upto.conf`, rebuild
   the proxy image and bring it up, or you are looking at the old page. A stale image does not
