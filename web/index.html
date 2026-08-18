@@ -59,11 +59,30 @@
      The palette itself is the owner-ruled direction A (2026-08-14, "紙上牌桌"): warm paper
      ground, ink text, one seal-red accent — warm tones as the appetite cue, red spent on the
      dice and the winner rather than on walls. */
+  /* ══ D101 · 六面 "Six Flat Faces" (owner-ruled 2026-08-18, replacing D87) ══
+     A die has six faces, so the product has six flat colours and the one that comes up
+     owns the screen. The hue is the answer, not decoration — which is what keeps a
+     flat-colour grammar from being worn rather than earned.
+
+     Every `--on-*` below was computed, not chosen: it is whichever of ink/paper scores
+     higher on that ground. All thirteen pairs clear their floor in both modes, lowest
+     5.41 (dark --hot). `test_web_contrast.py` reads these blocks, so restyling re-runs
+     the check against what actually ships.
+
+     `--flood-*` is the landed reveal's ground and it is NOT the raw hue in dark mode.
+     Raw hues there were a luminance jump of up to x96 to full viewport — a flash. The
+     four dark values sit at L~0.065 against a 0.0056 ground, so the room lights up ~x11.
+     `--flood-sun` reads olive rather than yellow: the evaluator measured the ramp and the
+     first value that still reads *yellow* costs x64, two thirds of the way back to the
+     flash. Ruled deliberate 2026-08-18 — do not "fix" it. */
   :root {
     color-scheme: light dark;
-    --ink: #241F1A; --paper: #FAF7F1; --muted: #746C60;
-    --line: #E7E1D6; --edge: #8F887B;
-    --raised: #ffffff; --accent: #BE3E28;
+    --ink: #101114; --paper: #FFFDF7; --muted: #5A5C63;
+    --hot: #FF4438; --cobalt: #2547E8; --jade: #00A870; --sun: #FFC300;
+    --on-hot: #101114; --on-cobalt: #FFFDF7; --on-jade: #101114; --on-sun: #101114;
+    --flood-hot: #FF4438; --flood-cobalt: #2547E8; --flood-jade: #00A870; --flood-sun: #FFC300;
+    --onflood-hot: #101114; --onflood-cobalt: #FFFDF7;
+    --onflood-jade: #101114; --onflood-sun: #101114;
     /* The die is an object, not a surface: it stays bone-coloured with dark pips in both
        modes, because that is what a die is. Inverting it in dark mode would produce a black
        die with white pips, which is a different object. */
@@ -75,33 +94,62 @@
        token holds the same red in both modes, which is also what a physical die does: the
        paint on the pips is the same paint when the room lights go off. Measured 5.15:1 in
        light and 4.44:1 in dark, both clear of the floor with margin rather than pinned to it. */
-    --pip: #241F1A; --pipred: #BE3E28; --diefill: #FCFAF6; --dieedge: #E2DACB;
-    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
-  }
+    --pip: #101114; --pipred: #FF4438; --diefill: #FFFDF7; --dieedge: #101114;
+      }
   @media (prefers-color-scheme: dark) {
     :root {
-      --ink: #ECE6DC; --paper: #1B1815; --muted: #A69D90;
-      --line: #322E28; --edge: #6F6A60;
-      --raised: #232019; --accent: #E06A50;
-      --pip: #1B1815; --pipred: #BE3E28; --diefill: #EFE9DD; --dieedge: #C9C0AE;
+      --ink: #FFFDF7; --paper: #101114; --muted: #A8ABB3;
+      --hot: #F34F44; --cobalt: #314FDC; --jade: #0A9E6D; --sun: #F0BB0F;
+      --on-hot: #101114; --on-cobalt: #FFFDF7; --on-jade: #101114; --on-sun: #101114;
+      /* not the raw hues — see the light block's note on the x96 flash */
+      --flood-hot: #950900; --flood-cobalt: #0026DB;
+      --flood-jade: #005338; --flood-sun: #5B4500;
+      --onflood-hot: #FFFDF7; --onflood-cobalt: #FFFDF7;
+      --onflood-jade: #FFFDF7; --onflood-sun: #FFFDF7;
+      /* the die does not flip: it is an object, not a surface. Same paint, lights off. */
+      --pip: #101114; --pipred: #FF4438; --diefill: #FFFDF7; --dieedge: #101114;
     }
+  }
+  /* H35: this face's DEFAULT INSTANCE IS THIN — `wght` defaults to 100 and its family
+     name is literally "Noto Sans TC Thin". Without the range below the whole surface
+     renders hairline and every geometric check still passes, because weight moves no
+     boxes. The range is the fix; `test_web_surface.py` asserts it is present and the
+     evaluator asserts the rendered weight. */
+  @font-face {
+    font-family: "Noto Sans TC";
+    src: url("fonts/noto-sub-variable.woff2") format("woff2");
+    font-weight: 100 900; font-style: normal; font-display: swap;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--paper); color: var(--ink);
+    margin: 0;
+    /* D101: the landed reveal floods the whole viewport with the winning face's colour.
+       `--flood` is unset until a roll lands, so every other screen is the ordinary ground. */
+    background: var(--flood, var(--paper)); color: var(--onflood, var(--ink));
+    transition: background-color .45s ease-out, color .45s ease-out;
     /* **A Traditional Chinese face is named before `system-ui`, and the reason is Han
      unification rather than anything measured here.** Many codepoints are shared between
      Traditional and Simplified and carry different regional glyph forms, so leaving
      `system-ui` first delegates glyph choice to however the viewer's system is configured —
      for a `lang="zh-Hant"` product that is a decision worth making rather than inheriting.
 
-     **What this reorder is NOT based on:** a screenshot comparison that appeared to show 区
+     **What this reorder is NOT based on:** a screenshot comparison that appeared to show 區
      for 區 at 430px. Re-shot at 900px, all twelve township names render Traditional, and the
      apparent difference was small-size rendering plus a font this session had briefly
      mis-installed as ExtraBold. The premise was wrong; the principle stands on its own, and
      the false finding is recorded here rather than quietly dropped. */
-    font: 16px/1.65 "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui,
-          -apple-system, sans-serif;
+    /* **The Simplified/Japanese tail is DECLARED, not left to the OS (ruled 2026-08-18).**
+       The vendored face cannot draw 89 characters that its own source face lacks, and the
+       shape of that hole is not random: of the 27 frequent ones, **0 are in Big5 and 27 are
+       in GB18030**. They are Simplified and Japanese forms — and they are not exotic:
+       `焿` (肉焿, 魷魚焿) is in 30 live names and `麺` is the Japanese form of 麵. Every face
+       named before this change was Traditional, so those names rendered only because the
+       platform's own font-linking quietly found a Simplified face we never asked for.
+       The SC/YaHei entries below cost nothing — system faces, one declaration, no bytes —
+       and turn "it happens to work" into "we asked for it". */
+    font: 16px/1.65 "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+          "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK TC",
+          system-ui, -apple-system, sans-serif;
     display: grid; place-items: start center; min-height: 100vh; padding: 2rem 1.25rem 3rem;
   }
   main { width: 100%; max-width: 26rem; }
@@ -180,7 +228,7 @@
   @media (min-width: 2100px) { main:has(.sheet), main:has(.homeband), main:has(.revealband) { font-size: 20px; } }
 
   header { margin-bottom: 1.75rem; }
-  h1 { font-family: var(--serif); font-size: 1.4rem; margin: 0 0 .2rem;
+  h1 { font-size: 1.4rem; margin: 0 0 .2rem;
        letter-spacing: .02em; font-weight: 700; }
   .promise { color: var(--muted); margin: 0; font-size: .95rem; }
 
@@ -215,28 +263,37 @@
     list-style: none; padding: .55rem .1rem; font-size: .9rem;
   }
   .districts > summary::-webkit-details-marker { display: none; }
-  .districts > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .districts > summary:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
   .districts .who { color: var(--muted); font-size: .8rem; letter-spacing: .04em; }
   .districts .val { font-weight: 600; }
   /* item 15: `margin-left: auto` put the caret 627px from the value it opens. It belongs beside
      the thing it acts on; the whole summary row remains the hit target. */
-  .districts .caret { color: var(--muted); font-size: .75rem; margin-left: .15rem; }
+  /* **Drawn, not typed.** This was U+25BE (the small down-pointing triangle) — the vendored face has no glyph for it
+     (verified in the source face's own cmap, and independently by the evaluator), so it fell
+     out of the subset and would have rendered through whatever the platform happened to
+     supply, inside a control, beside text that IS in the vendored face. A border triangle
+     has no glyph to miss. */
+  .districts .caret { display: inline-block; margin-left: .3rem; width: 0; height: 0;
+                      border-left: .3rem solid transparent; border-right: .3rem solid transparent;
+                      border-top: .34rem solid currentColor; opacity: .75;
+                      transition: transform 150ms ease-out; }
   .districts[open] .caret { transform: rotate(180deg); }
+  @media (prefers-reduced-motion: reduce) { .districts .caret { transition: none; } }
 
   /* item 13: opening the selector displaced the card by 152px. A panel, absolutely positioned,
      so opening it covers rather than shoves — the card is the thing being looked at. */
   .picker { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 0;
             position: absolute; z-index: 6; left: 0; right: 0;
-            background: var(--raised); border: 1px solid var(--edge); border-radius: .55rem;
+            background: var(--paper); border: 1px solid var(--ink); border-radius: .55rem;
             padding: .75rem; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
   .picker button {
     font: inherit; font-size: .85rem; padding: .65rem .9rem; border-radius: 999px;
     /* `--edge`, not `--line`: this is the only boundary an unselected pill has. */
-    border: 1px solid var(--edge); background: transparent; color: var(--muted);
+    border: 1px solid var(--ink); background: transparent; color: var(--muted);
     cursor: pointer; transition: color .12s, border-color .12s;
   }
   .picker button:hover { color: var(--ink); border-color: var(--muted); }
-  .picker button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .picker button:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
   .picker button[aria-pressed="true"] {
     color: var(--paper); background: var(--ink); border-color: var(--ink);
   }
@@ -246,7 +303,7 @@
      records 833px, and at 2560 a 736px sheet inside a 1344px card). A rule aimed at one child
      must name that child. */
   .card {
-    border: 1px solid var(--line); border-radius: .9rem; background: var(--raised);
+    border: 1px solid var(--ink); border-radius: .9rem; background: var(--paper);
     padding: 1.35rem 1.4rem 1.15rem;
   }
   .now { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
@@ -261,7 +318,7 @@
   .sky .hour { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
 
   .grid {
-    margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line);
+    margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--ink);
     display: grid; grid-template-columns: repeat(2, max-content); gap: .7rem 2.4rem;
     justify-content: start;
   }
@@ -293,8 +350,8 @@
   .mechgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 22rem;
                margin-inline: auto; }
   .mechgrid i { aspect-ratio: 1; border-radius: 2px; background: transparent;
-                border: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
-  .mechgrid i.a { border: 1.5px solid var(--accent); background: transparent; }
+                border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); }
+  .mechgrid i.a { border: 1.5px solid var(--hot); background: transparent; }
   .mechgrid i.b { background: color-mix(in srgb, var(--ink) 30%, transparent); border-color: transparent; }
   .mechgrid i.c { background: color-mix(in srgb, var(--ink) 12%, transparent); border-color: transparent; }
 
@@ -302,8 +359,8 @@
              flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .8rem; color: var(--muted); }
   .mechkey li { display: flex; align-items: center; gap: .4rem; }
   .mechkey i { width: 12px; height: 12px; border-radius: 2px; flex: none;
-               border: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
-  .mechkey i.a { border: 1.5px solid var(--accent); }
+               border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); }
+  .mechkey i.a { border: 1.5px solid var(--hot); }
   .mechkey i.b { background: color-mix(in srgb, var(--ink) 30%, transparent); border-color: transparent; }
   .mechkey i.c { background: color-mix(in srgb, var(--ink) 12%, transparent); border-color: transparent; }
   .mechnote { margin: .8rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.6; }
@@ -315,9 +372,9 @@
   .tabs { display: flex; gap: .35rem; margin-top: .9rem; }
   .tabs button {
     font: inherit; font-size: clamp(.85rem, .8rem + .2vw, 1.05rem); padding: .65rem 1rem; border-radius: 999px;
-    border: 1px solid var(--edge); background: transparent; color: var(--muted); cursor: pointer;
+    border: 1px solid var(--ink); background: transparent; color: var(--muted); cursor: pointer;
   }
-  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tabs button:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
   .tabs button:hover { color: var(--ink); border-color: var(--muted); }
   .tabs button[aria-pressed="true"] { color: var(--paper); background: var(--ink); border-color: var(--ink); }
   .tabs button[aria-pressed="true"]:hover { color: var(--paper); border-color: var(--ink); }
@@ -326,20 +383,20 @@
   /* item 20's reveal control. The key is a secret that a person still has to be able to check —
      `password` alone turns a mistyped paste into an unexplainable 401. */
   .fieldnote { color: var(--muted); font-size: .82rem; margin: .3rem 0 .1rem; line-height: 1.55; }
-  .devicehead { font-family: var(--serif); font-size: 1.25rem; font-weight: 700; margin: 0 0 .4rem; }
+  .devicehead { font-size: 1.25rem; font-weight: 700; margin: 0 0 .4rem; }
   .devicenote { color: var(--muted); margin: 0 0 1.1rem; font-size: .9rem; line-height: 1.6; }
   .secret { display: flex; gap: .5rem; align-items: stretch; }
   .secret input { flex: 1 1 auto; }
   .peek { font: inherit; font-size: .85rem; padding: .55rem .8rem; border-radius: .55rem;
-          border: 1px solid var(--edge); background: transparent; color: var(--muted);
+          border: 1px solid var(--ink); background: transparent; color: var(--muted);
           cursor: pointer; flex: none; }
   .peek:hover { color: var(--ink); border-color: var(--muted); }
-  .peek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .peek:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
   input {
     font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .55rem;
-    border: 1px solid var(--edge); background: var(--paper); color: var(--ink);
+    border: 1px solid var(--ink); background: var(--paper); color: var(--ink);
   }
-  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
 
   .act {
     font: inherit; display: block; width: 100%; margin-top: 1.1rem; padding: .65rem;
@@ -350,7 +407,7 @@
      action — the keyboard was finished and the pointer was not. */
   .act:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 88%, var(--paper)); }
   .act.ghost:hover:not(:disabled) { background: transparent; border-color: var(--muted); }
-  .act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .act:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
   /* **A dead control must not be the loudest one on the screen.** `opacity: .45` faded the
      fill and the label together and measured **2.75:1** — under the floor, on the first screen
      a new device ever sees, where it was also the only filled control. Dropping the fill says
@@ -360,10 +417,10 @@
   .act:disabled {
     /* item 1: a dashed border is a shape the inputs do not have. Solid-outlined, the first-run
        screen was three identical rounded rectangles and the dead one looked pressable. */
-    background: transparent; color: var(--muted); border: 1px dashed var(--edge);
+    background: transparent; color: var(--muted); border: 1px dashed var(--ink);
     box-shadow: none; opacity: 1; cursor: not-allowed;
   }
-  .act.ghost { background: transparent; color: var(--ink); border-color: var(--edge); margin-top: .6rem; }
+  .act.ghost { background: transparent; color: var(--ink); border-color: var(--ink); margin-top: .6rem; }
   /* **R-11: at rest the round screen had no primary control and 擲骰 was field-shaped.** R-2 gave
      the ink fill to propose — correctly — but propose only exists once you have typed, so the
      resting screen had nothing primary at all. Measured before this rule: the roll and the text
@@ -378,7 +435,7 @@
     width: auto; min-width: 9rem; margin-left: auto; margin-right: auto;
     border-radius: 999px; border: 1.5px solid var(--ink); padding-inline: 1.6rem;
   }
-  .act.roll.ghost:disabled { border: 1.5px dashed var(--edge); color: var(--muted); }
+  .act.roll.ghost:disabled { border: 1.5px dashed var(--ink); color: var(--muted); }
 
   /* The round sheet. Its padding is a token so the fold's gutter and the sheet's margin
      grow together; every other `.card` on the surface keeps the padding it was ruled with. */
@@ -408,9 +465,9 @@
      fold and the room to hold it arrive together or not at all. */
   @media (min-width: 760px) {
     main:has(.sheet) .split { display: grid; grid-template-columns: 1fr 1fr;
-             margin-top: 1.5rem; padding-top: 1.4rem; border-top: 1px solid var(--line); }
+             margin-top: 1.5rem; padding-top: 1.4rem; border-top: 1px solid var(--ink); }
     main:has(.sheet) .side-settled { padding-right: var(--fold); }
-    main:has(.sheet) .side-pending { padding-left: var(--fold); border-left: 1px solid var(--line);
+    main:has(.sheet) .side-pending { padding-left: var(--fold); border-left: 1px solid var(--ink);
                     display: flex; flex-direction: column; }
     /* **A15: the void.** Bottom-aligning 擲骰 to the pool column's height opened 40px of
        nothing at three places and ~197px at six — the roll floated away from the form it
@@ -437,7 +494,7 @@
      rule nobody can see is not decoration either — it is absence. `--edge` at low alpha keeps
      the sheet reading as paper rather than as a framed box (the reason D-line/edge split
      exists) while giving the round visible structure at 2560. */
-  .pool li { padding: .5rem 0; border-bottom: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
+  .pool li { padding: .5rem 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); }
   /* item 22: the last row alone had no rule, which reads as a missing row rather than an end.
      All of them, since the rules are what give the pool its structure (A16). */
   @media (min-width: 760px)  { main:has(.sheet) .pool li { padding: .65rem 0; } }
@@ -460,7 +517,7 @@
      hover and focus doing the work the borders were doing badly. */
   .candidates {
     list-style: none; margin: .5rem 0 0; padding: 0;
-    overscroll-behavior: contain; border-top: 1px solid var(--line);
+    overscroll-behavior: contain; border-top: 1px solid var(--ink);
   }
   /* R-7's fade. A mask rather than an overlaid block, so it works on both grounds without a
      per-mode colour — and `max-height` is gone because the JS cap now decides how many rows
@@ -473,7 +530,7 @@
     max-height: 9rem; overflow-y: auto;
     mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
   }
-  .candidates li { border-bottom: 1px solid var(--line); }
+  .candidates li { border-bottom: 1px solid var(--ink); }
   .candidates .pick {
     font: inherit; width: 100%; text-align: left; padding: .6rem .2rem;
     border: 0; border-radius: .2rem; background: transparent;
@@ -483,7 +540,7 @@
   }
   .candidates .pickwhere { font-size: .82rem; color: var(--muted); }
   .candidates .pick:hover { background: var(--paper); }
-  .candidates .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .candidates .pick:focus-visible { outline: 2px solid var(--hot); outline-offset: -2px; }
 
   /* ---- the dice, and the roll's own moment (D91, ruled 2026-08-15) -----------------
      Each die is a cube of six faces built from real pips, replacing the Unicode faces
@@ -537,7 +594,7 @@
      test_web_contrast measures still hold against the base fill. */
   .face {
     position: absolute; inset: 0; border-radius: 12px;
-    background: var(--diefill); border: 1px solid var(--dieedge);
+    background: var(--diefill); border: 1px solid var(--ink);
     display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
     padding: 15%; gap: 6%; backface-visibility: hidden;
   }
@@ -619,7 +676,9 @@
 
   /* The sum is a fact of the roll, not a caption about it — out of `--muted`, up a step. */
   /* items 6/7: 21.6px beside a 160px die read as a footnote to the dice rather than part of them. */
-  .dicesum { color: var(--ink); font-size: clamp(1.35rem, .95rem + 1.2vw, 2.6rem); }
+  .dicesum { color: currentColor; font-size: clamp(1.5rem, 5.5vw, 2.6rem);
+             font-variant-numeric: tabular-nums; }
+  @media (min-width: 1600px) { .dicesum { font-size: 3.2rem; } }
   /* **A18: the answer was set smaller than the outdoor temperature on another screen.** The
      winner is the one thing this product exists to produce, and 1.35rem left it quieter than
      the evidence table 40px beneath it. Colour is B5's decision and is not touched here. */
@@ -634,9 +693,15 @@
      `.state.bad`, so a future screen showing a result beside a failure inherits the obligation to
      split the pair. D87 flagged that hazard for a future screen; this is the screen that takes it
      on. */
-  .winner { font-family: var(--serif); text-align: center; font-weight: 700; color: var(--accent);
-            font-size: clamp(1.9rem, 1.4rem + 1.8vw, 3rem); line-height: 1.15;
+  /* D101 R-D1/R-D8: the winner is the largest text on the landed reveal at every width,
+     strictly larger than the dice sum. The old pair crossed at ~561px and printed the total
+     bigger than the restaurant on every phone. --t5 was also a fixed ceiling, so 900 and 2560
+     drew the same size; the signature moment gets its own tier above 1600. */
+  .winner { text-align: center; font-weight: 900; color: currentColor;
+            font-size: clamp(2.1rem, 9vw, 4.209rem); line-height: 1.15;
+            letter-spacing: .02em; text-wrap: balance;
             margin: .9rem 0 1.1rem; }
+  @media (min-width: 1600px) { .winner { font-size: clamp(4.209rem, 4.2vw, 6.5rem); } }
 
   /* **M-2, and the cap never existed.** §8 item 3 asked for the blanket `.card > *` cap to MOVE to
      the table; I removed the blanket (correctly — it broke D89's split) and the half that was meant
@@ -649,19 +714,19 @@
                    padding-top: .6rem; text-align: left; line-height: 1.5; }
   /* 1.61:1 is not structure at 1297px — A16's reasoning, one step further. */
   .alloc th { color: var(--muted); font-size: .8rem; font-weight: 500; text-align: left;
-              border-bottom: 1px solid color-mix(in srgb, var(--edge) 55%, transparent);
+              border-bottom: 1px solid color-mix(in srgb, var(--ink) 55%, transparent);
               padding: .35rem .3rem; }
   .alloc td { padding: .45rem .3rem;
-              border-bottom: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); }
+              border-bottom: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); }
   .alloc .num { text-align: right; }
   .alloc th:nth-child(n+2), .alloc td:nth-child(n+2) { text-align: right; }
   /* With the winner in accent, the hit row keeps its emphasis by weight and its own rule rather
      than by being the only red thing on the screen — two reds at different sizes competing is
      what B5 traded away. */
   .alloc tr.hit td { font-weight: 700;
-                     border-bottom-color: color-mix(in srgb, var(--edge) 70%, transparent); }
+                     border-bottom-color: color-mix(in srgb, var(--ink) 70%, transparent); }
 
-  .factors { margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--line); }
+  .factors { margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--ink); }
   .factorhead { margin: 0; font-size: .95rem; font-weight: 600; }
   .ordernote { margin: .1rem 0 .4rem; color: var(--muted); font-size: .78rem; }
   .factors ul { list-style: none; margin: 0; padding: 0; font-size: .9rem; }
@@ -669,7 +734,7 @@
   .factors .chan { color: var(--muted); }
   .factors .num { font-variant-numeric: tabular-nums; }
   .factors .why { color: var(--muted); }
-  .clampline { border-top: 1px dashed var(--line); }
+  .clampline { border-top: 1px dashed var(--ink); }
   .nofactors { color: var(--muted); font-size: .85rem; line-height: 1.6; }
 
   /* **A22: content swapped at 0ms.** `.picker button`'s colour transition was the only one in
@@ -703,7 +768,7 @@
   .confirm .act.roll { margin-top: 0; }
   .act.typed { margin-top: .55rem; }
   .side-pending:has(.confirm) .act.typed {
-    background: transparent; color: var(--ink); border-color: var(--edge); box-shadow: none;
+    background: transparent; color: var(--ink); border-color: var(--ink); box-shadow: none;
   }
 
   .stacked { margin-top: 1rem; }
@@ -772,7 +837,7 @@
     <summary>
       <span class="who">行政區</span>
       <span class="val">{{ selectedName }}</span>
-      <span class="caret">▾</span>
+      <span class="caret" aria-hidden="true"></span>
     </summary>
     <div class="picker">
       <button
@@ -1247,6 +1312,27 @@ createApp({
     const lastResult = ref(null);
     // D91: true only while the result being shown arrived as a live close.
     const tumble = ref(false);
+    let floodTimer = null;
+    /* D101's six faces. The pool's position assigns the hue, so nothing about odds is
+       recoverable from a colour — B1's veto is untouched: a chip is an identity, not a
+       quantity. Four hues cycle; the brief's faces 5 and 6 (ink, paper) are die faces
+       rather than flood grounds, and only these four have measured --onflood pairs. */
+    const FACES = ["hot", "cobalt", "jade", "sun"];
+    function clearFlood() {
+      if (floodTimer) { clearTimeout(floodTimer); floodTimer = null; }
+      document.documentElement.style.removeProperty("--flood");
+      document.documentElement.style.removeProperty("--onflood");
+    }
+    function applyFlood() {
+      const r = lastResult.value;
+      if (!r) return clearFlood();
+      const order = (r.places && Object.keys(r.places)) || [];
+      const seat = order.indexOf(String(r.winning_place_id));
+      const face = FACES[(seat < 0 ? 0 : seat) % FACES.length];
+      const root = document.documentElement.style;
+      root.setProperty("--flood", "var(--flood-" + face + ")");
+      root.setProperty("--onflood", "var(--onflood-" + face + ")");
+    }
     // B2: the roll is armed, not fired. Cleared by every event that leaves this round, so a new
     // round never opens already-armed from the last one.
     const rollArmed = ref(false);
@@ -1325,6 +1411,10 @@ createApp({
       if (event.type === 'snapshot') {
         openRound.value = event.open_round;
         lastResult.value = event.last_result;
+        // A snapshot never tumbles (D91), so the flood is already true when it arrives —
+        // applied at once rather than after the reveal delay it has no reason to wait for.
+        if (floodTimer) { clearTimeout(floodTimer); floodTimer = null; }
+        if (event.last_result) { applyFlood(); } else { clearFlood(); }
         // D91: a snapshot is a reconnect, not a roll. Landing the dice without the tumble
         // is the difference between showing a record and staging an event that already
         // happened — and D56 sends a snapshot on every reconnect, so this is the common path.
@@ -1334,6 +1424,7 @@ createApp({
         openRound.value = event.round;
         // D54: the last result is superseded by the next round opening, not by a clock.
         lastResult.value = null;
+        clearFlood();
         tumble.value = false;
         rollArmed.value = false;
       } else if (event.type === 'pooled') {
@@ -1349,6 +1440,13 @@ createApp({
         // and this is the surface's half of that promise.
         tumble.value = true;
         rollArmed.value = false;
+        // D101: the flood. The whole viewport takes the winning face's colour — but only
+        // once the dice have LANDED, on the same 980ms D91 already governs, because the
+        // ground changing colour would otherwise announce the answer while the dice are
+        // still moving. `--flood` is unset everywhere else, so every other screen keeps
+        // the ordinary ground.
+        if (floodTimer) clearTimeout(floodTimer);
+        floodTimer = setTimeout(applyFlood, 980);
         // R-4 was inert: `tumble` was never cleared, so `.dicebox.tumble` stayed on forever and
         // the landed single-fill rule never applied. Cleared AFTER the whole reveal sequence —
         // the dice end at 1000ms and the name/sum/hit row at 980+300=1280ms — because clearing
