@@ -144,6 +144,26 @@ false-joined 46% on address alone and was dropped. Measured across sources: the 
 from the registered name on 93% of the rows that have one, and the brand table renames 57% of
 the companies it covers — the ladder is doing work, not decoration.
 
+*How far it reaches, measured over the whole current publication* — 36,499 rows, the same joins
+the API uses at read time:
+
+| Rung | Rows | Share | Of those, still names a company |
+|---|---|---|---|
+| sign (D78, site-level) | 1,379 | 3.8% | 3.3% |
+| brand (D77, single-brand companies only) | 4,001 | 11.0% | 44.0% |
+| registered (what is left) | 31,119 | 85.3% | 33.3% |
+
+**The ladder reaches 14.7% of the city, and 33.3% of all rows still display a string that names a
+company rather than a shop.** That is the honest state of it: where a sign exists the name is
+right, and a sign exists for one row in twenty-six. The number is carried here rather than
+smoothed because it is the argument for the next source, not against this one — each rung was
+measured before it was believed, and this is the rung-by-rung version of the same discipline.
+D92's derivation then splits the sign-less rows that would otherwise collide: 9,136 gain the
+district-and-road bracket, 3,234 need the house number, and 22,750 are the only sign-less site of
+their company and stay bare. Whether a place's rung is *stable* across publications is not
+answerable yet — the sign and brand sources have each published once, and one publication yields
+no interval to compare.
+
 **6. Official industry codes decide only what they can, and that is one row in ten.**
 *Chosen:* the tax registry's codes rule where unambiguous, the model takes the rest. *Rejected:*
 codes as the classifier; ignoring codes entirely. *The number:* codes settle 10.9% of city rows;
