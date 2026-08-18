@@ -1,54 +1,54 @@
 # design.md — the grounding file for this surface
 
-**Read this before writing any CSS or markup in `app/web/`.** It is the single first read: it holds
-the tokens, the type ladder, the named parts and the rules that bind every screen. A build spec
-references parts from here **by name** and adds only what is specific to its screen — so the job is
-composition, not invention.
+**Read this before writing any component in `app/web/`.** It holds the tokens, the type ladder, the
+named parts and the rules that bind every screen. A build spec references parts from here **by
+name** and adds only what is specific to its screen, so the job is composition, not invention.
 
-**This file is derived.** It carries parts and numbers, not arguments. The reasoning behind every
-value lives in the project's decision record under the D-number stamped on each section. **When a
-decision is amended, the decision is amended first and this file follows** — so if this file and the
-record disagree, this file is the stale one.
+**Stack, from `D104`:** Vite · React 19 · Tailwind 4 · shadcn/ui, built into the proxy image.
+`D3`'s no-build-step rule is superseded.
 
-| | |
-|---|---|
-| **Direction** | 六面 · Six Flat Faces |
-| **Sections stamped** | `D101 · 2026-08-18` unless noted |
-| **New component** | needs a spec entry before it is built. There is no such thing as a one-off. |
+**This file is derived.** It carries parts and numbers, not arguments; the reasoning lives in the
+decision record under the D-number stamped on each section. **When a decision is amended, the
+decision is amended first and this file follows** — if the two disagree, this file is the stale one.
 
 ---
 
-## 1 · Colour tokens — `D101 · 2026-08-18`
+## 0 · The one thing to understand before installing anything
 
-Declared on `:root` in `index.html`. **Do not introduce a colour that is not in this table**, and do
-not pick an on-colour by eye — every `--on-*` below is whichever of ink/paper measured higher on
-that ground.
+**shadcn/ui's defaults are the look this project already rejected once.** Rounded corners, soft
+shadows, muted grays, a single low-contrast accent — that is the house style of every AI-built
+interface, and it is what the four-round loop produced and the owner threw out.
 
-### Light
+> **shadcn is adopted for its behaviour, not its appearance.** Take the accessibility, the keyboard
+> handling, the focus management, the composition. **Restyle every part to the tokens below before
+> it renders once.** A part that ships with its default skin is a defect, not a starting point.
 
-| token | value | | token | value |
-|---|---|---|---|---|
-| `--ink` | `#101114` | | `--on-hot` | `#101114` |
-| `--paper` | `#FFFDF7` | | `--on-cobalt` | `#FFFDF7` |
-| `--muted` | `#5A5C63` | | `--on-jade` | `#101114` |
-| `--hot` | `#FF4438` | | `--on-sun` | `#101114` |
-| `--cobalt` | `#2547E8` | | | |
-| `--jade` | `#00A870` | | | |
-| `--sun` | `#FFC300` | | | |
+**Concretely: `--radius` is `0`, there are no shadows except the hard offset in §3, and the palette
+is replaced wholesale.** If a component looks like the shadcn documentation, it is wrong.
 
-### Dark
+---
 
-| token | value | | token | value |
-|---|---|---|---|---|
-| `--ink` | `#FFFDF7` | | `--hot` | `#F34F44` |
-| `--paper` | `#101114` | | `--cobalt` | `#314FDC` |
-| `--muted` | `#A8ABB3` | | `--jade` | `#0A9E6D` |
-| | | | `--sun` | `#F0BB0F` |
+## 1 · Colour — Tailwind tokens
 
-On-colours are unchanged from light: `--on-hot` `--on-jade` `--on-sun` are `#101114`,
-`--on-cobalt` is `#FFFDF7`.
+Declared once as CSS custom properties and exposed to Tailwind via `@theme`. **Do not introduce a
+colour outside this table, and never pick an on-colour by eye** — every `on-*` is whichever of
+ink/paper measured higher on that ground.
 
-### The flood — the landed reveal's ground
+| token | Tailwind | light | dark |
+|---|---|---|---|
+| ink | `--color-ink` | `#101114` | `#FFFDF7` |
+| paper | `--color-paper` | `#FFFDF7` | `#101114` |
+| muted | `--color-muted` | `#5A5C63` | `#A8ABB3` |
+| hot | `--color-hot` | `#FF4438` | `#F34F44` |
+| cobalt | `--color-cobalt` | `#2547E8` | `#314FDC` |
+| jade | `--color-jade` | `#00A870` | `#0A9E6D` |
+| sun | `--color-sun` | `#FFC300` | `#F0BB0F` |
+
+**On-colours** (unchanged between schemes): `on-hot` `on-jade` `on-sun` = `#101114`;
+`on-cobalt` = `#FFFDF7`.
+
+**The flood — the landed reveal's ground.** The dark values are **not** the raw hues and must not be
+"fixed" to match them; a landed dark flood's relative luminance is capped at **≤ 0.08**.
 
 | face | light | dark | on-flood (dark) |
 |---|---|---|---|
@@ -57,262 +57,193 @@ On-colours are unchanged from light: `--on-hot` `--on-jade` `--on-sun` are `#101
 | jade | `#00A870` | `#005338` | `#FFFDF7` |
 | sun | `#FFC300` | `#5B4500` | `#FFFDF7` |
 
-**The dark values are not the raw hues and must not be "fixed" to match them.** Ceiling: a landed
-dark flood's relative luminance is **≤ 0.08**. `--flood-sun` reads olive rather than yellow at that
-ceiling; that is the ruled outcome, measured, not a bug.
+`--flood-sun` reads olive rather than yellow at that ceiling. That is the ruled outcome, measured.
 
-### The die is an object, not a surface
+**The die is an object, not a surface:** `pip #101114` · `pipred #FF4438` · `diefill #FFFDF7` ·
+`dieedge #101114`, **identical in both schemes**. `pipred` is its own token and never follows an
+accent that flips.
 
-`--pip` `#101114` · `--pipred` `#FF4438` · `--diefill` `#FFFDF7` · `--dieedge` `#101114` —
-**identical in both schemes.** The die does not invert; same paint, lights off. `--pipred` is its
-own token and is never replaced by an accent that flips.
+**Floors, re-measured whenever a value moves:** body text on any ground **≥ 4.5**; a purely
+graphical pair (a pip on a die face, a chip) **≥ 3.0**. Thirteen pairs stand, the thirteenth being
+the pinned bar against a landed flood of the same family.
 
-### Floors, re-measured whenever a value here moves
-
-Body text on any ground **≥ 4.5**. A purely graphical pair (a pip on a die face, a chip) **≥ 3.0**.
-Thirteen pairs are in the standing set; the thirteenth is the pinned bar against a landed flood of
-the same family, where the bar takes `--ink` ground with `--paper` text.
+**`--radius: 0`** — set it in the shadcn theme, not per component.
 
 ---
 
-## 2 · Type — `spec: Direction D structural · 2026-08-18`
+## 2 · Type
 
-One vendored family, `Noto Sans TC`, variable, `font-weight: 100 900` **declared** — the face's
-default instance is Thin, and without the range the whole surface renders hairline while every
-geometric check still passes. `Archivo Black` is loaded for **Latin numerals only**.
+Two vendored families: **`UpTo Sans`** (Noto Sans TC, variable, `font-weight: 100 900` **declared** —
+the face's default instance is Thin and without the range the whole surface renders hairline) and
+**`UpTo Serif`** (Noto Serif TC subset, display only; its source face defaults to ExtraLight, same
+hazard). `Archivo Black` is loaded for **Latin numerals only**.
 
-**The declared fallback chain is part of the design, not a nicety:**
-`"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",`
-`"Noto Sans CJK TC", system-ui, -apple-system, sans-serif` — Traditional faces first, then a declared
-Simplified/Japanese tail.
-The vendored face cannot draw 89 characters that its own source face lacks — 88 live place names,
-0.24% — and the chain is what draws them. **Determinism, not coverage:** it converts undeclared OS
-font-linking into a declared chain; it does not guarantee the glyph exists on the reader's machine.
+**The declared fallback chain is part of the design:** `"Noto Sans TC", "PingFang TC",
+"Microsoft JhengHei", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK TC",
+system-ui, -apple-system, sans-serif`. The vendored face cannot draw 89 characters its source face
+lacks (88 live names, 0.24%); the chain draws them. **Determinism, not coverage** — it does not
+guarantee the glyph exists on the reader's machine.
 
-### The ladder
-
-**Use only these for text. No inline `font-size` outside the ladder.**
+### The ladder — Tailwind text tokens
 
 | token | 430 | 900 | 2560 | used for |
 |---|---|---|---|---|
-| `--t-answer` | 44 | 72 | 112 | the winner's name on the landed reveal, nothing else |
-| `--t-display` | 32 | 40 | 52 | a screen's own heading inside a colour block |
-| `--t-sum` | 24 | 40 | 50 | the dice total |
-| `--t-temp` | 30 | 34 | 40 | the outdoor temperature, nothing else |
-| `--t-lead` | 20 | 21 | 24 | a block's lead line, a column head, the bar's label |
-| `--t-body` | 16 | 17 | 20 | rows, names, controls, fields |
-| `--t-note` | 13 | 13.5 | 15 | captions, keys, provenance, units |
+| `text-answer` | 44 | 72 | 112 | the winner's name on the landed reveal, nothing else |
+| `text-display` | 32 | 40 | 52 | a screen's own heading |
+| `text-sum` | 32 | 40 | 50 | the dice total |
+| `text-temp` | 30 | 34 | 40 | the outdoor temperature, nothing else |
+| `text-lead` | 20 | 21 | 24 | a block's lead line, a column head, the bar's label |
+| `text-body` | 16 | 17 | 20 | rows, names, controls, fields |
+| `text-note` | 13 | 13.5 | 15 | captions, keys, provenance, units |
 
 **The invariant, tested at every width with no ties:**
+`answer > display ≥ sum > temp > lead > body > note`.
+Build each as a `clamp()` whose **floor and ceiling both obey the ordering** — a ladder that holds
+only at the ceiling is the defect this table exists to prevent.
 
-```
---t-answer > --t-display ≥ --t-sum > --t-temp > --t-lead > --t-body > --t-note
-```
+**A section heading takes `text-display`; it does not take the screen's `h1` size.** The mechanism
+block's heading sitting on display rank once made an `h1` smaller than an `h2` beneath it.
 
-Build each as a `clamp()` whose **floor and ceiling both obey the ordering**. A ladder that holds
-only at the ceiling is the defect this table exists to prevent: a fixed size and a fluid size cross
-at some width, and nothing in the source shows you where.
-
-Weights: **900** for display, lead and the winner; **400** for body and note; **500** for a
-control's label. No italics anywhere — the face has no true italic and a synthesised one is a tell.
-
----
-
-## 3 · Space, rule and radius — `D101 · 2026-08-18`
-
-- **Radius is `0`.** Everywhere. There is no rounded thing on this surface.
-- **There are no shadows and no cards.** Separation is colour or a rule, never elevation.
-- **Rule weights, and only these three:** `3px --ink` between a colour block and what pins over it
-  (the bar's top edge); `1.5px --ink` between rows and table rows; `2px --ink` around a field or a
-  ghost control.
-- **Content column:** `390 / 736 / 1344 px` max-width, centred, at 430 / 900 / 2560.
-- **Block padding:** `16 / 20 / 24 px` vertical.
-- **Spacing steps:** `4 · 8 · 12 · 16 · 20 · 24 · 32`. Nothing between them.
+**A display headline may be serif and two-tone** — ink with one phrase in `hot` — on the home entry.
+**Weights:** 900 display/lead/winner, 400 body/note, 500 control labels. **No italics** — neither
+face has a true one and a synthesised italic is a tell.
 
 ---
 
-## 4 · The parts
+## 3 · Space, rule, radius, depth
 
-Implement each once; reuse it. **A screen does not invent a variant.** Values are 430 / 900 / 2560
-where they change.
+- **Radius `0`. Everywhere.** The single exemption is `.pip`, which stays round because a die's pips
+  are round; squaring them makes the face read as a grid. Nothing else.
+- **No soft shadows and no cards.** Separation is colour or a rule.
+- **One depth effect exists: a hard offset shadow**, `6px 6px 0 var(--color-ink)`, on images and on
+  a raised block. No blur, no alpha. This is the only shadow in the system.
+- **Rule weights, and only these three:** `3px ink` between a colour block and what pins over it;
+  `1.5px ink` between rows and table rows; `2px ink` around a field or a ghost control.
+- **Content column:** `min(1200px, 88vw)` — measured **83%** of a 1440 viewport.
+- **Block padding:** `16 / 20 / 24 px` vertical. **Spacing steps:** `4 · 8 · 12 · 16 · 20 · 24 · 32`.
 
-### `BLOCK` — a full-bleed flat colour band
-`width: 100vw`, no radius, no shadow, no border. Ground is one of `--cobalt` · `--sun` · `--jade` ·
-`--hot` · `--paper`; text is that ground's `--on-*`. Inner content centred in the content column.
-Vertical padding per §3. **Blocks stack edge to edge with no gap and no rule between them** — the
-colour change is the separation.
+---
 
-### `BAR` — the pinned primary control
-`position: fixed; left: 0; right: 0; bottom: 0`. Ground `--hot`, text `--on-hot`, zero radius, full
-width, **3px `--ink` top rule**. Content box **56px** plus **10px** padding top and bottom:
+## 4 · The parts — which come from shadcn, which do not
 
-```
---bar-h: calc(76px + env(safe-area-inset-bottom));
-```
+**Anything marked *custom* has no shadcn equivalent worth bending to it.** Do not install a
+component to obtain a part in this column; write it.
 
-Label at `--t-lead`, weight 900, centred. **At most one `BAR` per screen.** Whether it is filled
-depends on the act it carries — see the fill rule below. Every screen carrying one sets:
+| part | source | notes |
+|---|---|---|
+| `FIELD` | **shadcn `Input`** | restyle: height 48/52/56, `2px ink` border, radius 0, paper ground, `text-body`, muted placeholder. Focus `outline: 2px solid hot; offset 1px`. |
+| `GHOST` | **shadcn `Button`** `variant="outline"` | transparent ground, `2px ink` border, radius 0, `text-body`, same height as `FIELD`. |
+| `PRIMARY` | **shadcn `Button`** `variant="default"` | ink ground, paper text, radius 0. **Disabled drops the ground entirely** — transparent, muted label, **dashed** ink border, `cursor: not-allowed`. Fading a fill measured **2.75:1** and failed the floor. |
+| `TABLE` | **shadcn `Table`** | header `text-note` muted; rows `text-body`; `1.5px ink` row rules; numerals right-aligned `tabular-nums`; a `CHIP` in the first column. |
+| `PICKER` | **shadcn `Select`** | the district picker. Restyle the trigger to `FIELD`; radius 0 on the content panel too. |
+| `BADGE` | **shadcn `Badge`** | the home entry's eyebrow. `2px ink` border, radius 0, `text-note`. |
+| `BLOCK` | **custom** | full-bleed flat colour band, `width: 100vw`, no radius/shadow/border. Ground is one of the palette; text is that ground's `on-*`. Blocks stack edge to edge — **the colour change is the separation**. |
+| `BAR` | **custom** | pinned primary control, `fixed inset-x-0 bottom-0`, `3px ink` top rule, content box 56 + 10 padding, `--bar-h: calc(76px + env(safe-area-inset-bottom))`. **At most one per screen.** Every screen carrying one sets `main { padding-bottom: calc(var(--bar-h) + 16px) }`. |
+| `ROW` | **custom** | one place in a list. `min-height` 56/60/68, `1.5px ink` bottom rule (last row none), name `text-body`, a `CHIP` at the left. Rows never alternate ground. |
+| `CHIP` | **custom** | `12 × 12 px` square, radius 0, `1.5px ink` border, filled from the `FACES = [hot, cobalt, jade, sun]` cycle keyed by pool seat. **Identity, never quantity** — no share, weight or count. |
+| `COLLAGE` | **custom** | the home entry's four images (`D95`), 2×2 offset, each `2px ink` border + the §3 hard offset shadow, radius 0. Every image carries `alt` describing what is actually in the frame. |
+| `DIE` | **custom** | the 3-D cube. One variable, `--die`, at 132/180/240 px; the `translateZ` that closes the six faces **derives from it** — change the value, never the derivation. |
 
-```
-main { padding-bottom: calc(var(--bar-h) + 16px); }
-```
-
-**On a landed reveal whose flood is the hot family, the `BAR` takes `--ink` ground and `--paper`
-text** so it does not vanish into the ground.
-
-**The fill follows reversibility, not the bar — `R-2`.** A bar carrying a safe, reversible act is
-filled `--hot`. **A bar carrying an irreversible act is a ghost bar at rest** — `--paper` ground,
-`--ink` label, `GHOST`'s border, keeping the 3px top rule — and fills to `--hot` only once armed, at
-which moment whatever else was filled on that screen drops to `GHOST`. The frequent undoable act is
-the loud one; the irreversible one is quiet until you confirm it.
-
-**The rule is *at most one* filled control per screen, asserted over every reachable state — not
-*exactly one*, and not about the resting state alone.** A screen may legitimately rest with **none**:
-where the primary act does not exist yet (a submit with nothing typed), the screen carries one
-primary **shape** instead of a primary fill — an `--ink` border, no ground — so it still reads as
-having a primary without stealing the fill the frequent act owns. `R-11`
-
-**A disabled control is never "filled".** The disabled treatment **drops the ground**: transparent,
-`--muted` label, **dashed `--ink` border**, `cursor: not-allowed`. Fading a fill instead
-(`opacity: .45`) measured **2.75:1** and failed the floor, which is why the fill is removed rather
-than dimmed. **A dead control must not be the loudest thing on the screen, and it must not be
-pixel-identical to a live one.**
-
-### `ROW` — one place in a list
-`min-height` **56 / 60 / 68 px**. **1.5px `--ink` bottom rule**; the last row has none. Name at
-`--t-body`. Vertical padding 10px. Carries a `CHIP` at its left. Rows never alternate ground.
-
-### `CHIP` — a place's face colour
-**12 × 12 px** square, zero radius, `1.5px --ink` border, filled from the
-`FACES = ["hot","cobalt","jade","sun"]` cycle keyed by pool seat. **12px** left of the name,
-optically centred on its first line. It is a square because the radius is zero.
-**It carries an identity and no quantity** — never a share, a weight or a count.
-
-### `FIELD` — a text input
-Height **48 / 52 / 56 px**, ground `--paper`, **2px `--ink` border**, zero radius, text `--t-body`,
-`--muted` placeholder. Focus: `outline: 2px solid var(--hot); outline-offset: 1px`. Its label sits
-above at `--t-note` in `--muted`, and **that label is the only place its word appears on the
-screen** — a column head and a field label never repeat the same word.
-
-### `GHOST` — a secondary control
-Transparent ground, **2px `--ink` border**, zero radius, `--ink` text at `--t-body`, same height as
-`FIELD`. Any number per screen. Focus as `FIELD`.
-
-### `TABLE` — the evidence table
-Header row `--t-note` in `--muted`; data rows `--t-body`; **1.5px `--ink`** row rules; numerals
-right-aligned with `font-variant-numeric: tabular-nums`; a `CHIP` in the first column matching the
-pool's. Caption below at `--t-note`.
-
-### `DIE` — the tumbling cube
-One variable drives everything: `--die` at **132 / 180 / 240 px**. The `translateZ` that closes the
-six faces into a cube **derives from `--die`** — change the value, never the derivation, or the
-faces stop closing. Landed dice occupy **≥ 18%** of viewport height at 430.
+**The fill follows reversibility, not the part (`R-2`, `R-11`).** A control carrying a safe,
+reversible act may be filled. **A control carrying an irreversible act is a ghost at rest** and
+fills only once armed, at which moment whatever else was filled drops to ghost. **The rule is *at
+most one* filled control per screen, asserted over every reachable state** — a screen may rest with
+**none**, carrying a primary *shape* (an ink border, no ground) instead. **A disabled control is
+never "filled".**
 
 ---
 
 ## 5 · Motion
 
-1. **The flood** transitions `background-color` and `color` over `.45s ease-out`. Nothing else about
-   the landing animates.
-2. **The `BAR`'s state change** is an opacity and label cross-fade of **120 ms**. The bar's box does
-   not move, resize or slide.
-3. **`prefers-reduced-motion: reduce`** removes the tumble and both transitions above. **The end
-   states still apply, instantly** — the flood still floods, the bar still changes state.
+1. **The flood** transitions background and colour over `.45s ease-out`. Nothing else about the
+   landing animates.
+2. **A bar's state change** is an opacity and label cross-fade of **120 ms**. Its box does not move,
+   resize or slide.
+3. **`prefers-reduced-motion: reduce`** removes the tumble and both transitions; **the end states
+   still apply, instantly.**
 
-**Nothing scroll-triggered. No entrance animation on a colour block. Nothing springy.** This surface
-has no scroll narrative to reveal, and a block that fades in on load is a default tell.
+**Nothing scroll-triggered, no entrance animation on a block, nothing springy.** Disable shadcn's
+default enter/exit animations where they are not one of the three above.
 
 ---
 
-## 6 · Rules that bind every screen, regardless of direction
+## 6 · Rules that bind every screen, whatever the stack
 
-These are not style. A change here is not a design decision and cannot be made from this file.
+A change here is not a design decision and cannot be made from this file.
 
 - **The surface may state; it may never advise.** No recommendation UI, ever. `D20`
-- **Weather appears on the home screen and nowhere else.** `D20`
-- **No restaurant name on the home screen.** `D94`
-- **Nothing before the roll shows a share, a weight or a per-place count**, in any reachable state.
-  `B1`
-- **The result is decided before a single frame animates**, the answer is genuinely hidden while the
-  dice move, and the landing shifts **0.00 px** — the mechanism is
-  `visibility: hidden → visible`, so the answer holds its space the whole time. `D91`
-  **Do not refactor this.** Anything that reserves space around it is fine; anything that inserts
-  the answer into the layout is not.
-- **No external asset.** Nothing on this surface fetches from another host. It renders with the
-  wi-fi off.
-- **`v-html` is never bound.**
+- **Weather appears on the home entry and nowhere else.** `D20`
+- **No restaurant name on the home entry.** `D94`
+- **Nothing before the roll shows a share, weight or per-place count**, in any reachable state. `B1`
+- **The result is decided before a frame animates**, the answer is genuinely hidden while the dice
+  move, and the landing shifts **0.00 px** — the answer holds its space via `opacity 0 → 1`, and
+  **the hit row is gated by font-weight**. `D91` **Do not refactor this.**
+- **No external asset.** Nothing fetches from another host; it renders with the wi-fi off. **This
+  survives the build step: Vite must inline or emit local assets only, and no CDN font.**
+- **`dangerouslySetInnerHTML` is never used.** (React's form of the old `v-html` prohibition.)
 
 ---
 
-## 7 · The anti-default list
+## 7 · The anti-default list — scoped to *unconsidered* defaults
 
-Every one of these was measured as a failure mode on this project before the current direction. A
-build that hits one is wrong even if it grades well elsewhere.
+**Scope, and it is a correction.** This list catches a default that arrived because nobody chose it.
+**It does not rule out a family.** The family check convicted a warm-cream-and-serif direction that
+the owner's own reference belongs to — a cliché is a thing done often because it works, and testing
+for one is not testing for quality. **That half of the list is dead; do not resurrect it.**
 
-1. **Warm cream ground near `#F4F1EA` + high-contrast serif display + terracotta accent.** The most
-   common AI-design default; the surface's previous direction was all three and was thrown out for
-   it.
-2. **Near-black ground with one acid accent.** Cleared here by a light-first ground and five hues
-   rather than one.
-3. **Broadsheet hairlines.** Our rules are 3px and 1.5px, not hairlines.
-4. **Rounded cards floating on a ground with a soft shadow.** Radius is zero and there are no cards.
+What still counts as a defect:
+
+1. **A shipped shadcn default skin** — rounded, soft-shadowed, gray. §0.
+2. **Rounded cards floating on a ground with a soft shadow.** Radius is 0; the only shadow is hard.
+3. **A gradient anywhere.** There are none.
+4. **Emoji or icon fonts as UI.** The dice are real pips; the picker's caret is CSS.
 5. **A weather or a metric printed larger than the thing the product exists to answer.** The ladder
-   in §2 makes this structurally impossible; check it, do not trust it.
-6. **A gradient anywhere.** There are none. Flat means flat.
-7. **Emoji or icon fonts as UI.** The dice are built from real pips; the selector caret is CSS.
+   makes this structurally impossible — check it, do not trust it.
+6. **Saturated colour spread across the screen instead of concentrated.** Measured: the reference
+   holds high-saturation pixels to **10.8%** of the frame; a home at **36.7%** is the state the
+   owner rejected. **Target: keep it under 20% and moving toward the reference.**
+7. **A screen with no imagery where imagery is what carries the subject.** `D95`
 
 ---
 
 ## 8 · What each screen is measured against
 
-The bar is finished commercial products, compared at the same viewport and the same kind of screen.
-**A marketing page is not a product screen**: where one is cited, only its colour energy and type
-scale are borrowed, never its layout or density.
-
-| screen | compared against | what is borrowed |
-|---|---|---|
-| **reveal / the roll** | Wheel of Names | its proportions — the randomiser takes ~65% of viewport height. Ours targets 40 / 45 / 50% because ours must also keep the evidence table on screen, which the reference has no equivalent of. |
-| **round sheet** | Rallly's poll panel | row pitch and per-row state in a dense group list. Its vote rows sit at a ~57px pitch at phone width; ours specify 56px. |
-| **home** | Gumroad, with Duolingo as the control check | flat colour fields, zero radius, hard rules, display type scale, and exactly one filled control on the screen. |
-| **device / first run** | Splitwise's split colour fields | two flat colour fields meeting at a hard edge, a heading over a two-line body, no radius, no gutter. |
-
-**Everything else is reported as a distance, not as a pass or a fail.**
+**From now the gate is the owner-approved comparison page, pixel-for-pixel, not conformance to a
+palette ruling.** The reference wall stays as the standing bar: reveal ↔ Wheel of Names, round sheet
+↔ Rallly's poll panel, home ↔ the La Maison demo and Gumroad, device ↔ Splitwise. **A marketing page
+is not a product screen** — where one is cited, only its colour energy and type scale are borrowed.
 
 ---
 
 ## 9 · Writing a check against this surface
 
 **A probe that asserts a mechanism it did not read is not a check — it is a coincidence.** Four
-measurement errors were made in one day against this page, by two independent people, and every one
-was the same shape: the probe assumed how something worked instead of reading how it works. Each
-would have been reported as a product defect, and one of them was a **false pass** that let a real
-defect through.
-
-Read the rule before you assert against it. The four that have already bitten:
+measurement errors were made against this page in one day, by two people, every one the same shape.
+One was a **false pass** that let a real defect through.
 
 | the assumption | what the page actually does |
 |---|---|
-| the answer is hidden with `visibility` | it is hidden with **`opacity: 0 → 1`**, holding its box the whole time — which is what makes the shift 0.00 px. `checkVisibility()` **ignores opacity by spec**, so it calls an invisible answer "visible". |
-| the hit row is hidden like the answer | it is gated by **`font-weight`**, not opacity. An opacity-based probe cannot see it leak. |
-| a custom property's value is a length | `getPropertyValue('--t-answer')` returns the **declared** `clamp(...)` **string**. `parseFloat` of that is `NaN`, which reads as "not declared" when the token is fine. Resolve it by applying it to a probe element and reading the computed value. |
-| a filled control is a `<button>` | the pinned bar puts the fill on the **container** (`div.bar.filled`) with a transparent button inside. A `button`-only filter reports "0 filled controls" on a screen that has one. |
+| the answer is hidden with `visibility` | **`opacity: 0 → 1`**, holding its box — which is what makes the shift 0.00 px. `checkVisibility()` **ignores opacity by spec**. |
+| the hit row is hidden like the answer | it is gated by **`font-weight`**. An opacity probe cannot see it leak. |
+| a custom property's value is a length | `getPropertyValue` returns the **declared `clamp(...)` string**. Resolve it by applying it to a probe element. |
+| a filled control is a `<button>` | the pinned bar puts the fill on the **container**, with a transparent button inside. |
 
-Two more that are not probe bugs but will mislead the same way: **`innerText` is empty for anything
-inside a closed `<details>`** even though its box exists (use `textContent` plus a real visibility
-test), and **a disabled control is not a faded filled control** — the disabled treatment drops the
-ground entirely, so counting "things with a background" already excludes it.
+Two more that mislead the same way: **`innerText` is empty inside a closed `<details>`** though its
+box exists; and **a disabled control is not a faded filled one** — the treatment drops the ground.
+
+**Under React, add one:** a stable hook for every part named in §4 — `data-part="bar"`,
+`data-part="row"`, and so on. **Class names will change every time the styling changes; the gate
+must not.**
 
 ---
 
 ## 10 · Working rules for this directory
 
-- **Nothing here is bind-mounted.** After any edit to `app/web/` or `app/proxy/upto.conf`, rebuild
-  the proxy image and bring it up, or you are looking at the old page. A stale image does not
-  announce itself.
-- **Judge the built page, not the source.** Screenshot at **430 / 900 / 2560** in **both colour
-  schemes**. 430 alone is not enough for CJK legibility; 900 and 430 both sit below the layout's
-  large tiers, so 2560 is not optional either.
-- **The surface's own tests** (`test_web_surface.py`, `test_web_contrast.py`) live outside this
-  directory and are not yours to edit. When a legitimate change here breaks an assertion, send the
-  needed change to whoever owns that file.
-- **The rendered weight is asserted**, not assumed — see §2 on the Thin default instance.
+- **There is a build step now.** After any change, rebuild the proxy image and bring it up, or you
+  are looking at the old page. A stale image does not announce itself.
+- **Judge the built page, not the source.** Screenshot at **430 / 900 / 1440 / 2560** in **both
+  colour schemes**. 1440 is in the list because it is the reference's own viewport.
+- **The surface's tests live outside this directory and are not yours to edit.** Send the needed
+  change to whoever owns that file.
+- **The rendered weight is asserted**, not assumed — see §2 on both faces defaulting to their
+  thinnest instance.
