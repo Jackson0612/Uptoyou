@@ -12,7 +12,26 @@ from __future__ import annotations
 from fastapi import HTTPException, Request
 from sqlalchemy import bindparam, text
 
-from .auth import member_for
+from .auth import credential_for, member_for
+from .engine.fold import Contribution, fold
+
+
+async def resolve_credential(session, request: Request, circle_id: int):
+    """`(member_id, operator)` for the bearer token, or 401. D67's one answer for both halves.
+
+    The role comes from the presented secret (D105), so **an endpoint cannot be talked into an
+    operator shape by anything in the request** — there is no parameter to send.
+    """
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="a bearer token is required (D67)")
+    found = await credential_for(session, header[7:].strip(), circle_id)
+    if found is None:
+        # One answer for both halves: which half failed is not the caller's to learn.
+        raise HTTPException(
+            status_code=401, detail="the token does not resolve to a member of this circle"
+        )
+    return found
 
 
 async def resolve_member(session, request: Request, circle_id: int) -> int:
@@ -220,3 +239,112 @@ async def trip_for(session, round_id: int):
     if row is None:
         return None
     return {"nickname": row.nickname, "signed_at": row.signed_at.isoformat()}
+
+
+# --- D105: two reveal shapes, one builder, chosen by the credential -------------------------
+#
+# **The member shape is a strict subset of the operator's, produced by removing rather than by
+# building.** Two builders drift: the day a field is added to one, the other silently lacks it or
+# silently gains it. So the full payload is assembled once and the member's is what survives a
+# whitelist — and a new field is therefore **operator-only until someone names it here**, which is
+# the safe direction.
+#
+# **What a member sees: what happened.** The round, the two faces, their sum, which place won, its
+# name, and the trip if one is signed. **What a member does not see: how the odds got there** — no
+# per-place weights, no share of the 36 outcomes, no channels, no factors, no clamps. D105's line:
+# *the operator view audits the arithmetic, not the people.*
+#
+# **`places` stays whole, and that is a deliberate narrowing of my first attempt.** I trimmed it to
+# the winner on the strength of the ticket's *"nothing else"*, and it was over-reach: a member
+# proposed from that pool and read those names on their own screen minutes earlier, so withholding
+# them protects nothing, and it broke two existing tests that were right. **What "nothing else"
+# is about is how the odds got there** — `weights`, `allocation`, `panel` — not what the places are
+# called. Withholding a name would also stop a reveal saying "not 巷口麵店 this time", which is a
+# thing the screen may honestly say.
+MEMBER_KEYS = ("round_id", "status", "dice", "sum", "winning_place_id", "places", "trip")
+
+
+def for_credential(body: dict, operator: bool) -> dict:
+    """The operator's payload unchanged, or the member's subset of it."""
+    if operator:
+        return body
+    return {key: body[key] for key in MEMBER_KEYS if key in body}
+
+
+async def panel_for(session, round_id: int, weights, viewer: int | None = None) -> dict:
+    """The reveal panel's evidence for one round: every stored factor, re-folded.
+
+    **Extracted from `rounds._closed_body` on 2026-08-19 (D105)** because a reconnecting operator
+    needs the same table from the SSE snapshot, and D13's visibility rule must not exist twice —
+    two copies is how one of them stops matching the CHECK that backs it.
+
+    `viewer` is a member id, is never emitted, and decides exactly one field: a
+    `represented_member` reason is shown to that member and to nobody else, **including to an
+    operator**, who audits the arithmetic rather than the people.
+    """
+    # The reveal panel's evidence: the stored records, re-folded so the clamp lines D45
+    # requires are derived from the same rows the audit reads — never a second bookkeeping.
+    # A reason travels only at 'table' visibility (D13): this payload is circle-wide, so a
+    # represented member's sentence and a 'none' sentence alike stay behind; the factor and
+    # its contributor still show, because the *odds* were never the secret.
+    rows = (
+        await session.execute(
+            text(
+                "select id, place_id, channel, contributor, effect, reason, "
+                "reason_visibility, member_id from weight_contribution "
+                "where round_id = :r"
+            ),
+            {"r": round_id},
+        )
+    ).all()
+    panel: dict[str, dict] = {}
+    for place_id in weights:
+        contributions = [
+            Contribution(
+                id=row.id,
+                place_id=place_id,
+                channel=row.channel,
+                contributor=row.contributor,
+                effect=row.effect,
+                reason=row.reason,
+            )
+            for row in rows
+            if row.place_id == place_id
+        ]
+        folded = fold(place_id, contributions)
+        visibility = {row.id: row.reason_visibility for row in rows}
+        # **Whose reason it is, kept out of the payload and used only to decide one field.** D13's
+        # third column has three values: `table` is circle-wide, `none` is nobody's, and
+        # `represented_member` is exactly one person's — so the same round renders a different
+        # sentence to different readers, and an operator is not exempted from that. §3.0: at five
+        # people, "member 3 avoids 火鍋" makes the operator the one person who can see everyone's
+        # preferences, and D14 erased the proposal authorship of this very round.
+        represented = {row.id: row.member_id for row in rows}
+        panel[str(place_id)] = {
+            # D46's total order, straight from the fold — the panel must never re-sort.
+            "factors": [
+                {
+                    "channel": c.channel,
+                    "contributor": c.contributor,
+                    # normalize(): numeric(4,3) reads back as 0.800, and the panel says ×0.8.
+                    # Display only — the fold and D15's reconciliation compare values.
+                    "effect": str(c.effect.normalize()),
+                    "reason": c.reason if (
+                        visibility[c.id] == "table"
+                        or (visibility[c.id] == "represented_member"
+                            and viewer is not None and represented[c.id] == viewer)
+                    ) else None,
+                }
+                for c in folded.contributions
+            ],
+            # D45: a clamped channel is its own line, or the arithmetic visibly fails.
+            "clamps": [
+                {
+                    "channel": cl.channel,
+                    "raw": str(cl.raw.normalize()),
+                    "clamped": str(cl.clamped.normalize()),
+                }
+                for cl in folded.clamps
+            ],
+        }
+    return panel

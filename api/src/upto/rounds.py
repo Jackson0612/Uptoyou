@@ -31,7 +31,15 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from .api_common import place_names, resolve_member, result_body, trip_for
+from .api_common import (
+    for_credential,
+    panel_for,
+    place_names,
+    resolve_credential,
+    resolve_member,
+    result_body,
+    trip_for,
+)
 from .db import session_factory
 from .engine.fold import Contribution, fold
 from .engine.load import load_contributions
@@ -50,6 +58,7 @@ from .stream import publish
 router = APIRouter()
 
 _resolve_member = resolve_member
+_resolve_credential = resolve_credential
 
 
 class OpenRoundBody(BaseModel):
@@ -190,7 +199,14 @@ async def _closed_body(
     dice: tuple[int, int] | None,
     winning_place_id: int,
     weights: dict[int, object],
+    viewer: int | None = None,
 ) -> dict:
+    """The full (operator) payload. `viewer` is the looking member, for D13's own-reason rule.
+
+    **`viewer` is a member id and never reaches the payload** (H3). It is used for one comparison:
+    a `represented_member` reason is shown to that member and to nobody else — including to an
+    operator, who audits the arithmetic rather than the people.
+    """
     body = result_body(
         round_id,
         dice,
@@ -203,61 +219,9 @@ async def _closed_body(
     # time, never the signer's id (H3). Read here rather than assembled, so the reveal, the SSE
     # snapshot and the signing response cannot drift apart.
     body["trip"] = await trip_for(session, round_id)
-    # The reveal panel's evidence: the stored records, re-folded so the clamp lines D45
-    # requires are derived from the same rows the audit reads — never a second bookkeeping.
-    # A reason travels only at 'table' visibility (D13): this payload is circle-wide, so a
-    # represented member's sentence and a 'none' sentence alike stay behind; the factor and
-    # its contributor still show, because the *odds* were never the secret.
-    rows = (
-        await session.execute(
-            text(
-                "select id, place_id, channel, contributor, effect, reason, "
-                "reason_visibility from weight_contribution "
-                "where round_id = :r"
-            ),
-            {"r": round_id},
-        )
-    ).all()
-    panel: dict[str, dict] = {}
-    for place_id in weights:
-        contributions = [
-            Contribution(
-                id=row.id,
-                place_id=place_id,
-                channel=row.channel,
-                contributor=row.contributor,
-                effect=row.effect,
-                reason=row.reason,
-            )
-            for row in rows
-            if row.place_id == place_id
-        ]
-        folded = fold(place_id, contributions)
-        visibility = {row.id: row.reason_visibility for row in rows}
-        panel[str(place_id)] = {
-            # D46's total order, straight from the fold — the panel must never re-sort.
-            "factors": [
-                {
-                    "channel": c.channel,
-                    "contributor": c.contributor,
-                    # normalize(): numeric(4,3) reads back as 0.800, and the panel says ×0.8.
-                    # Display only — the fold and D15's reconciliation compare values.
-                    "effect": str(c.effect.normalize()),
-                    "reason": c.reason if visibility[c.id] == "table" else None,
-                }
-                for c in folded.contributions
-            ],
-            # D45: a clamped channel is its own line, or the arithmetic visibly fails.
-            "clamps": [
-                {
-                    "channel": cl.channel,
-                    "raw": str(cl.raw.normalize()),
-                    "clamped": str(cl.clamped.normalize()),
-                }
-                for cl in folded.clamps
-            ],
-        }
-    body["panel"] = panel
+    # The evidence table lives in `api_common.panel_for`, because the SSE snapshot needs the same
+    # thing for a reconnecting operator and two copies of a visibility rule is one copy too many.
+    body["panel"] = await panel_for(session, round_id, weights, viewer)
     return body
 
 
@@ -275,7 +239,9 @@ async def roll(round_id: int, request: Request) -> dict:
         ).one_or_none()
         if round_row is None:
             raise HTTPException(status_code=404, detail="找不到這一輪。")
-        await _resolve_member(session, request, round_row.circle_id)
+        # The role decides which reveal shape comes back, and it comes from the credential alone —
+        # there is no parameter an endpoint could be talked into.
+        member, is_operator = await _resolve_credential(session, request, round_row.circle_id)
 
         if round_row.status == "closed":
             # D69: the retry gets the answer it missed, in the shape a first roll returns.
@@ -288,9 +254,14 @@ async def roll(round_id: int, request: Request) -> dict:
             dice = (
                 (round_row.die1, round_row.die2) if round_row.die1 is not None else None
             )
-            return await _closed_body(
-                session, round_id, dice, round_row.winning_place_id,
-                {row.place_id: row.weight for row in stored},
+            # The retry answers in the shape a first roll would have returned **to this
+            # credential** — D69 promises the answer that was missed, not a different one.
+            return for_credential(
+                await _closed_body(
+                    session, round_id, dice, round_row.winning_place_id,
+                    {row.place_id: row.weight for row in stored}, viewer=member,
+                ),
+                operator=is_operator,
             )
 
         if not round_row.target_hour_typed:
@@ -327,10 +298,14 @@ async def roll(round_id: int, request: Request) -> dict:
         winner = place_for(table, dice[0], dice[1])
         await write_roll(session, round_id, pinned, weights, winner, dice)
         await session.commit()
-        body = await _closed_body(session, round_id, dice, winner, weights)
-        # D53: the close is pushed once, with its result, and then the channel is quiet.
-        publish(round_row.circle_id, {"type": "closed", "result": body})
-    return body
+        full = await _closed_body(session, round_id, dice, winner, weights, viewer=member)
+        # **D53's push carries the member shape, because a broadcast has no credential.** One event
+        # goes to every subscriber on the circle's channel, so it can only be the shape everyone may
+        # see. An operator's extra detail arrives when that operator asks — its own request, its own
+        # credential — which is also why the snapshot is per connection (D56).
+        publish(round_row.circle_id, {"type": "closed",
+                                      "result": for_credential(full, operator=False)})
+    return for_credential(full, operator=is_operator)
 
 @router.post("/rounds/{round_id}/trip", status_code=201)
 async def sign_trip(round_id: int, request: Request, response: Response) -> dict:

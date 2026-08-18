@@ -14,6 +14,7 @@ with D14's erasure observed after it.
 """
 
 import asyncio
+import json
 import os
 import secrets as pysecrets
 import subprocess
@@ -83,8 +84,20 @@ async def scenario(test_url: str) -> None:
             {"p": principal, "c": circle},
         )
         await session.execute(
-            text("insert into device_secret (principal_id, secret_sha256) values (:p, :h)"),
+            # **An operator's device, because this test asserts the evidence table (D105).** After
+            # 0025 the reveal payload's shape is chosen by the credential: a member sees what
+            # happened, an operator also sees how the odds got there. Asserting `weights` from a
+            # member token would be asserting a leak. A second, ordinary token below checks the
+            # other half — that the member shape really withholds it.
+            text("insert into device_secret (principal_id, secret_sha256, operator) "
+                 "values (:p, :h, true)"),
             {"p": principal, "h": sha256(token.encode()).hexdigest()},
+        )
+        plain_token = "t-plain-" + sha256(token.encode()).hexdigest()[:16]
+        await session.execute(
+            text("insert into device_secret (principal_id, secret_sha256, operator) "
+                 "values (:p, :h, false)"),
+            {"p": principal, "h": sha256(plain_token.encode()).hexdigest()},
         )
         place_pub = (
             await session.execute(
@@ -230,6 +243,23 @@ async def scenario(test_url: str) -> None:
         assert again.json()["dice"] == result["dice"]
         assert again.json()["winning_place_id"] == result["winning_place_id"]
         assert again.json()["weights"] == result["weights"]
+
+        # **The other half of D105: the same round, the same member, an ordinary device.** The role
+        # is on the secret, so one person holding two devices sees two shapes — which is the whole
+        # argument for putting it there rather than on the principal.
+        as_member = await client.post(
+            "/rounds/{}/roll".format(round_id),
+            headers={"Authorization": "Bearer " + plain_token},
+        )
+        assert as_member.status_code == 200, as_member.text
+        member_body = as_member.json()
+        for withheld in ("weights", "allocation", "panel"):
+            assert withheld not in member_body, (withheld, sorted(member_body))
+        for kept in ("round_id", "status", "dice", "sum", "winning_place_id", "places"):
+            assert kept in member_body, (kept, sorted(member_body))
+        assert member_body["winning_place_id"] == result["winning_place_id"]
+        assert "member_id" not in json.dumps(member_body, ensure_ascii=False)
+        print("  D105: the member shape withholds the arithmetic and keeps the outcome")
         assert again.json()["allocation"] == result["allocation"]
 
         # Proposing into a closed round is a 409, not a quiet anything.

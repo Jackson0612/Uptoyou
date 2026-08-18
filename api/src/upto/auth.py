@@ -18,16 +18,32 @@ from hashlib import sha256
 from sqlalchemy import text
 
 
-async def member_for(session, token: str, circle_id: int) -> int | None:
-    """The caller's member id in this circle, or None. The only crossing is the D12 join."""
+async def credential_for(session, token: str, circle_id: int):
+    """`(member_id, operator)` for this token in this circle, or `None`. The D12 join, once.
+
+    **The role comes from the secret and not from the person (D105).** `device_secret.operator` is
+    read in the same query that resolves the seat, so a caller cannot be an operator by any route
+    other than presenting the credential that was issued as one — there is no parameter, and nothing
+    on `principal` to read.
+
+    One principal may hold two secrets with different roles, so this returns the role **of the token
+    presented**. "Is this person an operator" is deliberately not a question this can answer.
+    """
     digest = sha256(token.encode("utf-8")).hexdigest()
-    return (
+    row = (
         await session.execute(
             text(
-                "select m.id from device_secret ds "
+                "select m.id as member_id, ds.operator as operator from device_secret ds "
                 "join member m on m.principal_id = ds.principal_id "
                 "where ds.secret_sha256 = :digest and m.circle_id = :circle"
             ),
             {"digest": digest, "circle": circle_id},
         )
-    ).scalar_one_or_none()
+    ).one_or_none()
+    return None if row is None else (row.member_id, bool(row.operator))
+
+
+async def member_for(session, token: str, circle_id: int) -> int | None:
+    """The caller's member id in this circle, or None. The only crossing is the D12 join."""
+    found = await credential_for(session, token, circle_id)
+    return None if found is None else found[0]

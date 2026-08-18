@@ -38,7 +38,8 @@ from sqlalchemy.exc import IntegrityError
 from upto.db import dispose_all, session_factory
 
 
-async def issue(circle_id: int, nickname: str, principal_id: int | None) -> int:
+async def issue(circle_id: int, nickname: str, principal_id: int | None,
+                operator: bool = False) -> int:
     token = secrets.token_urlsafe(32)
     digest = sha256(token.encode("utf-8")).hexdigest()
 
@@ -74,12 +75,15 @@ async def issue(circle_id: int, nickname: str, principal_id: int | None) -> int:
                     )
                     return 1
 
+            # **D105: the role is written here and nowhere else.** It rides the secret rather than
+            # the person, so it can never arrive as a request parameter and it is revocable on its
+            # own — revoking an operator device leaves the seat intact.
             await session.execute(
                 text(
-                    "insert into device_secret (principal_id, secret_sha256) "
-                    "values (:p, :h)"
+                    "insert into device_secret (principal_id, secret_sha256, operator) "
+                    "values (:p, :h, :operator)"
                 ),
-                {"p": principal_id, "h": digest},
+                {"p": principal_id, "h": digest, "operator": operator},
             )
             try:
                 member_id = (
@@ -109,6 +113,10 @@ async def issue(circle_id: int, nickname: str, principal_id: int | None) -> int:
     print(f"principal: {principal_id}")
     print(f"member: {member_id}")
     print(f"circle: {circle_name}")
+    # Said explicitly, because the two devices are indistinguishable afterwards from the outside and
+    # the difference is what the holder can see.
+    print("role: operator — this device's reveal carries the evidence table (D105)"
+          if operator else "role: member")
     return 0
 
 
@@ -125,8 +133,15 @@ def main() -> int:
         default=None,
         help="attach to this existing principal instead of minting one (D12)",
     )
+    parser.add_argument(
+        "--operator",
+        action="store_true",
+        help="issue this device as an operator's: its reveal payload carries the evidence table "
+             "(D105). The role belongs to the secret, not the person — the same human is an "
+             "ordinary member on any other device, and revoking this one leaves their seat.",
+    )
     args = parser.parse_args()
-    return asyncio.run(issue(args.circle_id, args.nickname, args.principal))
+    return asyncio.run(issue(args.circle_id, args.nickname, args.principal, args.operator))
 
 
 if __name__ == "__main__":
