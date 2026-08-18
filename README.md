@@ -1,5 +1,8 @@
 # Up to you
 
+*A Traditional Chinese copy of this page is at [README.zh-TW.md](README.zh-TW.md). This English
+version is canonical: where the two disagree, this one is right.*
+
 A self-hosted app for a small group deciding where to eat. Open a round, propose places, roll two
 dice — and read, on a reveal panel, exactly how the odds got that way. Every factor that moved a
 place's weight is stored as its own row, pinned to the reading it was computed from, so the result
@@ -251,11 +254,39 @@ holds for all seven: no poll was missed in the window, and the longest stretch w
 run was 62 minutes on the hourly sources and one day on the daily ones.
 
 **8. The cloud serves; the home box computes; the ledger is the clock.**
-*Chosen:* a small EC2 instance runs the API and database; model batches run overnight on a home
-server and land through the same ingest ledger. *Rejected:* a resident model on EC2; all-cloud
-batches. *The number:* the API stack sits at ~1.6 GB resident without the model; the home box —
-4 cores / 8 threads, once its VM stopped masking AVX2 — takes a RAG-shaped batch at 12–19 s a name,
-one night for the whole city.
+*Chosen:* a small EC2 instance runs the API and database; model batches run on a home box and land
+through the same ingest ledger. *Rejected:* a resident model on EC2; all-cloud batches. *The
+number:* the API stack sits at ~1.6 GB resident without the model. The home box's GPU — 8 GB, holding
+the 2B generator and the embedder resident together — takes a RAG-shaped batch at **1.27 s a
+name**, measured over one district's 1,318 rows from the database's own timestamps rather than a
+stopwatch. The same batch on the box's CPU alone was 12–19 s a name.
+
+*Then measured again, because the first measurement was of the wrong thing.* At 1.27 s a name the
+GPU sat at 0–47% utilisation and a quarter of its power cap: the card was waiting, not computing.
+Timing each call separately found the reason — a round trip with no model work costs 48 ms, but
+every request carries ~475 ms of fixed cost that scales with **nothing**: not the input length, not
+the output length, not the link. Two calls per name, so ~950 ms of the 1,270 was a cost paid per
+*request*.
+
+**So the fix was to make fewer requests, not faster ones.** The retrieval crib embedded one name per
+call; a commit batch of 25 names now embeds in one call, and that half went from 0.481 to 0.045 s a
+name — **10.8×**, measured twice on the same 100 names. *Rejected:* issuing several names
+concurrently, which measured 2.6× on the generation half and saturated at four in flight — declined
+because a pass commits every 25 rows and resumes at the first undecided one, and N requests in
+flight is both N connections that can drop and an end to that clean frontier. A dropped connection
+had already killed one pass at row 400 of 3,324; it is now retried three times, and the count is
+printed so a flaky link reads as a number rather than as a slow night.
+
+**What the batched pass has not yet shown is a faster pass, and that is the current state rather
+than a pending edit.** A 2,912-row run began at 0.92 s a name — batching doing exactly what the
+probe said — and then degraded steadily to about 2.0, finishing at **1.356 s a name overall**, which
+is worse than the un-batched 1.27. The degradation is monotonic in elapsed time and its cause is
+not yet known; nothing in the loop grows with progress, the crib is a fixed 537 rows, rows are
+updated by primary key, and the run recorded **zero** dropped connections across 2,912 calls. The
+comparison with 1.27 is also confounded: that figure came from a 28-minute pass, which may simply
+have been too short to reach whatever this is. **So no whole-city projection is carried here.** The
+per-call measurements above are direct A/B tests and stand; the pass-level number will be stated
+when the curve is explained rather than averaged.
 
 **9. Substring search stays a sequential scan; the trigram index was measured and rejected.**
 *Chosen:* leave the typeahead's `ILIKE '%q%'` as it is. *Rejected:* `pg_trgm` + GIN on the three
