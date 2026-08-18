@@ -242,6 +242,23 @@ never "filled".**
 **Nothing scroll-triggered, no entrance animation on a block, nothing springy.** Disable shadcn's
 default enter/exit animations where they are not one of the three above.
 
+### Ambient loops — the fourth rule, added 2026-08-18
+
+**An infinite animation is allowed only where the thing it animates is itself continuous.** Weather
+is continuous; a slowly rotating collage is a rhythm; a button is neither. **Three conditions, all
+required:**
+
+1. **It must not move layout.** Everything animates on `transform` and `opacity` inside a **fixed
+   box**, so a state change — a different weather condition, a different photograph — **shifts zero
+   pixels**.
+2. **Its period is 1.5 s or slower.** The surface's ambient set: 1.5 s rain, 3.2 s flash, 5 s halo,
+   6–8 s drift, 14 s rotation, 10 s collage swap.
+3. **`prefers-reduced-motion: reduce` stops all of it on a legible frame** — not a blank one. A
+   stopped sun keeps its halo; a stopped collage keeps a photograph.
+
+**A loop that fails any of the three is an entrance animation wearing a longer duration**, and §5's
+rule 2 already refuses those.
+
 ---
 
 ## 6 · Rules that bind every screen, whatever the stack
@@ -317,6 +334,21 @@ throwaway component, measure, delete it, and confirm `dist` is clean afterwards.
 
 **And pair a flood against its `on-flood` token, not against `paper`.** Measuring the wrong partner
 returned 2.33 / 1.99 where the real pairs are 7.98 / 9.31 — the page was right both times.
+
+**A screenshot-identity test is invalid on a page with ambient motion — and this bit after the test
+had already been used to prove something.** Comparing two renders by `md5`, the check that proved
+the dark scheme was gone, **stopped working the moment the weather icon was added**: an animated
+page never produces two byte-identical frames, so it reported a difference that was the animation
+frame rather than the colour scheme. **Run scheme- and state-identity comparisons with
+`reduced_motion: "reduce"`** — that stops the loops on their legible frame and leaves only the
+difference under test.
+
+**Deleting a variant prefix is a specificity change, not a no-op — and this one is aimed at the
+React port, where it will happen again.** Stripping `html[data-variant="a"]` dropped a rule from
+`(0,2,2)` to `(0,1,1)`, where it **lost to a `:nth-child` selector at `(0,2,1)`** that it had
+previously beaten. Four equal images became **370 / 328 / 328 / 370**, two overrunning their column
+by 62 px. **Visible in the render, invisible in the diff.** Every `dark:` and `data-*` prefix that
+comes off during a rewrite can hand a rule to a competitor it used to outrank, silently.
 
 **Under React, add one:** a stable hook for every part named in §4 — `data-part="bar"`,
 `data-part="row"`, and so on. **Class names will change every time the styling changes; the gate
