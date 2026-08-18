@@ -1,0 +1,12 @@
+{
+  "files": [],
+  // shadcn's CLI resolves the `@/*` alias from THIS file, not from the
+  // referenced project files, so the paths block is declared in both.
+  "compilerOptions": {
+        "paths": { "@/*": ["./src/*"] }
+  },
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

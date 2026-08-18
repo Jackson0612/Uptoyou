@@ -1,0 +1,237 @@
+/* `source("./")` scopes class detection to `src/`. Without it Tailwind scans the whole
+   directory, and `design.md` — which is prose ABOUT this surface — was generating
+   utilities from its own wording: `.italic` and `.shadow` both existed in the built
+   CSS, which are precisely the two things §2 and §3 prohibit. Documentation must not
+   be able to add a utility to the system it documents. */
+@import "tailwindcss" source("./");
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* shadcn drives dark mode from a `.dark` ancestor. This surface has always followed the
+   reader's system setting, so the class hook is kept AND `prefers-color-scheme` is honoured;
+   every dark value below is declared in both places. */
+@custom-variant dark (&:is(.dark *));
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   design.md §0 — shadcn is adopted for its BEHAVIOUR, not its appearance. `init`
+   wrote a grayscale semantic palette, `--radius: 0.625rem`, and a Geist font stack
+   over the declared fallback chain. All three are replaced here, before any part
+   renders once. If a component looks like the shadcn documentation, it is wrong.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* §6 — no external asset. The face is a local file under `public/fonts/`, copied
+   verbatim by Vite (publicDir contents are never hashed or rewritten), so the served
+   URL is `/fonts/…` exactly as it was before the build step existed.
+   §2 — the source face's default instance is THIN, so the range is DECLARED. Without
+   it the whole surface renders hairline while every geometric check still passes. */
+@font-face {
+  font-family: "UpTo Sans";
+  src: url("/fonts/noto-sub-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── shadcn's semantic layer, remapped onto D101. Nothing grayscale survives.
+      There are no muted surfaces in this system — separation is colour or a rule
+      (§3) — so `--muted` resolves to paper and only its foreground carries the
+      muted ink. */
+:root {
+  --background: #FFFDF7;
+  --foreground: #101114;
+  --card: #FFFDF7;
+  --card-foreground: #101114;
+  --popover: #FFFDF7;
+  --popover-foreground: #101114;
+  --primary: #101114;
+  --primary-foreground: #FFFDF7;
+  --secondary: #FFFDF7;
+  --secondary-foreground: #101114;
+  --muted: #FFFDF7;
+  --muted-foreground: #5A5C63;
+  --accent: #FFFDF7;
+  --accent-foreground: #101114;
+  --destructive: #FF4438;
+  --border: #101114;
+  --input: #101114;
+  --ring: #FF4438;
+  /* §3 — radius 0 EVERYWHERE. Set in the theme, never per component. */
+  --radius: 0px;
+}
+
+.dark,
+:root:has(.dark) {
+  --background: #101114;
+  --foreground: #FFFDF7;
+  --card: #101114;
+  --card-foreground: #FFFDF7;
+  --popover: #101114;
+  --popover-foreground: #FFFDF7;
+  --primary: #FFFDF7;
+  --primary-foreground: #101114;
+  --secondary: #101114;
+  --secondary-foreground: #FFFDF7;
+  --muted: #101114;
+  --muted-foreground: #A8ABB3;
+  --accent: #101114;
+  --accent-foreground: #FFFDF7;
+  --destructive: #F34F44;
+  --border: #FFFDF7;
+  --input: #FFFDF7;
+  --ring: #F34F44;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: #101114;
+    --foreground: #FFFDF7;
+    --card: #101114;
+    --card-foreground: #FFFDF7;
+    --popover: #101114;
+    --popover-foreground: #FFFDF7;
+    --primary: #FFFDF7;
+    --primary-foreground: #101114;
+    --secondary: #101114;
+    --secondary-foreground: #FFFDF7;
+    --muted: #101114;
+    --muted-foreground: #A8ABB3;
+    --accent: #101114;
+    --accent-foreground: #FFFDF7;
+    --destructive: #F34F44;
+    --border: #FFFDF7;
+    --input: #FFFDF7;
+    --ring: #F34F44;
+  }
+}
+
+/* shadcn's own mapping, kept so its parts compose — minus `--color-muted`, which
+   collides with D101's muted INK (§1) and is redeclared in the project theme below. */
+@theme inline {
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
+}
+
+/* ── The project theme. Declared AFTER shadcn's block so that where the two name the
+      same token, D101 wins. */
+@theme {
+  /* §1 · colour. Every `on-*` is whichever of ink/paper measured higher on that
+     ground; none of them is picked by eye. */
+  --color-ink: #101114;
+  --color-paper: #FFFDF7;
+  --color-muted: #5A5C63;
+  --color-hot: #FF4438;
+  --color-cobalt: #2547E8;
+  --color-jade: #00A870;
+  --color-sun: #FFC300;
+  --color-on-hot: #101114;
+  --color-on-cobalt: #FFFDF7;
+  --color-on-jade: #101114;
+  --color-on-sun: #101114;
+
+  /* the flood — the landed reveal's ground. The dark values are NOT the raw hues and
+     must not be "fixed" to match them: a landed dark flood is capped at luminance ≤ 0.08.
+     `flood-sun` reads olive at that ceiling, which is the ruled outcome, measured. */
+  --color-flood-hot: #FF4438;
+  --color-flood-cobalt: #2547E8;
+  --color-flood-jade: #00A870;
+  --color-flood-sun: #FFC300;
+  --color-on-flood-dark: #FFFDF7;
+
+  /* the die is an OBJECT, not a surface — identical in both schemes. `pipred` is its
+     own token and never follows an accent that flips (reusing the accent measured
+     2.74:1 on a bone face in dark, under the 3:1 floor for a graphical object). */
+  --color-pip: #101114;
+  --color-pipred: #FF4438;
+  --color-diefill: #FFFDF7;
+  --color-dieedge: #101114;
+
+  /* §2 · the ladder, tier 1 (below 900px). Each is piecewise because the three
+     specified points are not collinear, and floor AND ceiling both obey the ordering
+     `answer > display >= sum > temp > lead > body > note` — a ladder that holds only
+     at the ceiling is the defect the table exists to prevent. */
+  --text-answer:  clamp(44px,   calc(18.38px + 5.957vw), 72px);
+  --text-display: clamp(32px,   calc(24.68px + 1.702vw), 40px);
+  --text-sum:     clamp(32px,   calc(24.68px + 1.702vw), 40px);
+  --text-temp:    clamp(30px,   calc(26.34px + 0.851vw), 34px);
+  --text-lead:    clamp(20px,   calc(19.09px + 0.213vw), 21px);
+  --text-body:    clamp(16px,   calc(15.09px + 0.213vw), 17px);
+  --text-note:    clamp(13px,   calc(12.54px + 0.106vw), 13.5px);
+
+  /* §2 · the declared fallback chain IS part of the design. The vendored face cannot
+     draw 89 characters its source face lacks; the chain draws them. Determinism, not
+     coverage — it does not guarantee the glyph exists on the reader's machine.
+     This replaces the Geist stack `shadcn init` wrote here. */
+  --font-sans: "UpTo Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+               "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK TC",
+               system-ui, -apple-system, sans-serif;
+
+  /* §4 · BAR reserves its own height in ONE declaration, so a screen carrying one sets
+     `padding-bottom: calc(var(--bar-h) + 16px)` and nothing else. */
+  --bar-h: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+/* §2 · the ladder, tier 2. `html[lang]` and not `html`: Tailwind emits the theme on
+   `:root`, which is (0,1,0), and a bare `html` is (0,0,1) — it loses at every width and
+   the ladder silently never leaves tier 1. The attribute selector lifts this to (0,1,1). */
+@media (min-width: 900px) {
+  html[lang] {
+    --text-answer:  clamp(72px,   calc(50.31px + 2.410vw), 112px);
+    --text-display: clamp(40px,   calc(33.49px + 0.723vw), 52px);
+    --text-sum:     clamp(40px,   calc(34.58px + 0.602vw), 50px);
+    --text-temp:    clamp(34px,   calc(30.75px + 0.361vw), 40px);
+    --text-lead:    clamp(21px,   calc(19.37px + 0.181vw), 24px);
+    --text-body:    clamp(17px,   calc(15.37px + 0.181vw), 20px);
+    --text-note:    clamp(13.5px, calc(12.69px + 0.090vw), 15px);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light dark;
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: var(--text-body);
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* §3 · radius 0 everywhere. Stated as a base rule as well as in the theme, because a
+     shadcn part can carry its own rounding literal that no token reaches. The die's pip
+     re-rounds itself on that part — the one exemption in the system. */
+  *, *::before, *::after { border-radius: 0; }
+}
