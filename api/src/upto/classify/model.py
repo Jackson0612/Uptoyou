@@ -45,6 +45,42 @@ def available() -> bool:
     return any(entry.get("name", "").startswith(MODEL.split(":")[0]) for entry in tags.get("models", []))
 
 
+# --- what the server says about its own work, kept instead of discarded ------------------
+#
+# **Every `/api/generate` reply already carries five timing fields and this module was throwing
+# them away** — `load_duration`, `prompt_eval_count`, `prompt_eval_duration`, `eval_count`,
+# `eval_duration`. Caught by gpu-imggen 2026-08-18, and it is the cheapest instrument in the
+# system: the body is already parsed to get the answer, so keeping five integers costs nothing,
+# adds no request, and contends with nothing.
+#
+# **Why it matters more than a probe.** A second client cannot measure this pass — a single-slot
+# server makes any external observer's latency a function of the observed workload, so both
+# sessions investigating today's throughput bend produced a contaminated wall-time column. These
+# numbers come from inside the responses this pass is already receiving, for **its own real RAG
+# prompts**, on every call rather than one a minute.
+#
+# **`prompt_eval_count` is the sharp one.** It is the prompt's token count as the server saw it. If
+# it grows across a pass, the prompts are growing — which would be a mechanism rather than a
+# hypothesis, and would explain a bend that a fixed-prompt probe cannot see. If it is constant,
+# that whole branch dies and the model work is exonerated for these prompts too.
+#
+# Samples accumulate and are taken away by the caller, the same shape as the retry counter: a batch
+# reads its own numbers and leaves the list empty for the next one.
+_samples: list[dict] = []
+
+TIMING_FIELDS = (
+    "load_duration", "prompt_eval_duration", "eval_duration",
+    "prompt_eval_count", "eval_count", "total_duration",
+)
+
+
+def take_samples() -> list[dict]:
+    """Return the timings collected since the last call, and clear them."""
+    global _samples
+    taken, _samples = _samples, []
+    return taken
+
+
 def ask(prompt: str) -> str:
     """One completion, deterministic, short — the answer is at most a few characters."""
     body = json.dumps(
@@ -60,4 +96,8 @@ def ask(prompt: str) -> str:
     request = urllib.request.Request(
         f"http://{HOST}/api/generate", data=body, headers={"Content-Type": "application/json"}
     )
-    return fetch(request, TIMEOUT_S, "model")["response"]
+    reply = fetch(request, TIMEOUT_S, "model")
+    # Durations are nanoseconds on the wire; counts are counts. Missing fields read as 0 rather
+    # than raising — a server that stops reporting them must not stop the backfill.
+    _samples.append({field: reply.get(field, 0) for field in TIMING_FIELDS})
+    return reply["response"]

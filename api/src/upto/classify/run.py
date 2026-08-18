@@ -59,7 +59,7 @@ from sqlalchemy import text
 
 from upto.api_common import SINGLE_BRAND, STOREFRONT
 from upto.classify.classify import Classified, NoSignal, classify_name, classify_name_rag
-from upto.classify.model import MODEL, available, ask
+from upto.classify.model import MODEL, available, ask, take_samples
 from upto.classify.transport import reset_retries, retries_spent
 from upto.classify.prompt import PROMPT_VERSION, RAG_PROMPT_VERSION
 from upto.db import dispose_all, session_factory
@@ -365,12 +365,33 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
             # bends and `rest` is what grows, the cost is in this loop rather than in any of the
             # three, and that is a different search from any conducted on 2026-08-18.
             rest_s = batch_s - retrieval_s - model_s - write_s
+            # **`model` was the largest column and the least divisible one.** The server reports its
+            # own work in every reply, so the same number now splits into "the server working on
+            # this prompt" and, by subtraction from `model`, "everything else the call cost".
+            # `p_tok` is the prompt's token count as the server saw it — a rising `p_tok` would mean
+            # the prompts themselves are growing, which is the one mechanism no external probe can
+            # see, because a probe's prompt is fixed and these are not.
+            served = take_samples()
+            if served:
+                def middle(field: str, scale: float = 1e6) -> float:
+                    values = sorted(sample[field] / scale for sample in served)
+                    return values[len(values) // 2]
+                detail = (
+                    "  p_tok {:.0f}  load {:.0f}ms  p_eval {:.0f}ms  eval {:.0f}ms"
+                    "  server {:.2f}s".format(
+                        middle("prompt_eval_count", 1.0), middle("load_duration"),
+                        middle("prompt_eval_duration"), middle("eval_duration"),
+                        sum(s["total_duration"] for s in served) / 1e9,
+                    )
+                )
+            else:
+                detail = ""
             print(
                 f"  {seen}/{len(todo)}  written {done}  legal-entity {no_signal}  "
                 f"unusable {refused}"
                 f"  |  {batch_s / len(batch):.3f} s/name"
                 f"  retrieve {retrieval_s:.2f}  model {model_s:.2f}"
-                f"  write {write_s:.2f}  rest {rest_s:.2f}",
+                f"  write {write_s:.2f}  rest {rest_s:.2f}" + detail,
                 flush=True,
             )
 

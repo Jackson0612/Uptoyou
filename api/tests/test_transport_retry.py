@@ -241,5 +241,66 @@ class TheRetry(unittest.TestCase):
         self.assertEqual(len(transport.BACKOFF_S), transport.RETRIES - 1)
 
 
+class TheServersOwnTimings(unittest.TestCase):
+    """`ask` keeps the five timing fields every reply already carries (2026-08-18).
+
+    Tested because the cheapest instrument is the easiest to break silently: nothing downstream
+    reads these to make a decision, so a reply shape change or a stray `take_samples()` would leave
+    the backfill working perfectly and its diagnostics blank. The pass prints them per batch, and a
+    blank column looks like "the server stopped reporting" rather than "we stopped collecting".
+    """
+
+    def setUp(self):
+        self.real_urlopen = urllib.request.urlopen
+        model.time_sleep_patch = None
+        transport.reset_retries()
+        model.take_samples()
+
+    def tearDown(self):
+        urllib.request.urlopen = self.real_urlopen
+        model.take_samples()
+
+    def reply(self, **fields) -> bytes:
+        body = {"response": "麵食"}
+        body.update(fields)
+        return json.dumps(body).encode()
+
+    def test_the_fields_are_kept_and_taken_away(self):
+        urllib.request.urlopen = Door([
+            self.reply(load_duration=450_000_000, prompt_eval_count=214,
+                       prompt_eval_duration=41_000_000, eval_count=8,
+                       eval_duration=63_000_000, total_duration=600_000_000),
+        ])
+        model.ask("prompt")
+        taken = model.take_samples()
+        self.assertEqual(len(taken), 1)
+        self.assertEqual(taken[0]["prompt_eval_count"], 214)
+        self.assertEqual(taken[0]["load_duration"], 450_000_000)
+        # Taken away, not copied: the next batch must not see this one's numbers.
+        self.assertEqual(model.take_samples(), [])
+
+    def test_samples_accumulate_across_calls(self):
+        urllib.request.urlopen = Door([self.reply(prompt_eval_count=n) for n in (10, 20, 30)])
+        for _ in range(3):
+            model.ask("prompt")
+        self.assertEqual([s["prompt_eval_count"] for s in model.take_samples()], [10, 20, 30])
+
+    def test_a_reply_missing_the_fields_reads_as_zero_rather_than_raising(self):
+        """A server that stops reporting timings must not stop the backfill."""
+        urllib.request.urlopen = Door([self.reply()])
+        self.assertEqual(model.ask("prompt"), "麵食")
+        taken = model.take_samples()
+        self.assertEqual(len(taken), 1)
+        self.assertEqual(set(taken[0]), set(model.TIMING_FIELDS))
+        self.assertEqual(sum(taken[0].values()), 0)
+
+    def test_a_failed_call_records_no_sample(self):
+        """Only an answered call has timings — a dropped one must not add a row of zeroes."""
+        urllib.request.urlopen = Door([http_error()])
+        with self.assertRaises(urllib.error.HTTPError):
+            model.ask("prompt")
+        self.assertEqual(model.take_samples(), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
