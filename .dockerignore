@@ -6,3 +6,10 @@
 .env
 .env.*
 !.env.example
+
+# D104's build stage runs `npm ci` inside the image, so a `node_modules` from the developer's
+# machine must not ride along — it would add several hundred megabytes to every build context
+# (the proxy's *and* Airflow's, which share this file) and, worse, `COPY web/ ./` would bury the
+# tree `npm ci` had just installed with one resolved on a different platform. The exclusion and
+# that COPY belong together; neither is safe alone.
+**/node_modules
