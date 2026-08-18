@@ -34,6 +34,7 @@ from .api_common import (
     place_names,
     resolve_member,
     result_body,
+    trip_for,
 )
 from .db import session_factory
 from .engine.table import allocate
@@ -105,6 +106,12 @@ async def _snapshot(session, circle_id: int) -> dict:
             await place_names(session, weights.keys()),
             allocate(weights) if weights else {},
         )
+        # **B2, and this is the half D56 makes necessary.** Nothing is pushed when a trip is signed
+        # (D53), so a client that was not connected at the moment — or that reconnected since — would
+        # otherwise never learn of it. The snapshot *is* the stream's first event, so carrying the
+        # trip here is what makes a silent signing observable at all. Same shape as everywhere else:
+        # nickname and time, never the signer's id.
+        last_result["trip"] = await trip_for(session, last.id)
     return {"type": "snapshot", "open_round": None, "last_result": last_result}
 
 

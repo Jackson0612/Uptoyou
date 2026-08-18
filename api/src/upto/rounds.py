@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from .api_common import place_names, resolve_member, result_body
+from .api_common import place_names, resolve_member, result_body, trip_for
 from .db import session_factory
 from .engine.fold import Contribution, fold
 from .engine.load import load_contributions
@@ -199,6 +199,10 @@ async def _closed_body(
         await place_names(session, weights.keys()),
         allocate({p: w for p, w in weights.items()}),
     )
+    # B2: `None` until somebody signs, and the same shape wherever a trip appears — nickname and
+    # time, never the signer's id (H3). Read here rather than assembled, so the reveal, the SSE
+    # snapshot and the signing response cannot drift apart.
+    body["trip"] = await trip_for(session, round_id)
     # The reveal panel's evidence: the stored records, re-folded so the clamp lines D45
     # requires are derived from the same rows the audit reads — never a second bookkeeping.
     # A reason travels only at 'table' visibility (D13): this payload is circle-wide, so a
@@ -327,3 +331,82 @@ async def roll(round_id: int, request: Request) -> dict:
         # D53: the close is pushed once, with its result, and then the channel is quiet.
         publish(round_row.circle_id, {"type": "closed", "result": body})
     return body
+
+@router.post("/rounds/{round_id}/trip", status_code=201)
+async def sign_trip(round_id: int, request: Request, response: Response) -> dict:
+    """B2 / item 9 — one member says the group went. 201, or 200 on a retry, or 409 with the signer.
+
+    **§3.0's asymmetry, as an endpoint.** A proposal is anonymous and D14's trigger has already
+    erased its author by the time this can be called; a trip is *named*, because "we went" is a fact
+    about an outing rather than an opinion about a restaurant. So this is the one place a member's
+    identity is recorded and kept.
+
+    **Nothing is published to the stream (D53).** A close is pushed once and then the channel is
+    quiet. A trip event would tell four other people the *moment* one person tapped, and §3.0's whole
+    argument is that at five people the timing of an event is one guess from a name. D53's own flip
+    condition is a measurement of when people actually sign — not an intuition that a live badge
+    would be nice — so there is deliberately no `publish` call in this function.
+
+    **The three outcomes are the database's, not this code's.**
+
+    * **201** — the insert succeeded and this member is the signer.
+    * **200** — the same member tapped twice. D69's idiom: a retry is not an error, and it returns
+      the same trip rather than a conflict, because the second tap usually means the first response
+      was lost.
+    * **409 with the fact** — somebody else signed first, and the response names *who* and *when*
+      (D68). A bare 409 would leave a screen saying "already signed" with no way to show by whom,
+      and the nickname is circle-visible information: everyone in the circle knows who is in it.
+
+    **The race is settled by `trip.round_id`'s UNIQUE and not by a `SELECT` first.** Two taps in the
+    same instant both pass a check-then-insert; only one passes the index. So the insert is attempted
+    and the conflict is *read* afterwards — which also means the 409's facts come from the row that
+    actually won rather than from whatever a prior read saw.
+
+    **A signature outside the circle is refused by the composite foreign keys**, not here. See
+    revision 0024: `(circle_id, member_id) → member(circle_id, id)` cannot be satisfied by a member
+    of another circle, so even a bug in this function cannot store one.
+    """
+    async with session_factory()() as session:
+        round_row = (
+            await session.execute(
+                text("select circle_id, status, winning_place_id from round where id = :r"),
+                {"r": round_id},
+            )
+        ).one_or_none()
+        if round_row is None:
+            raise HTTPException(status_code=404, detail="找不到這一輪。")
+        member = await _resolve_member(session, request, round_row.circle_id)
+        # A trip needs somewhere to have gone. An open round has no winner, so signing one would
+        # record an outing to a place nobody has chosen yet.
+        if round_row.status != "closed" or round_row.winning_place_id is None:
+            raise HTTPException(status_code=409, detail="這一輪還沒擲出結果。")
+        try:
+            await session.execute(
+                text(
+                    "insert into trip (round_id, circle_id, member_id) "
+                    "values (:r, :c, :m)"
+                ),
+                {"r": round_id, "c": round_row.circle_id, "m": member},
+            )
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            existing = (
+                await session.execute(
+                    text("select member_id from trip where round_id = :r"), {"r": round_id}
+                )
+            ).one_or_none()
+            if existing is None:
+                # The insert failed and no trip exists: the composite keys refused it, which means
+                # the member does not belong to this round's circle. Re-raised rather than turned
+                # into a 409, because it is not a conflict — nothing is there to conflict with.
+                raise HTTPException(status_code=403, detail="這一輪不屬於你的圈子。") from None
+            trip = await trip_for(session, round_id)
+            if existing.member_id == member:
+                response.status_code = 200
+                return {"trip": trip}
+            raise HTTPException(
+                status_code=409,
+                detail="{}已經在 {} 記下這一趟了。".format(trip["nickname"], trip["signed_at"]),
+            ) from None
+        return {"trip": await trip_for(session, round_id)}

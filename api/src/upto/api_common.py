@@ -193,3 +193,30 @@ def result_body(
         "allocation": {str(p): n for p, n in allocation.items()},
         "places": {str(p): n for p, n in names.items()},
     }
+
+# --- B2 / item 9: the trip, read the same way everywhere it appears ------------------------
+#
+# **One helper for three readers, because three copies of this query is three chances to leak a
+# column.** The reveal payload, the SSE snapshot and the signing endpoint's own response must all
+# describe a trip identically, and what they must never carry is the signer's `member_id` — H3's
+# response-shape rule, and §3.0's reason: at five people an id is a name.
+#
+# `nickname` and `signed_at` only. Not `member_id`, not `place_id` (the winner is read from
+# `round.winning_place_id` — D28/D57, derived and never copied), and not a note, because D38 admits
+# no free text.
+#
+# **Nobody is a hole.** An unsigned round returns `None` rather than an empty object, so a screen
+# distinguishes "no trip yet" from "a trip with nothing in it" without inspecting fields.
+TRIP = """
+select m.nickname as nickname, t.signed_at as signed_at
+  from trip t join member m on m.id = t.member_id
+ where t.round_id = :round_id
+"""
+
+
+async def trip_for(session, round_id: int):
+    """`{"nickname", "signed_at"}` for a signed round, or `None`."""
+    row = (await session.execute(text(TRIP), {"round_id": round_id})).one_or_none()
+    if row is None:
+        return None
+    return {"nickname": row.nickname, "signed_at": row.signed_at.isoformat()}
