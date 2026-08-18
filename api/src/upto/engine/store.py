@@ -54,11 +54,23 @@ class ObservationPin:
 
 
 @dataclass(frozen=True)
+class PreferencePin:
+    """The preference **version** actually read — one id, and that is the whole point of it.
+
+    D24/D25: a round records which version of a preference it applied, so a version some round
+    used cannot be deleted (`ON DELETE RESTRICT`) and a re-read of history reproduces the number.
+    A preference has no composite key to pin because, unlike a reading, it is one row.
+    """
+
+    preference_id: int
+
+
+@dataclass(frozen=True)
 class PinnedContribution:
     """A contribution plus what only the engine knows: the pin and the visibility."""
 
     contribution: Contribution
-    pin: ForecastPin | ObservationPin
+    pin: ForecastPin | ObservationPin | PreferencePin
     reason_visibility: str
     member_id: int | None = None
 
@@ -141,7 +153,7 @@ async def write_roll(
                 "s5": pin.slot_start,
             }
             pin_values = ":s1, :s2, :s3, :s4, :s5"
-        else:
+        elif isinstance(pin, ObservationPin):
             pin_columns = (
                 "observation_publication_id, observation_station_id, "
                 "observation_element, observation_observed_at"
@@ -153,6 +165,22 @@ async def write_roll(
                 "s4": pin.observed_at,
             }
             pin_values = ":s1, :s2, :s3, :s4"
+        elif isinstance(pin, PreferencePin):
+            pin_columns = "preference_id"
+            params |= {"s1": pin.preference_id}
+            pin_values = ":s1"
+        else:
+            # **Named rather than defaulted.** This used to be a bare `else` that treated anything
+            # not a `ForecastPin` as an observation, which was true while there were two kinds and
+            # became a silent wrong answer the moment a third arrived — it would have written a
+            # preference's id into `observation_publication_id`. A new pin now fails loudly here
+            # instead, which is D24's whole argument (a wrong row cannot be told from a right one
+            # afterwards) applied to the writer rather than to the schema.
+            raise TypeError(
+                "unknown pin type {} — a contribution must name which row it was computed from, "
+                "and adding a source means adding a branch here and a column in a "
+                "migration".format(type(pin).__name__)
+            )
         await session.execute(
             text(
                 "insert into weight_contribution "

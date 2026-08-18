@@ -100,12 +100,29 @@ def hex_tokens(css_block: str) -> dict:
 
 
 def load_modes() -> tuple[dict, dict]:
+    """The two `:root` blocks that declare **colours**, light first.
+
+    **Not the first two blocks, and the difference is a false alarm this test raised once.** It
+    took `blocks[0]` and `blocks[1]`, which held while the file had exactly two `:root` blocks —
+    and broke the moment direction D's port added a third for non-colour tokens (spacing, type
+    scale). The middle block declares no hex value, so the dark palette moved to index 2 and the
+    test reported "index.html declares neither palette" about a file that declared D's perfectly
+    well. A gate that cries wolf gets waved through, so the selection now asks the question it
+    actually means: which blocks carry colours.
+    """
     with open(HOME, encoding="utf-8") as handle:
         text = handle.read()
-    blocks = re.findall(r":root\s*\{([^}]*)\}", text)
-    if len(blocks) < 2:
-        raise AssertionError("expected a light and a dark `:root` block in index.html")
-    return hex_tokens(blocks[0]), hex_tokens(blocks[1])
+    blocks = [hex_tokens(block) for block in re.findall(r":root\s*\{([^}]*)\}", text)]
+    coloured = [block for block in blocks if block]
+    if len(coloured) != 2:
+        raise AssertionError(
+            "expected exactly two `:root` blocks declaring colours (light, then dark); found "
+            "{} of {} blocks with hex values. Two modes is the assumption every pair here rests "
+            "on — a third palette is a design change, not a test failure.".format(
+                len(coloured), len(blocks)
+            )
+        )
+    return coloured[0], coloured[1]
 
 
 def luminance(colour: str) -> float:

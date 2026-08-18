@@ -12,6 +12,7 @@ from sqlalchemy import text
 from .db import dispose_all, session_factory
 from .read.weather import ForecastJoinBroken, TownshipUnknown, reading_for
 from .live import router as live_router
+from .preferences import router as preferences_router
 from .rounds import router as rounds_router
 
 app = FastAPI(
@@ -22,6 +23,7 @@ app = FastAPI(
 )
 app.include_router(rounds_router)
 app.include_router(live_router)
+app.include_router(preferences_router)
 
 
 @app.get("/health")
