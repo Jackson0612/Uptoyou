@@ -58,7 +58,7 @@ from sqlalchemy import text
 
 from upto.api_common import SINGLE_BRAND, STOREFRONT
 from upto.classify.classify import Classified, NoSignal, classify_name, classify_name_rag
-from upto.classify.model import MODEL, available, ask
+from upto.classify.model import MODEL, available, ask, reset_retries, retries_spent
 from upto.classify.prompt import PROMPT_VERSION, RAG_PROMPT_VERSION
 from upto.db import dispose_all, session_factory
 
@@ -292,6 +292,9 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
         )
 
         done = no_signal = refused = 0
+        # Zero the retry counter so the line printed at the end is this pass's number and not a
+        # total carried over from anything else that used the client in this process.
+        reset_retries()
         for start in range(0, len(todo), BATCH):
             batch = todo[start : start + BATCH]
             # One embedding request for the whole batch (M12: 10.8× on that half). The commit
@@ -344,9 +347,15 @@ async def main(township_code: str, rag: bool = False, embed_key: str = "bge",
                 flush=True,
             )
 
+        # The retry count is part of the ruling, not a nicety: a link that drops one call in
+        # fifty now succeeds silently and would otherwise read as a slow night. Printed even when
+        # it is zero, because a line that only appears on a bad night is a line nobody trusts on
+        # a good one.
+        spent = retries_spent()
         print(
             f"done: {done} classified, {no_signal} decided legal entities (recorded, not "
-            f"re-asked), {refused} unusable answers left pending"
+            f"re-asked), {refused} unusable answers left pending, "
+            f"{spent} connection-level retries spent"
         )
         return 0
     finally:
