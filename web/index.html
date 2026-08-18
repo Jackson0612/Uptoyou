@@ -1413,9 +1413,12 @@
       </div>
     </div>
 
-    <div class="card" :class="{ stacked: lastResult }">
+    <!-- 開一輪 is NOT here any more: it is the pinned BAR in chrome. Leaving the old
+         in-flow button behind gave the reveal TWO filled controls — the same mistake
+         as 擲骰 one screen earlier, where the old site was correctly emptied. The
+         empty-state sentence and the error stay; only the duplicated control went. -->
+    <div class="revealfoot">
       <p v-if="!lastResult" class="state">這個圈子現在沒有進行中的一餐。</p>
-      <button class="act" @click="openNewRound">開一輪</button>
       <p v-if="actionError" class="state bad" role="alert">{{ actionError }}</p>
     </div>
   </div>
