@@ -160,6 +160,29 @@ absence-vs-failure problem the ledger exists to solve. Proven, not assumed: ever
 idempotent on identical bytes (every column of every table compared, `tests/test_ingest_idempotency.py`),
 and the no-change path costs 1.6 s against 15–19 s for a real store.
 
+*Measured on the schedule itself* — 8 days, 332 rows of the run ledger against 361 Airflow task
+instances, nothing instrumented and no column added:
+
+| Source | Store p50 | No-change p50 | Ledger rows | Tasks succeeded |
+|---|---|---|---|---|
+| CWA township forecast | 2.99 s | 1.85 s | 149 | 162 / 164 |
+| CWA station observation | 3.09 s | 0.31 s (n=1) | 149 | 164 / 164 |
+| FDA 餐飲場所 reference | none yet | 1.88 s | 5 | 9 / 9 |
+| 食材登錄 brands | 0.57 s | 0.96 s | 8 | 6 / 6 |
+| 衛生評核 signs | 0.31 s | 0.43 s | 7 | 6 / 6 |
+| 商業登記 status | 25.03 s | 2.09 s | 7 | 6 / 6 |
+| 營業稅籍 registry | 12.95 s | 3.58 s | 7 | 6 / 6 |
+
+Three things the schedule shows that a single run cannot. **The no-change day is 3.6× cheaper
+than a store on the largest source** (3.58 s against 12.95 s) and 12× on the registry roster —
+which is the whole of the claim-before-parse short-circuit, priced. **Orchestration costs a flat
+1.2 s a task** (median, every source, from the gap between Airflow's duration and the runner's
+own ledger interval): the DAG shells the ingest out to a subprocess, and that price is the same
+whether the source takes half a second or twenty-five. **The scheduler is not the bottleneck** —
+queue latency is 0.05 s at p50 and 4.2 s at its worst across all 361 task instances. What none of this
+answers is the fetch / parse / store split: nothing records it, and measuring it would mean
+per-phase timers and a schema to hold them.
+
 **8. The cloud serves; the home box computes; the ledger is the clock.**
 *Chosen:* a small EC2 instance runs the API and database; model batches run overnight on a home
 server and land through the same ingest ledger. *Rejected:* a resident model on EC2; all-cloud
