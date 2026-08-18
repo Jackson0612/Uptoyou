@@ -30,26 +30,28 @@ is replaced wholesale.** If a component looks like the shadcn documentation, it 
 
 ## 1 · Colour — Tailwind tokens
 
+**There is one colour scheme. Light.** Owner-ruled 2026-08-18 — see the box at the end of this
+section before adding a dark variant of anything.
+
 Declared once as CSS custom properties and exposed to Tailwind via `@theme`. **Do not introduce a
 colour outside this table, and never pick an on-colour by eye** — every `on-*` is whichever of
 ink/paper measured higher on that ground.
 
-| token | Tailwind | light | dark |
-|---|---|---|---|
-| ink | `--color-ink` | `#101114` | `#FFFDF7` |
-| paper | `--color-paper` | `#FFFDF7` | `#101114` |
-| muted | `--color-muted` | `#5A5C63` | `#A8ABB3` |
-| hot | `--color-hot` | `#FF875C` | `#FF875C` |
-| hot-ink | `--color-hot-ink` | `#D95204` | `#FF875C` |
-| cobalt | `--color-cobalt` | `#2547E8` | `#314FDC` |
-| jade | `--color-jade` | `#00A870` | `#0A9E6D` |
-| sun | `--color-sun` | `#FFC300` | `#F0BB0F` |
+| token | Tailwind | value |
+|---|---|---|
+| ink | `--color-ink` | `#101114` |
+| paper | `--color-paper` | `#FFFDF7` |
+| muted | `--color-muted` | `#5A5C63` |
+| hot | `--color-hot` | `#FF875C` |
+| hot-ink | `--color-hot-ink` | `#D95204` |
+| cobalt | `--color-cobalt` | `#2547E8` |
+| jade | `--color-jade` | `#00A870` |
+| sun | `--color-sun` | `#FFC300` |
 
-**On-colours** (unchanged between schemes): `on-hot` `on-jade` `on-sun` = `#101114`;
-`on-cobalt` = `#FFFDF7`.
+**On-colours:** `on-hot` `on-jade` `on-sun` = `#101114`; `on-cobalt` = `#FFFDF7`.
 
-**`hot` is a GROUND. `hot-ink` is the same accent as TEXT or a MARK. They are not interchangeable,
-and this is the reason** — owner-ruled 2026-08-18, the reference demo's orange:
+**`hot` is a GROUND. `hot-ink` is the same accent as TEXT or a MARK. They are not interchangeable**
+— owner-ruled 2026-08-18, the reference demo's orange:
 
 | use | token | measured | floor |
 |---|---|---|---|
@@ -58,37 +60,63 @@ and this is the reason** — owner-ruled 2026-08-18, the reference demo's orange
 | **focus ring, the star, any mark on paper** | `hot-ink` | **4.00** | 3.0 |
 | ~~`hot` used as text or a mark on paper~~ | — | **2.33** | **fails** |
 
-**The focus ring must take `hot-ink`.** It currently takes `hot`; on the new palette that is 2.33
-against a 3.0 graphic floor, so leaving it would trade an accessibility guarantee for a colour.
-**In dark mode `hot-ink` becomes `#FF875C`** — the light orange reads as text on the dark ground at
-**7.98** — so one accent flips role between schemes rather than needing a third value.
+**The focus ring must take `hot-ink`.** On `hot` it is 2.33 against a 3.0 graphic floor, and **no
+visual review can catch that** — a focus ring only exists while something is tabbed to.
 
-**The reference itself fails this pair.** Its own display headline sets that orange on cream at
-**2.33**; a marketing page nobody measured. We take its colour and not its mistake.
+**The reference itself fails this pair**: its display headline sets that orange on cream at 2.33.
+We take its colour and not its mistake.
 
-**The flood — the landed reveal's ground.** The dark values are **not** the raw hues and must not be
-"fixed" to match them; a landed dark flood's relative luminance is capped at **≤ 0.08**.
+### The flood — the landed reveal's ground
 
-| face | light | dark | on-flood (dark) |
-|---|---|---|---|
-| hot | `#FF875C` | `#7A2E00` | `#FFFDF7` |
-| cobalt | `#2547E8` | `#0026DB` | `#FFFDF7` |
-| jade | `#00A870` | `#005338` | `#FFFDF7` |
-| sun | `#FFC300` | `#5B4500` | `#FFFDF7` |
+| face | ground | on-flood |
+|---|---|---|
+| hot | `#FF875C` | `#101114` |
+| cobalt | `#2547E8` | `#FFFDF7` |
+| jade | `#00A870` | `#101114` |
+| sun | `#FFC300` | `#101114` |
 
-`--flood-sun` reads olive rather than yellow at that ceiling. That is the ruled outcome, measured.
+### The die is an object, not a surface
 
-**The die is an object, not a surface:** `pip #101114` · `pipred #FF4438` · `diefill #FFFDF7` ·
-`dieedge #101114`, **identical in both schemes**. `pipred` is its own token and never follows an
-accent that flips.
+`pip #101114` · `pipred #FF4438` · `diefill #FFFDF7` · `dieedge #101114`.
 
-**Floors, re-measured whenever a value moves:** body text on any ground **≥ 4.5**; a purely
-graphical pair (a pip on a die face, a chip) **≥ 3.0**. Thirteen pairs stand, the thirteenth being
-the pinned bar against a landed flood of the same family.
+**`pipred` stays its own token even though the accent no longer flips.** It had two reasons and now
+has one: **a die is an object and its pips are red.** The second reason — that a scheme-flipping
+accent measured 2.74 on the bone face — died with the dark scheme, and is recorded here as spent so
+a later reader does not find half an argument and conclude the token is redundant.
+
+### Floors, re-measured whenever a value moves
+
+Body text on any ground **≥ 4.5**. A purely graphical pair (a pip on a die face, a chip, a focus
+ring) **≥ 3.0**. **Nine pairs stand, measured once each.**
 
 **`--radius: 0`** — set it in the shadcn theme, not per component.
 
 ---
+
+> ### There is no dark mode, and this is the ruling that removed it
+>
+> **Owner-ruled 2026-08-18: dark mode is dropped.** `color-scheme: light` — **declared explicitly,
+> not omitted**, or form controls and scrollbars still follow the OS and the removal is half-done in
+> the one place nobody screenshots.
+>
+> **It was never chosen.** It arrived in the first `app/` commit — the boot skeleton, 2026-08-11 —
+> as `color-scheme: light dark` with a `prefers-color-scheme` block, and no decision record ever
+> mentioned it. **It is the anti-default list's own failure case**: an unconsidered default that
+> slipped through because it predated the list.
+>
+> **What it cost while it lasted:** every colour pair measured twice, forever; every gate run doubled
+> across three widths; a flood-luminance ceiling that existed only for the dark scheme; a separate
+> pip token; and **the olive compromise — in dark, the sun face read olive rather than yellow**,
+> which degraded the product's central idea (the winning face's colour owning the screen) in one of
+> its four states.
+>
+> **What removing it costs, stated rather than hidden:** someone choosing dinner at night gets a
+> bright screen — and the flood ruling itself said this product is used *「often at night, often in
+> bed」*. Some readers expect an app to follow the system setting and read its refusal as unfinished.
+>
+> **Do not re-add a dark variant of a token to be helpful.** If dark mode returns it is a design
+> project — a photographic home on a near-black ground is a different product, and it would need
+> designing rather than inverting.
 
 ## 2 · Type
 
@@ -259,6 +287,16 @@ One was a **false pass** that let a real defect through.
 Two more that mislead the same way: **`innerText` is empty inside a closed `<details>`** though its
 box exists; and **a disabled control is not a faded filled one** — the treatment drops the ground.
 
+**Tailwind 4 tree-shakes any theme variable no utility references, and this produces a confident
+false reading.** A probe asking for `--color-pipred` before any component uses it gets an **empty
+string**, not the value — `getPropertyValue` returns nothing, the probe inherits, and pairs come
+back at exactly **1.00** as though the palette were broken. **The palette is fine; the token is not
+in the built CSS yet.** To verify a token before a screen consumes it, force its emission with a
+throwaway component, measure, delete it, and confirm `dist` is clean afterwards.
+
+**And pair a flood against its `on-flood` token, not against `paper`.** Measuring the wrong partner
+returned 2.33 / 1.99 where the real pairs are 7.98 / 9.31 — the page was right both times.
+
 **Under React, add one:** a stable hook for every part named in §4 — `data-part="bar"`,
 `data-part="row"`, and so on. **Class names will change every time the styling changes; the gate
 must not.**
@@ -269,8 +307,8 @@ must not.**
 
 - **There is a build step now.** After any change, rebuild the proxy image and bring it up, or you
   are looking at the old page. A stale image does not announce itself.
-- **Judge the built page, not the source.** Screenshot at **430 / 900 / 1440 / 2560** in **both
-  colour schemes**. 1440 is in the list because it is the reference's own viewport.
+- **Judge the built page, not the source.** Screenshot at **430 / 900 / 1440 / 2560**. 1440 is in
+  the list because it is the reference's own viewport. **One scheme — see §1.**
 - **The surface's tests live outside this directory and are not yours to edit.** Send the needed
   change to whoever owns that file.
 - **The rendered weight is asserted**, not assumed — see §2 on both faces defaulting to their
