@@ -51,6 +51,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Callable, Iterable, List, Optional, Set, Tuple
 
+from . import signature
+
 URL = "https://eip.fia.gov.tw/data/BGMOPEN1.zip"
 
 # Names the file, not the slice kept from it — the hash covers all 1.7M rows nationwide, so a
@@ -142,6 +144,10 @@ class TaxArchive:
     payload_bytes: int
     detected_at: datetime
     raw: bytes = field(default=b"", repr=False, compare=False)
+    # D102 / M3: the CSV's header, read in the same pass that reads the stamp row below it.
+    # Out of equality like `raw`: the content hash decides what is one publication.
+    column_signature: str = field(default="", compare=False)
+    column_names: tuple = field(default=(), repr=False, compare=False)
 
     def stamp_label(self) -> str:
         """What a verdict shows. A file whose stamp row is unreadable says so, never a date."""
@@ -237,24 +243,33 @@ def _open_csv(archive: zipfile.ZipFile, entry: zipfile.ZipInfo):
     return io.TextIOWrapper(archive.open(entry.filename), encoding="utf-8-sig", newline="")
 
 
-def _read_stamp(raw: bytes, entry_name: str) -> Optional[date]:
-    """Decompress the first few kilobytes only, and read row 2.
+def _read_head(raw: bytes, entry_name: str) -> tuple[Optional[date], str, list]:
+    """Decompress the first few kilobytes only, and read rows 1 and 2 — header, then stamp.
 
     A zip entry is a stream, so taking two lines costs two lines. This is what keeps the stamp
     a *cheap* signal: it is read on every run, including the twenty-nine in thirty that will
     turn out to have nothing to store.
+
+    **Renamed from `_read_stamp` and widened by D102**, because the header row was already being
+    read here and thrown away — row 1 is the header and row 2 is the stamp, so M3's column
+    signature was one line already paid for. Reading it in a second pass would have decompressed
+    the same kilobytes twice to learn something this function had in its hand.
     """
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         with _open_csv(archive, archive.getinfo(entry_name)) as stream:
             reader = csv.reader(stream)
             try:
-                next(reader)  # the header
+                header = next(reader)
+            except StopIteration:
+                return None, "", []
+            shape, names = signature.from_csv_header(header)
+            try:
                 stamp_row = next(reader)
             except StopIteration:
-                return None
+                return None, shape, names
     if not stamp_row:
-        return None
-    return parse_stamp(stamp_row[0])
+        return None, shape, names
+    return parse_stamp(stamp_row[0]), shape, names
 
 
 def read_archive(raw: bytes, detected_at: datetime, source: str = SOURCE) -> TaxArchive:
@@ -271,7 +286,7 @@ def read_archive(raw: bytes, detected_at: datetime, source: str = SOURCE) -> Tax
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             entry = _single_entry(archive)
             name, size = entry.filename, entry.file_size
-        stamp = _read_stamp(raw, name)
+        stamp, shape, names = _read_head(raw, name)
     except zipfile.BadZipFile:
         raise FiaUnavailable("{}: the download is not a zip archive".format(source)) from None
     except UnicodeDecodeError as failure:
@@ -287,6 +302,8 @@ def read_archive(raw: bytes, detected_at: datetime, source: str = SOURCE) -> Tax
         payload_bytes=len(raw),
         detected_at=detected_at,
         raw=raw,
+        column_signature=shape,
+        column_names=tuple(names),
     )
 
 

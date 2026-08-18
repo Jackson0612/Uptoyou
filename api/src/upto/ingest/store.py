@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import signature
 from .cwa import FORECAST_DATASET, Publication
 
 
@@ -41,8 +42,11 @@ class StoreResult:
 
 
 INSERT_PUBLICATION = """
-insert into {table} (dataset_id, content_sha256, detected_at, payload_bytes)
-values (:dataset_id, :content_sha256, :detected_at, :payload_bytes)
+insert into {table}
+    (dataset_id, content_sha256, detected_at, payload_bytes, column_signature, column_names)
+values
+    (:dataset_id, :content_sha256, :detected_at, :payload_bytes,
+     :column_signature, :column_names)
 on conflict (dataset_id, content_sha256) do nothing
 returning id
 """
@@ -73,6 +77,10 @@ async def store_publication(session: AsyncSession, publication: Publication) -> 
             "content_sha256": publication.content_sha256,
             "detected_at": publication.detected_at,
             "payload_bytes": publication.payload_bytes,
+            # D102 / M3: the payload's shape — the key set of one reading-bearing record, since a
+            # JSON feed has no header. `NULL` on a publication that predates the signature.
+            "column_signature": publication.column_signature or None,
+            "column_names": signature.as_json(publication.column_names),
         },
     )
     publication_id = inserted.scalar()

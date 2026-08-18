@@ -13,6 +13,7 @@ from typing import Optional, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import signature
 from .foodtracer import Sheet
 from .gcis import StatusRow
 
@@ -20,9 +21,11 @@ CHUNK = 5000
 
 CLAIM_PUBLICATION = """
 insert into business_status_publication
-    (source, content_sha256, detected_at, payload_bytes, scope)
+    (source, content_sha256, detected_at, payload_bytes, scope,
+     column_signature, column_names)
 values
-    (:source, :content_sha256, :detected_at, :payload_bytes, :scope)
+    (:source, :content_sha256, :detected_at, :payload_bytes, :scope,
+     :column_signature, :column_names)
 on conflict (source, content_sha256) do nothing
 returning id
 """
@@ -68,6 +71,10 @@ class BusinessStore:
                 "detected_at": sheet.detected_at,
                 "payload_bytes": sheet.payload_bytes,
                 "scope": scope,
+                # D102 / M3: the file's own shape, taken at identify time. `NULL` on a
+                # publication whose fetch predates the signature — nothing is backfilled.
+                "column_signature": sheet.column_signature or None,
+                "column_names": signature.as_json(sheet.column_names),
             },
         )
         return result.scalar()

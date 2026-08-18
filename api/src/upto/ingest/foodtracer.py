@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
+from . import signature
 from .fda import normalise
 
 # data.taipei resource 29869b6f… under dataset 147004 (食材登錄-臺北市食材登錄平台餐飲業者).
@@ -62,6 +63,15 @@ class Sheet:
     payload_bytes: int
     detected_at: datetime
     raw: bytes = field(default=b"", repr=False, compare=False)
+    # D102 / M3: the shape of the file this fetch was, taken at identify time from one header
+    # line. Excluded from equality for the same reason `raw` is — two fetches are the same
+    # publication when their content hashes agree, and the signature is derived from the content,
+    # so including it could only ever restate that or contradict it.
+    column_signature: str = field(default="", compare=False)
+    # Out of the repr as well as out of equality: `test_foodtracer_ingest` asserts the source's
+    # own words never reach a log line through this object, and a header row is the source's
+    # words — nine Chinese column names in every log line is also just noise.
+    column_names: tuple = field(default=(), repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -90,12 +100,15 @@ def read_sheet(raw: bytes, detected_at: datetime, source: str = SOURCE) -> Sheet
     """Identify a fetch without parsing it. The hash is of the served bytes, whole."""
     if not raw:
         raise FoodtracerUnavailable("{}: the download was empty".format(source))
+    shape, names = signature.csv_header(raw)
     return Sheet(
         source=source,
         content_sha256=hashlib.sha256(raw).hexdigest(),
         payload_bytes=len(raw),
         detected_at=detected_at,
         raw=raw,
+        column_signature=shape,
+        column_names=tuple(names),
     )
 
 

@@ -49,6 +49,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Optional
 
+from . import signature
+
 from ..seed.township_station import MAPPINGS as SEEDED_TOWNSHIPS
 
 URL = "https://data.fda.gov.tw/data/opendata/export/97/csv"
@@ -166,6 +168,11 @@ class Archive:
     payload_bytes: int
     detected_at: datetime
     raw: bytes = field(default=b"", repr=False, compare=False)
+    # D102 / M3: the shape of the CSV inside, read at identify time from its header row alone.
+    # Out of equality for the same reason `raw` is: two fetches are one publication when their
+    # content hashes agree, and this is derived from the content.
+    column_signature: str = field(default="", compare=False)
+    column_names: tuple = field(default=(), repr=False, compare=False)
 
     def stamp_label(self) -> str:
         """What item 14 shows. A publication with no stamp says so rather than showing a date."""
@@ -321,12 +328,20 @@ def _archive_stamp(entry: zipfile.ZipInfo) -> Optional[datetime]:
 
 
 def read_archive(raw: bytes, detected_at: datetime, source: str = SOURCE) -> Archive:
-    """Identify a fetch without decompressing it.
+    """Identify a fetch, decompressing one line of it and no more.
 
     The hash is of the compressed bytes, which is what D35 chose and what its cost bullet
     admits: a recompression of identical data would mint a false publication, and the stamp is
     right in exactly that case, which is the argument for storing both. The gain is that
     identity costs a directory read rather than a 99 MB parse.
+
+    **This used to say "without decompressing it", and D102 made that false rather than
+    imprecise — so it is corrected rather than left to be discovered.** M3's column signature is
+    read here, which means the header row is decompressed: a zip entry is a stream, so one line
+    costs one line, the same bounded read `fia._read_stamp` has always made to get its date. It is
+    emphatically not the parse — D34's claim-before-parse short-circuit, which M9 priced at 3.58 s
+    against 12.95 s on the tax source, is what would be lost if it were, and the whole reason the
+    signature is taken from a header instead of from a `ParseResult`.
     """
     if not raw:
         raise FdaUnavailable("{}: the download was empty".format(source))
@@ -336,6 +351,13 @@ def read_archive(raw: bytes, detected_at: datetime, source: str = SOURCE) -> Arc
             entry = _single_entry(archive)
             stamp = _archive_stamp(entry)
             name, size = entry.filename, entry.file_size
+            with archive.open(entry.filename) as binary:
+                # Best-effort, and `csv_header_from_stream` says why: a file that will not decode
+                # must still identify, because it always did, and the parse is where that failure
+                # belongs.
+                shape, names = signature.csv_header_from_stream(
+                    io.TextIOWrapper(binary, encoding="utf-8-sig", newline="")
+                )
     except zipfile.BadZipFile:
         raise FdaUnavailable("{}: the download is not a zip archive".format(source)) from None
     return Archive(
@@ -347,6 +369,8 @@ def read_archive(raw: bytes, detected_at: datetime, source: str = SOURCE) -> Arc
         payload_bytes=len(raw),
         detected_at=detected_at,
         raw=raw,
+        column_signature=shape,
+        column_names=tuple(names),
     )
 
 

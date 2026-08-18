@@ -30,6 +30,7 @@ from typing import Optional, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import signature
 from .fda import Archive, PlaceRow
 
 # One executemany per chunk. A single 36,499-parameter-set statement is one round trip that
@@ -40,10 +41,10 @@ CHUNK = 5000
 CLAIM_PUBLICATION = """
 insert into place_publication
     (source, content_sha256, archive_stamp, detected_at, payload_bytes,
-     entry_name, entry_bytes, scope)
+     entry_name, entry_bytes, scope, column_signature, column_names)
 values
     (:source, :content_sha256, :archive_stamp, :detected_at, :payload_bytes,
-     :entry_name, :entry_bytes, :scope)
+     :entry_name, :entry_bytes, :scope, :column_signature, :column_names)
 on conflict (source, content_sha256) do nothing
 returning id
 """
@@ -126,6 +127,10 @@ class PlaceStore:
                 "entry_name": archive.entry_name,
                 "entry_bytes": archive.entry_bytes,
                 "scope": scope,
+                # D102 / M3: the CSV's own header, read at identify time. `NULL` on a
+                # publication whose fetch predates the signature — nothing is backfilled.
+                "column_signature": archive.column_signature or None,
+                "column_names": signature.as_json(archive.column_names),
             },
         )
         return result.scalar()

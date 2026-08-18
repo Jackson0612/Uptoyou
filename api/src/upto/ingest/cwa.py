@@ -34,6 +34,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable
 
+from . import signature
+
 BASE = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/"
 FORECAST_DATASET = "F-D0047-061"
 OBSERVATION_DATASET = "O-A0001-001"
@@ -96,6 +98,11 @@ class Publication:
     payload_bytes: int
     forecast_rows: list[ForecastRow] = field(default_factory=list)
     observation_rows: list[ObservationRow] = field(default_factory=list)
+    # D102 / M3: the shape of the payload. These feeds are JSON and have no header row, so the
+    # signature is the **sorted key set of one reading-bearing record** — the object a parser
+    # actually reaches into. See `shape_of`.
+    column_signature: str = ""
+    column_names: tuple = field(default=(), repr=False)
 
 
 def tls_context() -> ssl.SSLContext:
@@ -287,6 +294,30 @@ def parse_observation(payload: dict) -> list[ObservationRow]:
     return rows
 
 
+def shape_of(dataset_id: str, payload: dict) -> tuple[str, list]:
+    """M3's signature for a JSON feed: the key set of the first record a parser reaches into.
+
+    **Which object counts as "the record" is the decision here.** A payload's top level is
+    envelope — `success`, `result`, `records` — and its shape barely moves; what a parser depends
+    on is the object it reads fields out of. For the observation feed that is one `Station`; for
+    the forecast it is one `Location` under the first `Locations` wrapper. So a renamed or vanished
+    `StationName` or `Geocode` moves the signature, and a change in the envelope does not.
+
+    Nothing raises here. A payload shaped so unexpectedly that the record cannot be found signs as
+    empty, and the parse — which is where an unreadable payload belongs — fails on its own terms a
+    few lines later.
+    """
+    records = (payload or {}).get("records") or {}
+    if dataset_id == FORECAST_DATASET:
+        wrapper = records.get("Locations") or []
+        locations = (wrapper[0].get("Location") or []) if wrapper else []
+        record = locations[0] if locations else None
+    else:
+        stations = records.get("Station") or []
+        record = stations[0] if stations else None
+    return signature.from_json_keys(record if isinstance(record, dict) else None)
+
+
 def fetch_publication(
     dataset_id: str,
     api_key: str,
@@ -296,11 +327,14 @@ def fetch_publication(
     """Fetch one dataset and reduce it to a Publication. Does not touch a database."""
     payload, raw = _fetch_json(dataset_id, api_key, opener=opener)
     clock = now or (lambda: datetime.now(timezone.utc))
+    shape, names = shape_of(dataset_id, payload)
     publication = Publication(
         dataset_id=dataset_id,
         content_sha256=content_digest(dataset_id, payload),
         detected_at=clock(),
         payload_bytes=len(raw),
+        column_signature=shape,
+        column_names=tuple(names),
     )
     if dataset_id == FORECAST_DATASET:
         publication.forecast_rows = parse_forecast(payload)

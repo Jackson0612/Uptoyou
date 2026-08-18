@@ -19,6 +19,7 @@ from typing import List, Optional, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import signature
 from .fia import INDUSTRY_COLUMNS, TaxArchive, TaxRow
 
 # One executemany per chunk, as in `fda_store`: about 14.5k rows arrive, and chunking bounds
@@ -28,10 +29,10 @@ CHUNK = 5000
 CLAIM_PUBLICATION = """
 insert into business_tax_publication
     (source, content_sha256, file_stamp, detected_at, payload_bytes,
-     entry_name, entry_bytes, scope)
+     entry_name, entry_bytes, scope, column_signature, column_names)
 values
     (:source, :content_sha256, :file_stamp, :detected_at, :payload_bytes,
-     :entry_name, :entry_bytes, :scope)
+     :entry_name, :entry_bytes, :scope, :column_signature, :column_names)
 on conflict (source, content_sha256) do nothing
 returning id
 """
@@ -129,6 +130,9 @@ class BusinessTaxStore:
                 "entry_name": archive.entry_name,
                 "entry_bytes": archive.entry_bytes,
                 "scope": scope,
+                # D102 / M3: the header row, read in the same pass as the file's stamp.
+                "column_signature": archive.column_signature or None,
+                "column_names": signature.as_json(archive.column_names),
             },
         )
         return result.scalar()
