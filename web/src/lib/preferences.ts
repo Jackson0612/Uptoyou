@@ -92,6 +92,24 @@ function auth(d: Device): HeadersInit {
   return { authorization: `Bearer ${d.token}` }
 }
 
+/**
+ * **The API's `detail` is written for whoever is holding a terminal, and 401's is written in
+ * English.** Driven on 2026-08-19 against a circle this credential does not hold: the preferences
+ * screen rendered 「the token does not resolve to a member of this circle」 — a developer's sentence,
+ * in the wrong language, on a screen whose whole promise is 「只有你看得到」.
+ *
+ * The same rule `round.ts` already follows, and it is a rule rather than a habit: **401 and 404 are
+ * about the credential and are answered in the surface's own words; every other status keeps the
+ * API's sentence**, because those are written for a person already and second-guessing them is how
+ * a screen comes to state something the server did not.
+ */
+async function said(r: Response, fallback: string): Promise<Error> {
+  if (r.status === 401) return new Error('這把鑰匙開不了這個圈子。回到裝置畫面重新貼一次。')
+  if (r.status === 404) return new Error('找不到這個圈子。')
+  const body = await r.json().catch(() => ({}))
+  return new Error((body as { detail?: string }).detail || `${fallback}（${r.status}）`)
+}
+
 export async function fetchPreferences(d: Device): Promise<Preferences> {
   const r = await fetch(`/api/circles/${encodeURIComponent(d.circle)}/preferences`, {
     headers: auth(d),
@@ -99,10 +117,7 @@ export async function fetchPreferences(d: Device): Promise<Preferences> {
     // from the GET; a cached read would pass that gate while proving nothing about the server.
     cache: 'no-store',
   })
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}))
-    throw new Error(body.detail || `讀取失敗（${r.status}）`)
-  }
+  if (!r.ok) throw await said(r, '讀取失敗')
   return r.json()
 }
 
@@ -124,8 +139,7 @@ export async function postPreference(
     body: JSON.stringify(body),
   })
   if (r.status === 204) return
-  const detail = await r.json().catch(() => ({}))
-  throw new Error(detail.detail || `寫入失敗（${r.status}）`)
+  throw await said(r, '寫入失敗')
 }
 
 /** `YYYY-MM` in Taipei, which is the boundary the database computed `expires_on` against. Reading
