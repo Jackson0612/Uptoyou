@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Die from './Die'
+import Evidence from './Evidence'
 import {
-  device, faceOf, fetchReveal, signTrip,
-  type Device, type MemberReveal, type Trip,
+  device, evidenceIn, faceOf, fetchRaw, signTrip,
+  type Device, type Evidence as EvidenceData, type MemberReveal, type Trip,
 } from '@/lib/reveal'
 
 /**
@@ -37,17 +38,22 @@ export default function Reveal({ roundId }: { roundId: number }) {
   const [landed, setLanded] = useState(false)
   const [error, setError] = useState('')
   const [trip, setTrip] = useState<Trip>(null)
+  /** `null` for a member, and for a member it is null because **nothing arrived** — not because
+   *  this component declined to read something that did. D105's whole point. */
+  const [evidence, setEvidence] = useState<EvidenceData | null>(null)
   const [signing, setSigning] = useState(false)
   const timer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     if (!dev) return
     let live = true
-    fetchReveal(dev, roundId)
-      .then((d) => {
+    fetchRaw(dev, roundId)
+      .then((raw) => {
         if (!live) return
+        const d = raw as MemberReveal
         setData(d)
         setTrip(d.trip)
+        setEvidence(evidenceIn(raw))
         // Demo scaffolding: the switcher's 開獎 stop needs a round to point at and there is no
         // endpoint for "this circle's latest". Recording the one actually looked at is the
         // cheapest honest answer, and it disappears with the switcher.
@@ -135,6 +141,12 @@ export default function Reveal({ roundId }: { roundId: number }) {
             claim the reader can check that, and it must not be dressed to imply so. */}
         <p className="sentence" data-part="sentence">三十六格已按權重分配</p>
       </div>
+
+      {/* **The operator's addition, and it appends BELOW the answer region** — §0: the operator
+          state is the member state plus two components, and nothing in the member state moves when
+          they are present. For a member `evidence` is null and this line renders nothing, because
+          nothing arrived to render. */}
+      {evidence && data && <Evidence ev={evidence} places={data.places} />}
 
       {/* D106 — the trip is named, the proposal never is. Signing is the one place a member's
           identity is recorded and kept; the proposal's author was erased by D14's trigger when the

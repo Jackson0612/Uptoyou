@@ -249,3 +249,66 @@
    against that ground. */
 .reveal ~ .backLink,
 .reveal ~ .switcher { background: transparent; color: inherit; }
+
+/* ── the operator's evidence (D105, §4b) ────────────────────────────────────
+   Appends below the answer region. Nothing above it moves when it is present. */
+
+/* **It takes a paper ground, and that is a correction rather than a preference.** The flood IS the
+   winning place's own face colour — so on a jade win the winner's `CHIP` and its twelve `ALLOC36`
+   cells were jade on jade and simply disappeared. The grid then read as twenty-four cells and
+   twelve holes, which is a false statement about the allocation, made by the one figure whose job
+   is to be checkable. On paper all four faces are legible at once, and a paper block after a
+   colour block is `§3`'s own idiom: blocks stack edge to edge and the colour change is the
+   separation. Nothing above it moves — `§0`'s rule that the operator state is the member state
+   plus two components. */
+.reveal .evidence {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100vw;
+  margin-top: 32px;
+  padding: 24px max(6vw, calc((100vw - 1200px) / 2)) 24px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  border-top: 3px solid var(--color-ink);
+}
+
+/* ALLOC36 — 6 × 6, cells ≥ 36 px square (§3's rescue floor, carried from R-D3). Below that the
+   blocks stop being countable and the figure becomes a texture. */
+.reveal .alloc36 {
+  display: grid;
+  grid-template-columns: repeat(6, 36px);
+  grid-auto-rows: 36px;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.reveal .allocCell { border: 1.5px solid var(--color-ink); }
+.reveal .allocCell[data-face="hot"]    { background: var(--color-hot); }
+.reveal .allocCell[data-face="cobalt"] { background: var(--color-cobalt); }
+.reveal .allocCell[data-face="jade"]   { background: var(--color-jade); }
+.reveal .allocCell[data-face="sun"]    { background: var(--color-sun); }
+
+.reveal .evTable { border-collapse: collapse; flex: 1 1 420px; text-align: left; }
+.reveal .evTable th {
+  font-size: var(--text-note); font-weight: 700; letter-spacing: .02em;
+  opacity: .75; padding: 0 12px 8px 0;
+}
+.reveal .evTable td {
+  font-size: var(--text-body); padding: 10px 12px 10px 0;
+  border-top: 1.5px solid var(--color-ink);
+}
+.reveal .evPlace { display: flex; align-items: center; gap: 10px; }
+/* CHIP — 12 × 12, radius 0, 1.5px ink. Identity, never quantity. */
+.reveal .chip { width: 12px; height: 12px; flex: 0 0 12px; border: 1.5px solid var(--color-ink); }
+.reveal .chip[data-face="hot"]    { background: var(--color-hot); }
+.reveal .chip[data-face="cobalt"] { background: var(--color-cobalt); }
+.reveal .chip[data-face="jade"]   { background: var(--color-jade); }
+.reveal .chip[data-face="sun"]    { background: var(--color-sun); }
+.reveal .evNum { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700;
+                 white-space: nowrap; }
+.reveal .evOf { font-size: var(--text-note); font-weight: 400; opacity: .7; }
+.reveal .evWhy { font-size: var(--text-note); }
+.reveal .evFactor { display: block; }
+.reveal .evNone { opacity: .55; }

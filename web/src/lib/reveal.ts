@@ -27,13 +27,39 @@ export type MemberReveal = {
   trip: Trip
 }
 
+/** One factor the fold actually applied. `reason` is `null` unless D13 lets it travel — a
+ *  `represented_member` reason reaches that member alone and nobody else, **including the
+ *  operator**, who audits the arithmetic rather than the people. */
+export type Factor = {
+  channel: string
+  contributor: string
+  effect: string
+  reason: string | null
+}
+
 /** Operator only. Kept in a separate type so that nothing which renders a member screen can even
  *  name these fields — §8's build order made concrete: member state complete first, because
  *  building the operator state and subtracting is how a field survives in the member payload. */
-export type OperatorReveal = MemberReveal & {
+export type Evidence = {
   weights: Record<string, string>
   allocation: Record<string, number>
-  panel: Record<string, { factors: unknown[]; clamps: unknown[] }>
+  panel: Record<string, { factors: Factor[]; clamps: unknown[] }>
+}
+
+/**
+ * The accounting, or `null` for a member — **read from the response rather than from a role flag**.
+ *
+ * D105 puts the role on the credential and the shape on the response, so *is this an operator* is
+ * answered by asking what arrived, never by asking who is asking. A client that decided this from
+ * a stored flag would be one bug away from rendering a table it did not receive, and one bug the
+ * other way from hiding one it did — and neither failure would show on a member's screen, which is
+ * the only place it would matter.
+ */
+export function evidenceIn(body: unknown): Evidence | null {
+  const b = body as Partial<Evidence>
+  if (!b || typeof b !== 'object') return null
+  if (!b.allocation || !b.weights || !b.panel) return null
+  return { weights: b.weights, allocation: b.allocation, panel: b.panel }
 }
 
 /** design.md §1: the four face colours, cycled by **pool seat**. Identity, never quantity — the
@@ -67,6 +93,13 @@ export function device(): Device | null {
  * needs no second endpoint to read a result, and why a reload after the roll is not a special case.
  */
 export async function fetchReveal(d: Device, roundId: number): Promise<MemberReveal> {
+  return (await fetchRaw(d, roundId)) as MemberReveal
+}
+
+/** The response untouched. The reveal needs both halves of it — the member fields it renders and,
+ *  for an operator credential, the accounting that arrived alongside them — and asking twice would
+ *  mean two rolls' worth of requests for one screen. */
+export async function fetchRaw(d: Device, roundId: number): Promise<unknown> {
   const r = await fetch(`/api/rounds/${roundId}/roll`, {
     method: 'POST',
     headers: { authorization: `Bearer ${d.token}` },
