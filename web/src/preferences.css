@@ -1,0 +1,196 @@
+/* A2 — the private preference screen's geometry.
+
+   Every value is a token or a step from `design.md` §3 (spacing 4 · 8 · 12 · 16 · 20 · 24 · 32;
+   rules 3px / 2px / 1.5px; radius 0; no shadow except the one hard offset, which this screen has
+   no object for). Nothing here invents a colour or a size.
+
+   Everything is scoped under `.prefs`. `index.css` imports this file, and an unscoped selector
+   here would reach the home screen — which is under a PIXEL DIFF gate, so a stray rule would fail
+   a gate on a screen this file has no business touching. */
+
+.prefs {
+  /* **Narrower than the system's `min(1200px, 88vw)` content column, and this is a proposal for
+     the evaluator rather than a settled value.** Measured at 1440: the content column stretches a
+     ROW to 1200 px, which puts the keep control roughly a thousand pixels from the row name it
+     belongs to — the eye cannot pair them, and a settings list is a single column of controls
+     rather than the hero and the evidence table the wide column exists for. 720 keeps the pair
+     readable at desktop and changes nothing at 430, where 88vw already wins. */
+  width: min(720px, 88vw);
+  margin: 0 auto;
+  /* No `--bar-h` reservation: this screen carries no pinned BAR, because whether it has one is
+     part of `[OPEN-2]`'s frame. Reserving space for a bar that may never exist would leave a band
+     of dead paper at the foot of a settings screen. */
+  padding-block: 20px 32px;
+}
+
+.prefsTitle {
+  font-size: var(--text-display);
+  font-weight: 900;
+  letter-spacing: .01em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.prefsH {
+  font-size: var(--text-lead);
+  font-weight: 900;
+  letter-spacing: .02em;
+  margin: 0 0 12px;
+}
+
+/* The house note: `--t-note` in muted ink. Every coverage sentence, every provenance line and
+   every state caption on this screen is this one class — a second note style would be a second
+   voice for the same job. */
+.prefsNote {
+  font-size: var(--text-note);
+  color: var(--color-muted);
+  line-height: 1.7;
+  margin: 12px 0 0;
+}
+
+/* The API's own detail, never a sentence invented here — the same rule the home screen keeps for
+   a failed weather read. `hot-ink` because it is a mark on paper: `hot` measures 2.33 there. */
+.prefsErr {
+  font-size: var(--text-body);
+  color: var(--color-hot-ink);
+  border: 2px solid var(--color-hot-ink);
+  padding: 12px 16px;
+  margin: 20px 0 0;
+}
+
+/* Separation is a rule, not a card and not a ground (§3). */
+.prefsBlock {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 3px solid var(--color-ink);
+}
+
+/* ── A · the two bands ──────────────────────────────────────────────────────
+   GHOST at rest, ink fill when chosen. **The chosen band is this screen's ONE filled control**,
+   which is why no other control here takes a ground. */
+.bandRow { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.band {
+  min-height: 48px;
+  padding: 0 24px;
+  border: 2px solid var(--color-ink);
+  background: transparent;
+  color: var(--color-ink);
+  font-size: var(--text-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+.band[data-chosen="yes"] {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+/* EXPIRED: the ground drops and the border dashes — design.md's own vocabulary for a control that
+   is present and not acting. It is still tappable, and that tap is the re-affirmation, so the
+   label keeps ink rather than going muted: a muted label would read as disabled, and a disabled
+   control cannot be the one control G9 requires this state to carry. */
+.band[data-expired="yes"] {
+  background: transparent;
+  color: var(--color-ink);
+  border-style: dashed;
+}
+.band:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 1px; }
+.band:disabled { cursor: not-allowed; }
+
+@media (min-width: 900px) {
+  .band { min-height: 52px; }
+}
+
+/* ── the keep choice ────────────────────────────────────────────────────────
+   A square marker and a label, never a fill: the fill belongs to the band. The marker is the
+   system's own square — 12px, radius 0, 1.5px ink — filled when kept. */
+.keep {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 8px 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-muted);
+  font-size: var(--text-note);
+  cursor: pointer;
+}
+.keep[data-kept="yes"] { color: var(--color-ink); font-weight: 700; }
+.keep:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+.keep:disabled { cursor: not-allowed; }
+
+.mark {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 1.5px solid var(--color-ink);
+  background: transparent;
+}
+.keep[data-kept="yes"] .mark { background: var(--color-ink); }
+
+/* ── B / B-bis · the rows ───────────────────────────────────────────────────
+   ROW per design.md: 56 / 60 / 68 px, a 1.5px ink bottom rule, last row none, never alternating
+   ground. Ten and eleven of them run past a phone's fold, which the spec rules correct: this is a
+   settings screen, not a fold. */
+.rows { list-style: none; margin: 0; padding: 0; }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  border-bottom: 1.5px solid var(--color-ink);
+}
+.rows .row:last-child { border-bottom: 0; }
+
+@media (min-width: 900px) {
+  .row { min-height: 60px; }
+}
+
+/* The row's single control fills the row, so the tap target is the row and not a small square at
+   its edge. Its MEANING is the row's state — set, affirm, or un-set — which is why there is one
+   of it and not a toggle beside a confirm. */
+.rowTap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 56px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--color-ink);
+  font-size: var(--text-body);
+  text-align: left;
+  cursor: pointer;
+}
+.rowTap:focus-visible { outline: 2px solid var(--color-ring); outline-offset: -2px; }
+.rowTap:disabled { cursor: not-allowed; }
+
+.rowName { font-weight: 400; }
+
+/* An avoided row is MARKED, not filled and not struck through: a strike would read as deleted, and
+   nothing here deletes.
+
+   **Scoped to `.rowTap`, and the scope is the whole point.** A row carries TWO markers — the
+   stance's and the keep choice's — and a descendant selector on `.row` painted both from the
+   stance, so an avoided row rendered as *kept* on first render. That is D17's default reported
+   wrongly by a stylesheet, which is exactly the state A2-G6 exists to catch, and it was invisible
+   in the markup because the marker was right there in the DOM with the correct `data-kept="no"`. */
+.row[data-on="yes"] .rowTap .mark,
+.row[data-on="on"] .rowTap .mark { background: var(--color-ink); }
+
+/* The asking state — carried from a previous month or arrived on a new device. Dashed rather than
+   solid, because the fact is real and this device has not yet been shown it. */
+.row[data-on="asking"] .rowTap .mark { background: transparent; border-style: dashed; }
+
+.rowState {
+  font-size: var(--text-note);
+  font-weight: 700;
+  color: var(--color-hot-ink);
+  letter-spacing: .02em;
+}
+.rowState.asking { font-weight: 400; color: var(--color-muted); }
+
+.keepInline { margin-top: 0; flex: 0 0 auto; }

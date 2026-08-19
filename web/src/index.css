@@ -5,6 +5,7 @@
    be able to add a utility to the system it documents. */
 @import "tailwindcss" source("./");
 @import "./home.css";
+@import "./preferences.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
