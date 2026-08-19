@@ -60,6 +60,38 @@ WEATHER_WORDS = ["降雨機率", "體感溫度", "weather_code", "weather_text",
 # `screens/home/Weather.tsx` all count — because the rule is about which screen, not which file.
 HOME_HINT = re.compile(r"(^|[/\\])home([/\\.]|$)", re.I)
 
+# **And the modules that are the home without being named it. Added 2026-08-19.**
+#
+# The pattern above was written against a layout that no longer exists, and it went stale the way
+# every naming convention does: D104's port put the home screen's root in `App.tsx` and its lookup
+# tables in `lib/weather.ts`, so the two files that legitimately hold weather read as "not the home"
+# and D20's second half started failing on correct code. Reported by the frontend session, which
+# checked it against HEAD first and did not touch this file.
+#
+# **Widening the pattern was the obvious fix and it is the wrong one.** Any regex loose enough to
+# admit `App.tsx` and `lib/` admits every module in the tree, which turns this assertion into "any
+# file may mention weather" — deleting the rule with extra steps. So the exemption is a list
+# instead. Adding to it is a visible act in a diff someone reviews; a new screen that mentions
+# weather still fails, which is the entire point of the rule.
+#
+# **Each entry says why it is the home rather than merely being allowed**, because a bare list of
+# paths decays into a list of whatever was failing that week.
+HOME_MODULES = {
+    # The home screen's root. It IS the home — the only screen the React port has so far — and the
+    # day a router arrives this line is what has to be re-argued rather than quietly kept.
+    "src/App.tsx": "the home screen's root component",
+    # The measure→label tables. Not a place weather is *shown*: D20's rule is about which screen
+    # displays it, and a lookup table displays nothing. It is listed rather than exempted by folder
+    # so that a second `lib/` module holding weather has to be argued for too.
+    "src/lib/weather.ts": "the home screen's weather vocabulary, displayed by nothing itself",
+}
+
+
+def is_home(relative_path: str) -> bool:
+    """Whether a module is the home screen's, by name or by the explicit list."""
+    return bool(HOME_HINT.search(relative_path)) or \
+        relative_path.replace(os.sep, "/") in HOME_MODULES
+
 LINE_COMMENT = re.compile(r"//[^\n]*")
 BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
@@ -200,12 +232,48 @@ class WeatherStaysOnTheHomeScreen(unittest.TestCase):
     def test_no_module_outside_the_home_mentions_weather(self):
         elsewhere = {
             path: hits for path, hits in self.modules_mentioning_weather().items()
-            if not HOME_HINT.search(path)
+            if not is_home(path)
         }
         self.assertEqual(
             elsewhere, {},
             "D20: weather belongs to the home screen and nowhere else; found it in " +
             ", ".join("{} ({})".format(path, "/".join(hits)) for path, hits in elsewhere.items()),
+        )
+
+    def test_every_listed_home_module_still_exists(self):
+        """**The list must not outlive the files in it.**
+
+        This is the failure the list replaced, wearing a different hat: `HOME_HINT` went stale because
+        nothing told it the layout had moved, and an exemption list rots exactly the same way — rename
+        `lib/weather.ts` and the entry lingers, exempting a path that is not there while the real file
+        is unexempted and failing. Worse, an entry for a deleted module reads as a *reason* to a future
+        reader, so the stale list is more misleading than the stale regex was.
+
+        So the list is checked against the disk. A rename must move the entry, and the diff that
+        renames the file is the diff that has to.
+        """
+        missing = [path for path in sorted(HOME_MODULES)
+                   if not os.path.exists(os.path.join(WEB, path))]
+        self.assertEqual(
+            missing, [],
+            "HOME_MODULES exempts {} which no longer exist(s) under app/web/. An exemption for an "
+            "absent file exempts nothing and reads as a reason — move the entry with the rename."
+            .format(", ".join(missing)),
+        )
+
+    def test_the_exemption_list_is_not_a_blanket(self):
+        """A list that grew to cover the whole surface would pass everything, which is H34's shape.
+
+        Not a style rule — it is the failure mode of the fix. The reason a list was chosen over a
+        wider pattern is that each addition is visible; a list nobody pushes back on becomes the
+        pattern it replaced.
+        """
+        modules = source_files()
+        self.assertLess(
+            len(HOME_MODULES), max(2, len(modules) // 2),
+            "HOME_MODULES exempts {} of {} modules. Past roughly half, D20's second half is no "
+            "longer asserting anything — if the surface really is that weather-heavy, the rule needs "
+            "re-arguing rather than the list needs extending.".format(len(HOME_MODULES), len(modules)),
         )
 
     def test_the_positive_half_says_what_it_waits_for(self):
@@ -216,7 +284,7 @@ class WeatherStaysOnTheHomeScreen(unittest.TestCase):
         does, the check above fails.
         """
         mentions = self.modules_mentioning_weather()
-        if any(HOME_HINT.search(path) for path in mentions):
+        if any(is_home(path) for path in mentions):
             return
         print("\nweb surface: no module mentions weather yet, so D20's positive half (the home "
               "screen DOES show it) is not yet assertable. It arms itself when a home module "
