@@ -220,6 +220,8 @@ component to obtain a part in this column; write it.
 | `ROW` | **custom** | one place in a list. `min-height` 56/60/68, `1.5px ink` bottom rule (last row none), name `text-body`, a `CHIP` at the left. Rows never alternate ground. |
 | `CHIP` | **custom** | `12 × 12 px` square, radius 0, `1.5px ink` border, filled from the `FACES = [hot, cobalt, jade, sun]` cycle keyed by pool seat. **Identity, never quantity** — no share, weight or count. |
 | `COLLAGE` | **custom** | the home entry's images (`D95`), 2×2 offset, each `2px ink` border + the §3 hard offset shadow, radius 0. **A pool of ten, four visible, one cell swapping every 10 s** (owner-ruled 2026-08-18) — the geometry never moves, only the photograph inside a fixed box. Every image carries `alt` naming the dish and describing the frame, and **the `alt` swaps with the image**. **A picture that cannot be named truthfully does not ship** (owner-ruled 2026-08-18: the menu is drawn only from dishes the generator renders truthfully, and breadth across `D38`'s ten categories chooses it — not taste in food). Rotation, loading, pool order and the `HC` gate: `idea & img/evaluator/spec-home-collage-rotation.md`. |
+**`R-D9`'s dice figure is a FLOOR and has been read as a SIZE — named 2026-08-19 by `frontend`, unresolved.** *At least 18% of viewport height at 430* says how small the dice may get before the screen has failed. **Nothing has ever ruled how large they should be when there is room**, so at 900+ they sit at 180 px under a winner name six times their height — **the mechanism of the whole product as the smallest, most crowded object on the screen.** A floor answers *when is it broken*; it does not answer *what should this look like*. **This is a composition ruling nobody has made, and it is probably most of why six animations were rejected on it.**
+
 | `DIE` | **custom** | the 3-D cube — **it already is one**; six faces, `rotateX`/`rotateY`, `translateZ`. It lands **face-on**, which is why the resting state reads flat to a viewer. **If a tilted resting angle is ever ruled (raised by the owner 2026-08-19, unruled), one constraint binds it and it is not cosmetic: the landed face's pip count must stay unambiguous — a person reads the number without counting twice.** The landed face is the only place the roll's result is legible, and `D91` forbids the animation misrepresenting a decided result; the resting frame is where that result is asserted. Foreshortening the winning face while neighbouring faces contribute pips is exactly that failure, so **a small angle that keeps one face dominant is the target — near-corner-on views, where three faces sit at similar prominence, are where it breaks.** Choose by rendering candidates and ruling from them, never by picking a number (frontend's constraint, 2026-08-19). One variable, `--die`, at **140**/180/240 px; the `translateZ` that closes the six faces **derives from it** — change the value, never the derivation. **140, not 132, ruled 2026-08-19** (frontend found the conflict; the recommendation was its): 132 is **17.37%** of 760 against `R-D9`'s **18%** floor, so the token contradicted the gate it is measured by. 136.8 px is the exact floor and 140 clears it at 18.42% with margin for a border. **The floor was not moved to fit the token** — a target adjusted to pass its own test measures nothing, and 18% came from R-D9's measurement of the reference. Parked-width note: 430 is out of scope under §7b, so this changes nothing today; it is fixed now because a known contradiction left in this file is one the next reader has to rediscover. |
 
 ### §4b · The reveal has two states, and they are not a permission toggle over one design — `D105`
@@ -278,6 +280,29 @@ never "filled".**
 
 **Nothing scroll-triggered, no entrance animation on a block, nothing springy.** Disable shadcn's
 default enter/exit animations where they are not one of the three above.
+
+### The dependency shelf — owner-ruled 2026-08-19
+
+**The rule first: nothing is adopted because a reference has it.** The owner declined to walk
+`got-you.vercel.app`'s stack item by item. **This list is a shelf to reach for when a real need
+arises — propose then, through orchestrator, with recommendation, cost and reason.** `design.md`'s
+dependency rule stands: anything with a cost goes up before it goes in.
+
+| | ruling |
+|---|---|
+| **Next.js** | **不換.** Vite stays. |
+| **Cloudflare** | **要** — the public-deployment ruling comes later. |
+| **`motion`** | **approved and in** (D104 amendment, `115ad08`) — LazyMotion, minimal features, +27,815 B gzipped measured, bundled not fetched. |
+| **Zustand** | **not now.** One SSE snapshot is the truth; a store would be a second one. |
+| **React Hook Form + Zod** | **not now** — the forms are tiny. |
+| **Day.js · DayPicker · react-icons · overlayscrollbars · linkify** | no need today. |
+| **Supabase** | **no.** Our own Postgres + FastAPI **is** the portfolio; replacing it with a hosted backend deletes the thing being shown. |
+| **Vercel** | a deployment question, later. |
+| **Google Places** | **narrow only** — live photos and hours **of the winner**, on the reveal, **never stored**. Needs its own card. Research summary in `decision-log` 2026-08-19 night. |
+
+**Why a shelf rather than a stack:** every entry above is a real dependency with a real payload, and
+**the one we did adopt was adopted on evidence — six rejected animations — not on a reference having
+it.** That is the bar for the next one.
 
 ### Reference sources, and what each one is good for — recorded 2026-08-19
 
