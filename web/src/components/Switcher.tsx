@@ -15,10 +15,11 @@
  * approved page leaves empty. Raised with the evaluator rather than done quietly; if they want it
  * in the masthead it is a two-line change and the fidelity gate pays for it.
  *
- * **Three destinations, not five.** Home, preferences and reveal exist; the device and round
- * screens do not. A demo that walks a person into a blank page is worse than a demo with three
- * stops, so unbuilt screens are absent rather than present-and-dead — the same argument §1a makes
- * about a disabled control being a door. Each is one entry here when its screen lands.
+ * **Five destinations, all of them built as of A4.** The rule that got them here stands and is
+ * worth keeping: a stop appears when its screen exists, never before — a demo that walks a person
+ * into a blank page is worse than a demo with fewer stops, which is §1a's argument that a disabled
+ * control is still a door. The reveal is the one that still comes and goes, because it needs a
+ * round to point at.
  */
 
 /** The reveal needs a round to show. Rather than invent one, the entry carries the last round this
@@ -39,6 +40,8 @@ type Stop = { href: string; label: string }
 function stops(): Stop[] {
   const list: Stop[] = [
     { href: '/', label: '首頁' },
+    { href: '/device', label: '裝置' },
+    { href: '/round', label: '這一餐' },
     { href: '/preferences', label: '偏好' },
   ]
   const round = lastRound()

@@ -6,6 +6,8 @@ import Preferences from './components/preferences/Preferences.tsx'
 import Reveal from './components/reveal/Reveal.tsx'
 import Switcher from './components/Switcher.tsx'   // demo scaffolding — see the component
 import Back from './components/Back.tsx'           // demo scaffolding — owner-ruled 2026-08-19
+import DeviceScreen from './components/device/Device.tsx'
+import Round from './components/round/Round.tsx'
 
 /**
  * One path, one screen — read once at boot, with no router library.
@@ -30,6 +32,8 @@ import Back from './components/Back.tsx'           // demo scaffolding — owner
 function route() {
   const path = window.location.pathname.replace(/\/+$/, '')
   if (path === '/preferences') return <Preferences />
+  if (path === '/device') return <DeviceScreen />
+  if (path === '/round') return <Round />
   if (path === '/reveal') {
     const round = Number(new URLSearchParams(window.location.search).get('round'))
     return Number.isFinite(round) && round > 0 ? <Reveal roundId={round} /> : <App />

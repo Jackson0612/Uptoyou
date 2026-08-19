@@ -157,6 +157,15 @@
      CJK descenders overflow a 1.08 line, and `RV-5` measures this region, so a clip here is both
      a visible defect and a wrong number. */
   line-height: 1.16;
+  /* **Two lines are reserved whether the name needs them or not**, and this is what makes `R-D9`'s
+     answer-region floor a property of the screen rather than of the restaurant. Measured: the same
+     build gave **41.2%** of a 900-tall viewport for a one-line winner and **52.2%** for a two-line
+     one — the gate's verdict was being decided by how long the winning place happened to be
+     called, which is a gate measuring content. Reserving the second line makes it 52.2% for every
+     name, and member state has no ceiling to spend (`D105`: floor only), so the room costs
+     nothing. It also holds the box still across rounds, which is `D91`'s zero-shift argument one
+     level up: the moment should not resize with the answer. */
+  min-height: 2.32em;   /* 2 × 1.16 — the line-height above, never a typed pixel count */
   /* The CJK face's ascent and descent exceed even a 1.16 line box, so the element's own box
      reported 6 px of overflow at 430 and 15 px at 2560. Nothing has `overflow: hidden`, so the
      glyphs were painting correctly — but an overflow an inspector reports is a finding the gate
