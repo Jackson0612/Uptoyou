@@ -220,7 +220,7 @@ component to obtain a part in this column; write it.
 | `ROW` | **custom** | one place in a list. `min-height` 56/60/68, `1.5px ink` bottom rule (last row none), name `text-body`, a `CHIP` at the left. Rows never alternate ground. |
 | `CHIP` | **custom** | `12 × 12 px` square, radius 0, `1.5px ink` border, filled from the `FACES = [hot, cobalt, jade, sun]` cycle keyed by pool seat. **Identity, never quantity** — no share, weight or count. |
 | `COLLAGE` | **custom** | the home entry's images (`D95`), 2×2 offset, each `2px ink` border + the §3 hard offset shadow, radius 0. **A pool of ten, four visible, one cell swapping every 10 s** (owner-ruled 2026-08-18) — the geometry never moves, only the photograph inside a fixed box. Every image carries `alt` naming the dish and describing the frame, and **the `alt` swaps with the image**. **A picture that cannot be named truthfully does not ship** (owner-ruled 2026-08-18: the menu is drawn only from dishes the generator renders truthfully, and breadth across `D38`'s ten categories chooses it — not taste in food). Rotation, loading, pool order and the `HC` gate: `idea & img/evaluator/spec-home-collage-rotation.md`. |
-| `DIE` | **custom** | the 3-D cube. One variable, `--die`, at 132/180/240 px; the `translateZ` that closes the six faces **derives from it** — change the value, never the derivation. |
+| `DIE` | **custom** | the 3-D cube. One variable, `--die`, at **140**/180/240 px; the `translateZ` that closes the six faces **derives from it** — change the value, never the derivation. **140, not 132, ruled 2026-08-19** (frontend found the conflict; the recommendation was its): 132 is **17.37%** of 760 against `R-D9`'s **18%** floor, so the token contradicted the gate it is measured by. 136.8 px is the exact floor and 140 clears it at 18.42% with margin for a border. **The floor was not moved to fit the token** — a target adjusted to pass its own test measures nothing, and 18% came from R-D9's measurement of the reference. Parked-width note: 430 is out of scope under §7b, so this changes nothing today; it is fixed now because a known contradiction left in this file is one the next reader has to rediscover. |
 
 ### §4b · The reveal has two states, and they are not a permission toggle over one design — `D105`
 
@@ -334,6 +334,38 @@ What still counts as a defect:
    holds high-saturation pixels to **10.8%** of the frame; a home at **36.7%** is the state the
    owner rejected. **Target: keep it under 20% and moving toward the reference.**
 7. **A screen with no imagery where imagery is what carries the subject.** `D95`
+
+---
+
+## 7b · DEMO SCOPE — owner-ruled 2026-08-19, and it overrides the widths everywhere below
+
+**「先捨棄手機，目前在趕進度，像 lawcidity 一樣有個 demo 網頁就好」.**
+
+**The target is one width: 1440 — the approved page's own viewport.** Every spec in
+`idea & img/evaluator/` states numbers at 430 / 900 / 2560; **while this section stands, only the
+1440 column is built and only the 1440 column is gated.** The others are not deleted from the specs,
+because deleting them is how they come back as guesswork.
+
+**What this is and is not.** It is a portfolio demo — a page that shows the mechanism and the data
+pipeline to someone assessing the work. It is **not** the shipped product. The product's real use is
+five friends on five phones deciding where to eat, and a desktop-only build cannot do that job. That
+cost is accepted deliberately, on a deadline, by the owner.
+
+**Carried, not lost — the phone findings that were open when this landed:**
+
+- **430's vertical rhythm compounds tighter than the approved page** — every gap ~1–2 px smaller,
+  reaching **7.7 px at the collage** (inside ±8 px, at its edge), and aligning the frames still
+  leaves 11.08% differing, so the smaller type tiers diverge as well as move.
+  `gate-a0c-fidelity.md` holds the measurement.
+- **`D89`** (the round screen responsive from 760 px) and **`R-D9`**'s 430 targets are **parked, not
+  reversed.**
+
+**Flip condition — one line, so nobody has to reconstruct it:** the day the product is aimed at
+phones again, re-run `gate-a0c-fidelity.md` at 430 first. **The 430 drift is a known open defect and
+must not be rediscovered as a surprise.** A build that has only ever been gated at 1440 has not been
+shown to work on a phone; it has been shown to photograph well on a laptop.
+
+**Do not read a green 1440 gate as a green product.**
 
 ---
 
