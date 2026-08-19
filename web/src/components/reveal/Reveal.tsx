@@ -48,6 +48,10 @@ export default function Reveal({ roundId }: { roundId: number }) {
         if (!live) return
         setData(d)
         setTrip(d.trip)
+        // Demo scaffolding: the switcher's 開獎 stop needs a round to point at and there is no
+        // endpoint for "this circle's latest". Recording the one actually looked at is the
+        // cheapest honest answer, and it disappears with the switcher.
+        localStorage.setItem('upto_last_round', String(roundId))
         // **Reduced motion lands instantly and still lands** (§5 rule 3: the end states apply, the
         // transitions do not). Not "no animation and no reveal" — the person still gets the answer.
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) setLanded(true)

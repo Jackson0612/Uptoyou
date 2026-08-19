@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import Preferences from './components/preferences/Preferences.tsx'
 import Reveal from './components/reveal/Reveal.tsx'
+import Switcher from './components/Switcher.tsx'   // demo scaffolding — see the component
 
 /**
  * One path, one screen — read once at boot, with no router library.
@@ -39,6 +40,9 @@ const screen = route()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    {/* Demo scaffolding, ruled 2026-08-19. Removing it is this line plus the import plus the
+        stylesheet import in `index.css` — deliberately three deletions and no untangling. */}
+    <Switcher />
     {screen}
   </StrictMode>,
 )

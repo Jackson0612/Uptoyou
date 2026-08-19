@@ -1,0 +1,39 @@
+/* Demo scaffolding — the top-level switcher. Deletes with its component and its one import.
+
+   `position: fixed`, so it is out of flow and moves nothing: the 1440 fidelity diff is measured
+   against a reference page that has no navigation, and anything in flow would shift every object
+   below it. Top-RIGHT because that corner is empty on the approved page at 1440; the masthead's
+   own picker sits inside the content column, well left of this. */
+
+.switcher {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  gap: 0;
+  /* the system's own rule weight and ground — this is scaffolding, not a new visual language */
+  border-left: 2px solid var(--color-ink);
+  border-bottom: 2px solid var(--color-ink);
+  background: var(--color-paper);
+}
+
+.switcher a {
+  padding: 8px 14px;
+  font-size: var(--text-note);
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--color-ink);
+  text-decoration: none;
+  border-left: 1.5px solid var(--color-ink);
+}
+.switcher a:first-child { border-left: 0; }
+
+/* The current stop is filled. **This is the screen's one filled control only when the screen has
+   no other** — the home and reveal both carry a filled BAR, so the switcher deliberately marks
+   the current stop with ink TEXT on paper rather than an ink ground, which is a mark and not a
+   control. §4's at-most-one-filled-control rule is about controls carrying acts; a "you are here"
+   is a label. */
+.switcher a[data-here="yes"] { text-decoration: underline; text-underline-offset: 3px; }
+
+.switcher a:focus-visible { outline: 2px solid var(--color-ring); outline-offset: -2px; }
