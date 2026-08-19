@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { LazyMotion, domAnimation } from './lib/motion'
 import './index.css'
 import App from './App.tsx'
 import Preferences from './components/preferences/Preferences.tsx'
@@ -49,10 +50,14 @@ const atHome = window.location.pathname.replace(/\/+$/, '') === ''
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    {/* `strict` refuses a `motion.*` component anywhere below it, which is what keeps the feature
+        bundle to the half we budgeted for. See `lib/motion.ts`. */}
+    <LazyMotion features={domAnimation} strict>
     {/* Demo scaffolding, ruled 2026-08-19. Removing it is this line plus the import plus the
         stylesheet import in `index.css` — deliberately three deletions and no untangling. */}
     <Switcher />
     {!atHome && <Back />}
     {screen}
+    </LazyMotion>
   </StrictMode>,
 )

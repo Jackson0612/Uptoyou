@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react'
+import { useEffect } from 'react'
+import { m, useAnimate, useReducedMotion } from '@/lib/motion'
 
 /**
  * `DIE` — the cube from `design.md` §4. A real object with six faces, not a picture of a number.
@@ -56,7 +57,14 @@ const PIPS: Record<number, number[]> = {
 const RED = new Set([1, 4])
 
 /**
- * **A7 direction A — 拋擲, owner-ruled from three animated candidates 2026-08-19.** Each die is
+ * **A7 direction A — 拋擲, owner-ruled from three animated candidates 2026-08-19; rebuilt on
+ * springs the same night after 「這些動畫沒有達到我的標準」.**
+ *
+ * **D109's camera swing is retracted and is gone from this file.** What replaced it is not another
+ * camera: the die simply never leaves an axis it cannot land square-on from, so 「square-on at
+ * rest」 is now a property of the target angles rather than of a second element correcting for
+ * them. One fewer moving part, and the constraint it existed to satisfy is satisfied harder.
+ * Each die is
  * thrown from its own point, spins its own number of turns, and holds its own outward offset while
  * it spins. **All three differ per die on purpose**: two cubes given one motion read as one object
  * cut in half, which is the failure the ruling's 「一擲定案」 depends on not having.
@@ -80,61 +88,132 @@ const RED = new Set([1, 4])
  *
  * **Screenshotting the frame is what caught this, twice. Nothing in the numbers looks wrong.**
  *
- * **`hold` is the anti-collision offset.** A cube's rotated bounding box is its body diagonal, about
+ * **`hold` is the anti-collision offset, and it had to be rebuilt from scratch after the camera
+ * was retracted.** The first spring build dropped it with the CSS keyframes and the two cubes
+ * passed **17.7 px through each other** in flight — measured, and invisible in any still frame that
+ * happens to catch them apart. A cube's rotated bounding box is its body diagonal, about 1.7× its
+ * face, so two cubes spaced for their flat footprint intersect. The separation is spent while they
+ * are wide and given back by the settle, so the landed frame is `design.md`'s gap exactly.
+ *
+ * **The old `hold`:** A cube's rotated bounding box is its body diagonal, about
  * 1.7× its face, so two cubes spaced for their flat footprint pass through each other. The gap is
  * `design.md`'s and the landed frame is gated, so the separation is bought during the spin and
  * given back before the landing.
  */
 const THROW = [
-  { ex: '-430px', ey: '300px', turnx: '1080deg', turny: '720deg',  turnz: '-360deg', hold: '-70px' },
-  { ex: '-330px', ey: '392px', turnx: '720deg',  turny: '1440deg', turnz: '360deg',  hold: '70px' },
+  { ex: -430, ey: 300, turnx: 1080, turny: 720,  turnz: -360, hold: -62 },
+  { ex: -330, ey: 392, turnx: 720,  turny: 1440, turnz: 360,  hold: 62 },
 ] as const
 
+/** How far short of the landing angle the tumble stops, so the spring has something to rock over.
+ *  Small on purpose: a spring's overshoot is a percentage of the distance it is given, and a spring
+ *  handed 1080° would rock a quarter-turn past the face. Handed 34°, it rocks about 3° — a die
+ *  settling onto a face, which is the thing the owner said the timed version was not. */
+const ROCK_X = 34
+const ROCK_Y = 26
+
+/** How far below its resting place, and how much smaller, the die flies. **This is the clearance
+ *  D109's camera used to provide** — a cube presents its body diagonal while it tumbles, about 1.7×
+ *  its face, and at full size that runs off the top of this screen. It arrives at its real size on
+ *  the settle, which also reads as the die coming toward the viewer rather than merely stopping. */
+const FLY_Y = 40
+const FLY_SCALE = 0.74
+
 export default function Die(
-  { value, tumbling, seat }: { value: number; tumbling: boolean; seat: number },
+  { value, seat, onLanded }: { value: number; seat: number; onLanded?: () => void },
 ) {
   const { x, y } = SHOW[value] ?? SHOW[1]
   const t = THROW[seat % THROW.length]
+  const reduce = useReducedMotion()
+  const [scope, animate] = useAnimate()
+  const TX = t.turnx + x
+  const TY = t.turny + y
+
+  useEffect(() => {
+    // **Reduced motion is honoured by never starting, not by animating to the same place fast.**
+    // With no `animate` call the element keeps `.cube`'s own resting transform from the stylesheet,
+    // which IS the landed frame — §5 rule 3's "the end states still apply, instantly".
+    if (reduce || !scope.current) return
+    let alive = true
+    void (async () => {
+      // **The tumble carries the whole path, and it flies SMALL and LOW on purpose.** D109's
+      // camera used to provide this clearance with a dolly and a downward offset; retracting the
+      // camera took the clearance with it, and the first spring build ran the dice straight off the
+      // top of the window — measured, not guessed.  The headroom now belongs to the object's own
+      // path, which is one fewer element that has to arrive on time.
+      //
+      // A tween and not a spring: a spring's settling time does not depend on how far it travels,
+      // so three whole turns on a spring stiff enough to feel crisp is a blur, and one loose enough
+      // to read overshoots by a quarter-turn.
+      await animate(
+        scope.current,
+        {
+          x: [t.ex, t.hold], y: [t.ey, FLY_Y], scale: [0.68, FLY_SCALE],
+          rotateX: [0, TX - ROCK_X], rotateY: [0, TY - ROCK_Y], rotateZ: [0, t.turnz],
+        },
+        { duration: 1.05, ease: [0.16, 0.62, 0.3, 1] },
+      )
+      if (!alive) return
+      // **The settle — one spring carrying the arrival and the rock together.** The evaluator's
+      // numbers, on distances small enough for them to mean what they say: the die rises the last
+      // 28 px, grows into its resting size and rocks a couple of degrees past its face before
+      // decaying onto it. That overshoot is the point — a critically-damped landing is what
+      // 「timed rather than felt」 looks like.
+      await animate(
+        scope.current,
+        { x: 0, y: 0, scale: 1, rotateX: TX, rotateY: TY },
+        {
+          // **Two springs, and the split is the whole of the collision fix.** Measured with one
+          // spring carrying everything: the cubes overlapped by 27.7 px and clipped the window by
+          // 5.8 px, both at t≈1300 ms — inside the settle, not the tumble. At full size a cube
+          // rotated even 30° is wider than the 4 px the resting gap leaves between them, so
+          // arriving at size and rocking at the same time is a guaranteed intersection.
+          //
+          // So the ROTATION rocks fast and the BODY arrives slowly behind it: by the time the die
+          // is at its resting size and its resting x, it is already square-on and narrow.
+          default: { type: 'spring', stiffness: 120, damping: 26, mass: 1 },
+          rotateX: { type: 'spring', stiffness: 260, damping: 18, mass: 1 },
+          rotateY: { type: 'spring', stiffness: 260, damping: 18, mass: 1 },
+        },
+      )
+      if (alive) onLanded?.()
+    })()
+    return () => { alive = false }
+    // Mount-only: the round's dice are fixed before this component exists, so a re-run would be a
+    // second throw of the same result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div className="die" data-part="die" data-value={value} aria-hidden="true">
-      {/* **A7 — the CAMERA, and it is a separate element on purpose.** `.dieScene` carries where the
-          viewer is standing; `.cube` carries where the die is pointing. They are different facts
-          and folding them into one transform means a change to the camera silently re-aims the
-          die, which is exactly the class of error that cannot be seen in a still frame.
-
-          `dieScene` and not `scene`, for the reason `dieCell` is not `cell`: there are no CSS
-          modules here, every class name in this directory is global, and a generic one is a
-          collision waiting for the second screen that wants it. */}
-      <div className="dieScene">
-        <div
-          className="cube"
-          data-tumbling={tumbling ? 'yes' : 'no'}
-          // The landing angle, handed to CSS as two numbers. The tumble's last keyframe adds four
-          // and three whole turns to them, so the animation's end orientation and the resting
-          // transform below are the SAME orientation — removing the animation cannot jump.
-          style={{
-            '--tx': `${x}deg`, '--ty': `${y}deg`,
-            '--ex': t.ex, '--ey': t.ey,
-            '--turnx': t.turnx, '--turny': t.turny, '--turnz': t.turnz,
-            '--hold': t.hold,
-          } as CSSProperties}
-        >
-          {SIDES.map((side) => {
-            const v = VALUE_ON[side]
-            return (
-              <div key={side} className={`face ${side}`} data-face={v}>
-                {Array.from({ length: 9 }, (_, i) => i + 1).map((cell) => (
-                  <span key={cell} className="dieCell">
-                    {PIPS[v].includes(cell) && (
-                      <i className="pip" data-red={RED.has(v) ? 'yes' : 'no'} />
-                    )}
-                  </span>
-                ))}
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      <m.div
+        ref={scope}
+        className="cube"
+        // **`initial` and not the effect, and the difference is one painted frame.** `useAnimate`
+        // runs in an effect, which is after the browser has painted — so the die was drawn once at
+        // its RESTING place and then jumped off-screen to start the throw. Measured: the first
+        // sampled frame reported the landed hull exactly. A frame is 16 ms and nobody would name
+        // it, but it is the answer's own position shown before the throw, and `RV-15` asks what the
+        // first painted frame contains. `initial` is applied before paint, so the first frame is
+        // the entry.
+        initial={reduce ? false : { x: t.ex, y: t.ey, scale: 0.68 }}
+        style={{ ['--tx' as string]: `${x}deg`, ['--ty' as string]: `${y}deg` }}
+      >
+        {SIDES.map((side) => {
+          const v = VALUE_ON[side]
+          return (
+            <div key={side} className={`face ${side}`} data-face={v}>
+              {Array.from({ length: 9 }, (_, i) => i + 1).map((cell) => (
+                <span key={cell} className="dieCell">
+                  {PIPS[v].includes(cell) && (
+                    <i className="pip" data-red={RED.has(v) ? 'yes' : 'no'} />
+                  )}
+                </span>
+              ))}
+            </div>
+          )
+        })}
+      </m.div>
     </div>
   )
 }

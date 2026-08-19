@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Die from './Die'
 import Evidence from './Evidence'
+import Field from './Field'
+import Pairs from './Pairs'
+import { m, useReducedMotion } from '@/lib/motion'
 import {
   device, evidenceIn, faceOf, fetchRaw, signTrip,
   type Device, type Evidence as EvidenceData, type MemberReveal, type Trip,
@@ -120,6 +123,7 @@ export default function Reveal({ roundId }: { roundId: number }) {
    *  this component declined to read something that did. D105's whole point. */
   const [evidence, setEvidence] = useState<EvidenceData | null>(null)
   const [signing, setSigning] = useState(false)
+  const reduce = useReducedMotion()
   /** Which row the sweep is lighting, or `null`. A place id, never an index — the row order is the
    *  pool's and an index would silently re-point if it ever changed. */
   const [sweep, setSweep] = useState<string | null>(null)
@@ -257,19 +261,26 @@ export default function Reveal({ roundId }: { roundId: number }) {
       data-sweep-skipped={skipped ?? undefined}
       data-face={landed && face ? face : undefined}
     >
-      {/* `data-dice-state` is set from the animation's own end, never from a timer that thinks it
-          knows the duration — the evaluator's `RL-2`/`RL-3` need a start and an end they can read
-          off the page rather than infer from the driver's wall clock. `onAnimationEnd` catches the
-          cube's event as it bubbles; the name guard matters because the camera runs its own
-          animation of the same length beside it. */}
-      <div
-        className="dice"
-        data-part="dice"
-        data-dice-state={landed ? 'landed' : 'tumbling'}
-        onAnimationEnd={(e) => { if (e.animationName === 'tumble') land('animation') }}
-      >
-        <Die value={data?.dice[0] ?? 1} tumbling={!landed} seat={0} />
-        <Die value={data?.dice[1] ?? 1} tumbling={!landed} seat={1} />
+      <Field />
+
+      {/* **The dice mount only once the round is known, and that closed a latent bug.** They used
+          to render immediately with a placeholder 1 and start tumbling, so the landing angle was
+          re-targeted mid-flight when the real value arrived. Nothing showed for it, because the CSS
+          re-resolved and the die still landed on the right face — a throw aimed at the wrong number
+          that corrected itself invisibly. `.dice` holds its box from `min-height`, so waiting costs
+          no layout.
+
+          `data-dice-state` is set from the die's own settle completing rather than from a timer:
+          **a spring has no duration anyone outside it can know**, which is precisely why it feels
+          different from an ease, and the die calls back when its spring has decayed onto the
+          face. */}
+      <div className="dice" data-part="dice" data-dice-state={landed ? 'landed' : 'tumbling'}>
+        {data && (
+          <>
+            <Die value={data.dice[0]} seat={0} onLanded={() => land('animation')} />
+            <Die value={data.dice[1]} seat={1} onLanded={() => land('animation')} />
+          </>
+        )}
       </div>
 
       {/* **The answer region holds its box from the first frame.** `opacity` alone moves — never
@@ -295,7 +306,15 @@ export default function Reveal({ roundId }: { roundId: number }) {
         <p className="decider" data-part="deciding">以 {decider} 的骰子為準。</p>
       )}
 
-      <div className="answer" data-part="answer" aria-hidden={!landed} inert={!landed}>
+      <m.div
+        className="answer"
+        data-part="answer"
+        aria-hidden={!landed}
+        inert={!landed}
+        initial={false}
+        animate={{ opacity: landed ? 1 : 0, y: reduce || landed ? 0 : 14 }}
+        transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 24, mass: 1 }}
+      >
         {/* **`sum` is in the member payload and is deliberately NOT rendered.** It is an innocent
             number — the two dice added up — but §1's table does not list it in member state, and
             §1a refuses *any bare number the eye can pair with a place*. A digit sitting directly
@@ -316,7 +335,7 @@ export default function Reveal({ roundId }: { roundId: number }) {
             press. It claims that the allocation happened and that weight drove it. It does not
             claim the reader can check that, and it must not be dressed to imply so. */}
         <p className="sentence" data-part="sentence">三十六格已按權重分配</p>
-      </div>
+      </m.div>
 
       {/* **§0b, owner-amended: the member sees the LIST, never the numbers.** 「使用者畫面我認為可
           以套用開發者的這頁，只是需要移除36格的畫面，以及權重點數」 — the same panel as the
@@ -341,6 +360,12 @@ export default function Reveal({ roundId }: { roundId: number }) {
           sweep={sweep}
         />
       )}
+
+      {/* Owner-ruled 「要」 2026-08-19. **After the dice land**, not before: the pairs are the
+          receipt for a result the screen has just shown, and printing them while the dice are still
+          in the air would be the answer available in numbers beside an animation withholding it —
+          the same argument that keeps the revealed seed until the landing. */}
+      {landed && data && <Pairs rolls={data.rolls ?? []} />}
 
       {/* ── D108 · the commitment, and the seed that opens it ──────────────────────────────
           **The hash is shown throughout; the seed only once the dice have landed.** The commitment

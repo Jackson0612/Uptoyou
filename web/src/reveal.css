@@ -73,78 +73,71 @@
    0-height bounding box. */
 .reveal .die { width: var(--die); height: var(--die); perspective: 900px; }
 
-/* ── A7 · the camera ─────────────────────────────────────────────────────────
-   **§0c: tumble tilted, read flat — both, not a trade.** A resting die seen at an angle is a
-   three-dimensional object and its pip count is ambiguous; a die that never tilts is a picture of
-   a number. So the OBJECT keeps spinning about its own axes and the VIEWER moves: `.dieScene`
-   rotates the whole space, which is what a camera swinging overhead is.
+/* ── A7 · the field ─────────────────────────────────────────────────────────
+   `Field.tsx` carries the reasoning; these are the numbers.
 
-   **It ends at identity, and that is what makes `RV-14` true by construction rather than by
-   tuning.** Camera at identity plus a cube resting on an axis-aligned angle means the front face
-   is exactly parallel to the screen. There is no residual tilt to notice, because there is no
-   number here that could carry one.
+   **`position: fixed` and out of flow, so none of it can move a box.** `D91`'s held-box clause
+   binds the whole tumble→land sequence and this is the largest thing added to the screen — putting
+   it in flow would have made every measurement in `A3` and `A7` need re-taking.
 
-   **The swing runs as its own animation ending with the tumble, not as a transition after it, and
-   that is a deviation from a literal reading of 「then」 — stated rather than hidden.** Two chained
-   phases means two end signals, and the second one desyncs silently: nothing on screen says the
-   camera arrived late, and a still frame taken at rest looks identical either way. One animation,
-   one `animationend`, one moment where the result is asserted. The tilt is held through the fast
-   part and unwound over the last third, so the sequence a person sees is still tumble-then-arrive. */
-.reveal .dieScene {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
+   **`z-index: 0` with the content above it.** The light is *ground*, and the die faces are opaque,
+   so the glow cannot wash them however bright it gets. That is the mistake the evaluator made and
+   wrote down: a glow behind the dice turned crisp paper into pale plastic. */
+.reveal .field { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.reveal > *:not(.field) { position: relative; z-index: 1; }
+
+/* Halftone. `currentColor` and not a token: the reveal crosses from ink-on-paper to an on-flood
+   pair, and a fixed colour would be right in one state and wrong in the other. Two pitches, two
+   corners, two opacities — the corners get depth rather than a repeat. */
+.reveal .halftone {
+  position: absolute; inset: -6%;
+  background-image: radial-gradient(circle at center, currentColor 1.1px, transparent 1.3px);
+  will-change: transform;
 }
-.reveal .die:has(.cube[data-tumbling="yes"]) .dieScene {
-  animation: camera var(--tumble) cubic-bezier(.3, .1, .3, 1) forwards;
+.reveal .halftoneA {
+  background-size: 13px 13px; opacity: .11;
+  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 2% 2%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse 62% 58% at 2% 2%, #000 0%, transparent 72%);
+}
+.reveal .halftoneB {
+  background-size: 21px 21px; opacity: .085;
+  -webkit-mask-image: radial-gradient(ellipse 58% 54% at 99% 99%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(ellipse 58% 54% at 99% 99%, #000 0%, transparent 70%);
 }
 
-/* **The `scale3d` is a dolly, and it is here to stop the cube being clipped rather than for the
-   look.** A cube's projection is widest across its body diagonal — up to √3 of its side — so while
-   it is tilted and spinning it is far larger than the 180 px box it occupies in flow. Sampled every
-   20 ms across a real tumble at 1440×900: the cubes reached **`top: -14.5 px`**, i.e. their corners
-   were cut off by the top of the window, against a `.dice` box sitting at 24. The horizontal
-   overflow (13 px left, 10 px right) has 500 px of room and clips nothing.
+/* The light. Sized in `vmin` so it is the same light at every width, sat over the dice region, and
+   blurred rather than hard-edged because a hard-edged glow is a shape and not a light. */
+/* **Tuned down twice, both times from a screenshot rather than from taste.** At `62vmin` and
+   `.58` alpha it stopped being a light and became a wash: it reached the winner's name and took the
+   contrast out of the largest type on the screen, which is the opposite of what a light source is
+   for. It now sits tight around the dice and falls off before the headline starts.
 
-   **The downward offset is the second half of the same fix, and it exists because the first
-   measurement of it was taken on the wrong object.** `getBoundingClientRect()` on `.cube` returns
-   that element's own box after transform — one PLANE through the middle of the die, not the solid.
-   It read `top: 1.2 px` and said the clipping was cured. The projected solid is the union of the
-   six `.face` rects, and measured that way the same build reached **`-16.5 px`**. So the dolly
-   alone was never enough, and the reading that said it was had measured a cross-section of the
-   thing rather than the thing. Shifting the flight path down for the part of the tumble that is
-   wide costs nothing at rest, where the offset is 0 and the frame is `A3`'s.
-
-   **The offset was raised a second time after the barrel roll went in** (`--turnz` in `Die.tsx`):
-   a cube rolling about Z presents its diagonal to the vertical, so the same flight reached `-3.9`
-   again from `5.3`. Every change to the ROTATION changes the projection, and the clearance has to
-   be re-measured after each one rather than reasoned about from the last number.
-
-   **The number was found by re-measuring, not by reasoning.** The first attempt used `.86`/`.88`,
-   derived from the centre and the overflow, and still clipped by 4.9 px — because the widest
-   projection does not happen at either keyframe, it happens somewhere between them where the body
-   diagonal points at the camera, and no arithmetic over the two ends can see that moment.
-
-   Pulling the camera back for the tilted part and returning it to 1 costs nothing anywhere else:
-   the landed frame is `scale3d(1,1,1)` with no rotation, so it is the frame `A3` was gated on,
-   unchanged to the pixel. **The alternative was 16 px of headroom above the dice**, which fixes it
-   by moving every object on the screen down — a layout change to solve a projection problem, and
-   one that would have to be re-measured at all three `--die` steps. */
-@keyframes camera {
-  0%   { transform: translate3d(0, 36px, 0) scale3d(.80, .80, .80) rotateX(-24deg) rotateZ(8deg); }
-  55%  { transform: translate3d(0, 38px, 0) scale3d(.82, .82, .82) rotateX(-19deg) rotateZ(-6deg); }
-  /* The pinch. Timestamped sampling put the worst frame at ~65% of the tumble, not at either end,
-     so deepening the start bought almost nothing — `.86 → .80` at 0% moved the overflow by 0.9 px
-     while the same change had moved it by 9.6 px when the binding frame was early. The dolly has
-     to be held low THROUGH that moment, which is what this keyframe does. */
-  72%  { transform: translate3d(0, 26px, 0) scale3d(.84, .84, .84) rotateX(-12deg) rotateZ(-3deg); }
-  /* Held up through the cube's overshoot at 74%, which timestamped sampling identified as the
-     binding frame (t≈1139 ms of 1400). Raising the earlier offsets by 10 px had moved the
-     clearance by 2.2 px, because the frame that clips is not the frame that is lowest. */
-  86%  { transform: translate3d(0, 17px, 0) scale3d(.92, .92, .92) rotateX(-5deg) rotateZ(-1deg); }
-  100% { transform: translate3d(0, 0, 0)    scale3d(1, 1, 1)       rotateX(0deg)   rotateZ(0deg); }
+   The evaluator's warning holds in the other direction too — the light must not touch the object's
+   own face. The die faces are opaque and this sits under them in the stack, so it lights the ground
+   they are on and nothing else. */
+.reveal .glow {
+  position: absolute; left: 50%; top: 11%;
+  width: 44vmin; height: 44vmin; margin: -22vmin 0 0 -22vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgb(255 255 255 / .34) 0%,
+    rgb(255 255 255 / .14) 40%,
+    transparent 70%);
+  filter: blur(16px);
+  will-change: transform;
 }
+
+/* ── A7 · the die's own space ────────────────────────────────────────────────
+   **D109's camera was retracted by the owner on 2026-08-19 (「這些動畫沒有達到我的標準」) and this
+   is what is left where it was: nothing.** The swing existed so a tilted tumble could still be read
+   square-on at rest; the spring rebuild lands the cube on axis-aligned angles directly, so the
+   correction has no job. The constraint it served — `RV-14`, square-on with no residual angle — is
+   now a property of the target rotation itself, which is a stronger place for it than a second
+   element that had to arrive on time.
+
+   The measurements the camera was tuned against are gone with it: the dolly, the pinch keyframe and
+   the flight-path offset were all clearance for a projection this motion does not produce. Whatever
+   the spring build clips, it clips for its own reasons and has to be measured again from scratch. */
 
 .reveal .cube {
   position: relative;
@@ -169,39 +162,6 @@
    IS the landing orientation (1440 and 1080 are multiples of 360, so the composite matrix is
    identical to the resting one). The die decelerates forward into its own face, and removing the
    animation at the end cannot jump, because there is nothing left to travel. */
-.reveal .cube[data-tumbling="yes"] {
-  /* `ease-out` rather than the old custom curve: with four keyframes the curve applies between
-     each pair, and a curve that decelerates hard inside every segment makes a throw stutter four
-     times instead of once. */
-  animation: tumble var(--tumble) ease-out forwards;
-}
-
-@keyframes tumble {
-  /* Thrown from below and to the left, small because it is far away. Both dice are fully inside
-     the window in this first frame — `RV-15`. */
-  0%   { transform: translate3d(var(--ex, 0px), var(--ey, 0px), 0) scale3d(.72, .72, .72)
-                    rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-  /* Arrived, at size, still spinning hard — and held apart by `--hold`, which is the only thing
-     stopping the two body diagonals from passing through each other. */
-  40%  { transform: translate3d(var(--hold, 0px), 0, 0) scale3d(1, 1, 1)
-                    rotateX(calc(var(--turnx, 1080deg) - 360deg))
-                    rotateY(calc(var(--turny, 720deg) - 360deg))
-                    rotateZ(calc(var(--turnz, 0deg) * .48)); }
-  /* The overshoot. A die that stops exactly on its face has been placed; one that goes a little
-     past and comes back has been thrown. The separation is given back over the same stretch, so
-     it is spent while the cube is still wide and returned before it is not. */
-  74%  { transform: translate3d(calc(var(--hold, 0px) * .72), 0, 0) scale3d(1, 1, 1)
-                    rotateX(calc(var(--turnx, 1080deg) + var(--tx, 0deg) + 22deg))
-                    rotateY(calc(var(--turny, 720deg) + var(--ty, 0deg) + 16deg))
-                    rotateZ(calc(var(--turnz, 0deg) * .92)); }
-  /* The landing orientation itself. `--turnx`/`--turny` are whole turns, so this composite matrix
-     is identical to `.cube`'s resting transform — the animation ends where the element already is
-     and removing it cannot jump. */
-  100% { transform: translate3d(0, 0, 0) scale3d(1, 1, 1)
-                    rotateX(calc(var(--turnx, 1080deg) + var(--tx, 0deg)))
-                    rotateY(calc(var(--turny, 720deg) + var(--ty, 0deg)))
-                    rotateZ(var(--turnz, 0deg)); }
-}
 
 .reveal .face {
   position: absolute;
@@ -377,8 +337,6 @@
      cannot be stopped from here, so `Reveal.tsx` asks the same media query before it schedules a
      single step. A rule that silences two of three reads as complete precisely because the two it
      silences are the loud ones. */
-  .reveal .cube[data-tumbling="yes"] { animation: none; }
-  .reveal .die:has(.cube[data-tumbling="yes"]) .dieScene { animation: none; }
   .reveal .evTable tr[data-sweep="on"] .evPlace { background: none; }
 }
 
@@ -412,13 +370,19 @@
    `.commit` takes the same provenance register as the round screen's and the home screen's weather
    source — small, muted, factual, `break-all` because a 64-character hash has no break
    opportunity. */
+/* **`currentColor` at reduced opacity, never `--color-muted`, and this was a real legibility
+   defect rather than a preference.** `--color-muted` is a grey chosen against the paper ground; the
+   reveal floods to one of four saturated colours, and grey-on-cobalt is the one combination in this
+   palette that disappears. Both lines were unreadable on a blue win and fine on every screenshot
+   taken before one happened. `currentColor` is the on-flood pair after the flood and ink before it,
+   so the contrast is whatever `design.md` measured for that pair, minus a fixed step. */
 .reveal .decider {
-  margin: 0; font-size: var(--text-note); color: var(--color-muted);
+  margin: 0; font-size: var(--text-note); color: inherit; opacity: .72;
 }
 .reveal .commit {
-  margin: 0; font-size: var(--text-note); color: var(--color-muted);
+  margin: 0; font-size: var(--text-note); color: inherit; opacity: .66;
   font-variant-numeric: tabular-nums; word-break: break-all;
-  max-width: min(1200px, 88vw); text-align: center;
+  max-width: min(1200px, 88vw); text-align: center; line-height: 1.7;
 }
 
 /* The demo scaffolding, over the flood. **Here rather than in `switcher.css` because these
@@ -540,3 +504,40 @@
   visibility: hidden;
 }
 .reveal .evNameInk { position: absolute; inset: 0; }
+
+
+/* ── D108 · every member's pair, listed ──────────────────────────────────────
+   `Pairs.tsx` carries the reasoning. Evidence register: the paper ground the table already uses, so
+   the two read as one body of evidence rather than as two features that happen to be adjacent.
+
+   **No transition and no animation properties at all**, and their absence is the design. */
+.reveal .pairs {
+  width: min(1200px, 88vw);
+  background: var(--color-paper); color: var(--color-ink);
+  padding: 20px 24px 22px;
+}
+.reveal .pairsH {
+  margin: 0 0 4px; font-size: var(--text-note); font-weight: 700;
+  color: var(--color-muted); letter-spacing: .04em;
+}
+.reveal .pairRows { list-style: none; margin: 0; padding: 0; }
+.reveal .pairRow {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 0; border-top: 1.5px solid var(--color-ink); min-height: 44px;
+}
+.reveal .pairName { font-size: var(--text-body); }
+/* `tabular-nums` and a reserved width so `6 · 4` and `1 · 1` occupy the same column. Nothing here
+   changes after paint, but the column is a column either way. */
+.reveal .pairDice {
+  font-size: var(--text-body); font-variant-numeric: tabular-nums;
+  min-width: 5em; text-align: right; white-space: nowrap;
+}
+/* The deciding seat. **An inset shadow rather than a border**, because a border would add 3 px to
+   the row and push every row below it — the same reason the round screen's seat list uses one. */
+.reveal .pairRow[data-counts="yes"] {
+  box-shadow: inset 3px 0 0 var(--color-hot-ink); padding-left: 12px;
+}
+.reveal .pairRow[data-counts="yes"] .pairName { font-weight: 700; }
+.reveal .pairsNote {
+  margin: 12px 0 0; font-size: var(--text-note); color: var(--color-muted);
+}
