@@ -26,6 +26,13 @@ export const POOL = [
 const CELLS = 4
 const INTERVAL_MS = 10_000
 const FADE_MS = 400
+/** A pool no larger than the cell count can never produce a swap: every image is already on
+ *  screen, so the not-currently-displayed rule has nothing to return. Measured with today's
+ *  four — the interval ran for 44 s and changed nothing while the hook still reported
+ *  `rotating`. Both halves of that are wrong: the state must not claim motion that cannot
+ *  happen, and a timer nobody can ever see is still a timer. Ten images make it live again
+ *  with no change here. */
+const CAN_ROTATE = POOL.length > CELLS
 
 type Slot = { file: string; alt: string; token: number }
 
@@ -83,6 +90,7 @@ export default function Collage() {
     const stop = () => { if (timer !== undefined) { window.clearInterval(timer); timer = undefined }
                          setRotating(false) }
     const start = () => {
+      if (!CAN_ROTATE) return
       if (timer !== undefined || motionOff.matches || document.visibilityState !== 'visible') return
       setRotating(true)
       timer = window.setInterval(() => {
