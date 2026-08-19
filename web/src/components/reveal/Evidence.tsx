@@ -21,12 +21,29 @@ import { FACES, type Evidence as EvidenceData, type Places } from '@/lib/reveal'
 
 /** The 36 outcomes, in pool order, each carrying the face of the place that holds it. Built from
  *  `allocation` alone so the grid cannot drift from the table. */
-function cells(ev: EvidenceData, places: Places): { face: string; placeId: string }[] {
-  const out: { face: string; placeId: string }[] = []
+const COLS = 6
+
+function cells(
+  ev: EvidenceData,
+  places: Places,
+): { face: string; placeId: string; startsRun: boolean; col: number }[] {
+  const out: { face: string; placeId: string; startsRun: boolean; col: number }[] = []
   Object.keys(places).forEach((placeId, seat) => {
     const n = ev.allocation[placeId] ?? 0
     const face = FACES[seat % FACES.length]
-    for (let i = 0; i < n; i++) out.push({ face, placeId })
+    for (let i = 0; i < n; i++) {
+      out.push({
+        face,
+        placeId,
+        // **The boundary is drawn on the first cell of each run, not between colours.** With more
+        // than four places `FACES` cycles, so colour alone stops identifying a place — but the grid
+        // is filled in pool order and the table lists in pool order, so the Nth *run* is the Nth
+        // row whatever colour it wears. Bounding the runs makes that reading available; leaving
+        // them unbounded is what let two same-coloured runs read as one 15-cell block.
+        startsRun: out.length > 0 && i === 0,
+        col: (out.length % COLS) + 1,
+      })
+    }
   })
   return out
 }
@@ -42,7 +59,15 @@ export default function Evidence({ ev, places }: { ev: EvidenceData; places: Pla
           figure reads as a texture rather than as thirty-six things. */}
       <div className="alloc36" data-part="alloc36" aria-hidden="true">
         {grid.map((c, i) => (
-          <span key={i} className="allocCell" data-face={c.face} />
+          <span
+            key={i}
+            className="allocCell"
+            data-face={c.face}
+            // A run that starts mid-row takes a leading edge; one that starts at the left margin
+            // takes a top edge instead, because a left border there would sit on the grid's own
+            // outer edge and say nothing.
+            data-run-start={c.startsRun ? (c.col === 1 ? 'top' : 'left') : undefined}
+          />
         ))}
       </div>
 

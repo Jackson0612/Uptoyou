@@ -303,6 +303,11 @@
   flex: 0 0 auto;
 }
 .reveal .allocCell { border: 1.5px solid var(--color-ink); }
+/* Option C — the run boundary. The same 2 px ink edge the collage and the fields already use, so
+   no new colour and no contrast measurement. It marks where one place's run ENDS and the next
+   begins, which is the reading the colour cycle destroys above four places. */
+.reveal .allocCell[data-run-start="left"] { border-left: 4px solid var(--color-ink); }
+.reveal .allocCell[data-run-start="top"]  { border-top: 4px solid var(--color-ink); }
 .reveal .allocCell[data-face="hot"]    { background: var(--color-hot); }
 .reveal .allocCell[data-face="cobalt"] { background: var(--color-cobalt); }
 .reveal .allocCell[data-face="jade"]   { background: var(--color-jade); }
