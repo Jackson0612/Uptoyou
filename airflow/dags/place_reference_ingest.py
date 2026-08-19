@@ -38,6 +38,7 @@ that reason.
 from __future__ import annotations
 
 import os
+import sys
 import subprocess
 from datetime import datetime, timedelta
 
@@ -45,6 +46,25 @@ from airflow.exceptions import AirflowSkipException
 from airflow.hooks.base import BaseHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.sdk import Asset, dag, task
+from airflow.utils.trigger_rule import TriggerRule
+
+# **The dags folder is NOT on `sys.path` in Airflow 3, and this line is what a wrong assumption
+# cost.** Airflow 2 added `dags_folder` to `sys.path` and the documentation for it is still easy to
+# find; 3.0.2 loads DAGs through a *bundle* and does not. Measured 2026-08-19: without this line
+# both this file and `name_reference_ingests.py` failed to import with
+# `ModuleNotFoundError: No module named '_publication_check'`, and the DAGs vanished from the list
+# while `airflow dags list` still printed their previous serialisation — so the UI looked fine and
+# only `airflow dags list-import-errors` said otherwise.
+#
+# **Rejected: `PYTHONPATH` on the four airflow services in `compose.yaml`.** It works and it is one
+# line instead of two, and it puts the reason a sibling import resolves in a different file from the
+# import — so the next person to tidy an environment block breaks a DAG and finds out at 03:20.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# A9's shape check, shared with the four name-reference DAGs. It defines no DAG, so nothing is
+# registered twice. The key it wants is the ledger's `source`, which is `SOURCE` below and never
+# a display label.
+from _publication_check import make_check_task
 
 POSTGRES_CONNECTION = "upto_postgres"
 
@@ -134,7 +154,8 @@ def upto_place_reference_ingest():
             )
         return finished.stdout.strip()
 
-    @task(task_id="publication_stored", outlets=[PLACE_PUBLICATION])
+    @task(task_id="publication_stored", outlets=[PLACE_PUBLICATION],
+          trigger_rule=TriggerRule.NONE_FAILED)
     def publication_stored(verdict: str) -> str:
         """Emit the asset event **only** when the run actually stored a publication (A8 (a)).
 
@@ -180,7 +201,26 @@ def upto_place_reference_ingest():
             SOURCE, rows_written, PLACE_PUBLICATION.name))
         return verdict
 
-    publication_stored(reference_places())
+    # **The three-task chain, and the trigger rule is the load-bearing part.** A9's check sits
+    # between the ingest and the asset emitter so that a red check emits nothing — using the
+    # mechanism A8 already established (an outlet fires only on success, so an unrun task is a
+    # silent one) rather than a second suppression path.
+    #
+    # `publication_stored` takes its XCom from the **ingest**, not from the check, and depends on
+    # the check only for ordering. That is deliberate: the check *skips* on the two ordinary
+    # non-comparisons — a `no_change` day, and the first publication a source ever stores — and a
+    # skipped task leaves no XCom to read. Reading the ingest's verdict keeps the argument real in
+    # every path.
+    #
+    # `NONE_FAILED` is what makes the first publication work at all. `ALL_SUCCESS` would treat the
+    # check's n/a skip as a reason not to emit, so the very first publication would land and no
+    # classify pass would follow it — the check's honesty about having nothing to compare would
+    # silently cost the thing A8 was built for. `NONE_FAILED` runs on success or skip and refuses
+    # only on failure, which is precisely the gate wanted here.
+    verdict = reference_places()
+    check = make_check_task(SOURCE)(verdict)
+    stored = publication_stored(verdict)
+    check >> stored
 
 
 upto_place_reference_ingest()

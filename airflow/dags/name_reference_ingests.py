@@ -42,11 +42,29 @@ Like every DAG in this repository: no backfill (the endpoints serve only the cur
 from __future__ import annotations
 
 import os
+import sys
 import subprocess
 from datetime import datetime, timedelta
 
 from airflow.hooks.base import BaseHook
 from airflow.sdk import dag, task
+
+# **The dags folder is NOT on `sys.path` in Airflow 3, and this line is what a wrong assumption
+# cost.** Airflow 2 added `dags_folder` to `sys.path` and the documentation for it is still easy to
+# find; 3.0.2 loads DAGs through a *bundle* and does not. Measured 2026-08-19: without this line
+# both this file and `name_reference_ingests.py` failed to import with
+# `ModuleNotFoundError: No module named '_publication_check'`, and the DAGs vanished from the list
+# while `airflow dags list` still printed their previous serialisation — so the UI looked fine and
+# only `airflow dags list-import-errors` said otherwise.
+#
+# **Rejected: `PYTHONPATH` on the four airflow services in `compose.yaml`.** It works and it is one
+# line instead of two, and it puts the reason a sibling import resolves in a different file from the
+# import — so the next person to tidy an environment block breaks a DAG and finds out at 03:20.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# A9's shape check, shared with `place_reference_ingest.py`. It defines no DAG of its own, so
+# nothing is registered twice.
+from _publication_check import make_check_task
 
 POSTGRES_CONNECTION = "upto_postgres"
 
@@ -54,7 +72,17 @@ POSTGRES_CONNECTION = "upto_postgres"
 # can return it here; the others have one signal and nothing to disagree with.
 DISAGREEMENT = 2
 
-# (dag_id suffix, module, source label as printed by the runner, cron — UTC, see above, tags)
+# (dag_id suffix, module, source label as printed by the runner, cron — UTC, see above, tags,
+#  **db_source**)
+#
+# **The fourth field and the last one are two different names for the same source, and only the
+# last is a key.** The display label is what the runner prints in an error message; `db_source` is
+# what `ingest_run.source` and the publication table actually store, and for three of these four
+# they are not the same string. A9's check keyed off the display label would find zero rows and
+# read that as "no previous publication" — a false n/a, which is the exact bug the n/a state exists
+# to prevent. Measured against the live ledger 2026-08-19. The labels are left alone rather than
+# renamed: they appear in the logs of every run since 2026-08-14, and rewriting history to make
+# one string do two jobs is a bigger change than carrying two fields.
 SOURCES = (
     (
         "brand",
@@ -62,6 +90,7 @@ SOURCES = (
         "foodtracer-brands",
         "20 19 * * *",
         ["ingest", "d77", "brands", "reference"],
+        "taipei-foodtracer",
     ),
     (
         "storefront",
@@ -69,6 +98,7 @@ SOURCES = (
         "gradelist-storefronts",
         "40 19 * * *",
         ["ingest", "d78", "storefronts", "reference"],
+        "taipei-hygiene-grade",
     ),
     (
         "business_status",
@@ -76,6 +106,7 @@ SOURCES = (
         "gcis-status",
         "0 20 * * *",
         ["ingest", "d81", "registry-status", "reference"],
+        "gcis-restaurant-registry",
     ),
     (
         "business_tax",
@@ -83,6 +114,7 @@ SOURCES = (
         "fia-business-tax",
         "20 20 * * *",
         ["ingest", "d85", "tax-registry", "reference"],
+        "fia-business-tax",
     ),
 )
 
@@ -99,7 +131,8 @@ def _database_url() -> str:
     )
 
 
-def _make(name: str, module: str, source: str, cron: str, dag_tags: list[str]):
+def _make(name: str, module: str, source: str, cron: str, dag_tags: list[str],
+          db_source: str):
     @dag(
         dag_id=f"upto_{name}_ingest",
         description=f"{source} — daily, deduplicated by content hash",
@@ -152,10 +185,15 @@ def _make(name: str, module: str, source: str, cron: str, dag_tags: list[str]):
                 )
             return finished.stdout.strip()
 
-        run()
+        # A9 — the shape check, downstream of the ingest. Nothing depends on it here (these four
+        # emit no asset), so it needs no trigger rule: it is the leaf, and its three states are the
+        # whole report. A red one means the source changed the shape of its file or its row count
+        # collapsed, and the rows it stored are already stored — red means "come and read the log",
+        # the same reading as the disagreement above.
+        make_check_task(db_source)(run())
 
     _ingest_dag()
 
 
-for _name, _module, _source, _cron, _tags in SOURCES:
-    _make(_name, _module, _source, _cron, _tags)
+for _name, _module, _source, _cron, _tags, _db_source in SOURCES:
+    _make(_name, _module, _source, _cron, _tags, _db_source)
