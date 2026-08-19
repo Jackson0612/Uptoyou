@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Collage from './components/home/Collage'
 import WeatherIcon from './components/home/WeatherIcon'
 import {
-  TOWNSHIPS, fetchWeather, conditionCode, measure, type Weather,
+  TOWNSHIPS, fetchWeather, conditionCode, measure, fetchedLabel, type Weather,
 } from './lib/weather'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -38,6 +38,7 @@ export default function App() {
 
   const name = TOWNSHIPS.find((t) => t.code === township)?.name ?? ''
   const hour = weather?.hour?.slice(11, 16) ?? ''
+  const fetched = fetchedLabel(weather)
 
   return (
     <>
@@ -87,9 +88,18 @@ export default function App() {
                 </>
               )}
               {/* provenance is kept and demoted, never removed — it is the claim itself */}
+              {/* **Four facts, and the fourth was missing.** The approved page reads
+                  「中山區 17:00 · 預報 · 中央氣象署開放資料 · 今天 14:00 取得」 and the build
+                  stopped at the source's name — so the line said where the reading is for and who
+                  published it, and never when we went and got it. At 900 that cost a wrapped line
+                  and 22 px of block height against the reference, which is how it surfaced; the
+                  reason to fix it is not the 22 px. `time_label` is the API's own word for which
+                  clock `detected_at` is on. */}
               <p className="wxsrc" data-part="weather-source">
-                {name}{hour && ` ${hour}`} · {weather?.kind === 'observation' ? '觀測' : '預報'}
+                <span className="where">{name}{hour && ` ${hour}`} · </span>
+                {weather?.kind === 'observation' ? '觀測' : '預報'}
                 {' · 中央氣象署開放資料'}
+                {fetched && ` · ${fetched}`}
               </p>
             </div>
           </div>

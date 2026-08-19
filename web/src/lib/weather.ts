@@ -58,3 +58,28 @@ export function conditionCode(w: Weather | null): string | null {
 export function measure(w: Weather | null, name: string): string {
   return (w && w.measures[name]) || '—'
 }
+
+/**
+ * When this reading was fetched, in Taipei, as the approved page words it: 「今天 14:00 取得」.
+ *
+ * **It is a separate fact from the hour the reading is FOR, and the approved page shows both.**
+ * `hour` says which hour the forecast describes; this says when we went and got it. A person
+ * reading 「13:00 · 預報」 cannot tell whether that forecast was published minutes or a day ago,
+ * and D34's whole argument is that the age of a reading is part of the reading.
+ *
+ * 「今天」 only when the fetch falls on today's Taipei date — otherwise the date is shown, because
+ * 「今天」 on a stale reading is exactly the wrong reassurance.
+ */
+export function fetchedLabel(w: Weather | null, now = new Date()): string {
+  const at = w?.source?.detected_at
+  if (!at) return ''
+  const shift = (d: Date) => new Date(d.getTime() + (8 * 60 + d.getTimezoneOffset()) * 60000)
+  const t = shift(new Date(at))
+  const today = shift(now)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const clock = `${pad(t.getHours())}:${pad(t.getMinutes())}`
+  const sameDay = t.getFullYear() === today.getFullYear()
+    && t.getMonth() === today.getMonth()
+    && t.getDate() === today.getDate()
+  return sameDay ? `今天 ${clock} 取得` : `${t.getMonth() + 1}/${t.getDate()} ${clock} 取得`
+}
