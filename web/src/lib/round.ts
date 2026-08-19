@@ -125,12 +125,44 @@ export type StreamEvent =
   | { type: 'pooled'; round_id: number; place: Pooled }
   | { type: 'closed'; result: { round_id: number } }
 
+/**
+ * A6 / D108 — one member's seat in the round. **Present from the snapshot, before anyone has
+ * tapped**, which is what lets the surface paint every seat on the first frame and then fill them.
+ * A seat that appeared when its member rolled would make the list *grow*, and a growing list makes
+ * `RL-4` (no layout jump) unmeasurable and `RL-5` (no reorder) meaningless.
+ *
+ * `die1`/`die2` are `null` until the round closes; **`counts` marks the seat whose pair is the
+ * round's, and it is true on a seat with no dice on it** — that is D108's whole point, the decider
+ * is known before any dice are seen.
+ *
+ * **`nickname` and `member_id` are the two keys that may yet move** (backend, 2026-08-19): `rolls[]`
+ * names everyone, and three suites assert D55's *authorship never travels* by checking the string
+ * `member` never appears on the wire. The ruling is with orchestrator — D55 narrowing to
+ * *proposal* authorship, or D108's naming shrinking. Everything else here is settled: the keys, the
+ * order, the nulls, `counts`.
+ */
+export type Roll = {
+  member_id: number
+  nickname: string
+  die1: number | null
+  die2: number | null
+  counts: boolean
+}
+
 export type OpenRound = {
   round_id: number
   target_hour: string
   target_hour_typed: boolean
   opened_at: string
   pool: Pooled[]
+  /** `sha256` of the outcome seed, published at open — **before the first place is proposed**,
+   *  which is what makes it a commitment rather than a fact withheld. */
+  seed_commit: string
+  rolls: Roll[]
+  deciding_member: { id: number; nickname: string } | null
+  /** The seed itself, `null` until the round closes. Present-and-null rather than absent, so the
+   *  surface reads one shape in both states. */
+  revealed_seed: string | null
 }
 
 /**

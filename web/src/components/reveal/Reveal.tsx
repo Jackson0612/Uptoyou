@@ -235,6 +235,11 @@ export default function Reveal({ roundId }: { roundId: number }) {
   }
 
   const face = data ? faceOf(data.places, data.winning_place_id) : null
+  /** Derived from the seat marked `counts`, falling back to `deciding_member` only if no seat is
+   *  marked — a payload that predates A6 has neither, and the line simply does not render. */
+  const decider = data
+    ? (data.rolls?.find((r) => r.counts)?.nickname ?? data.deciding_member?.nickname ?? '')
+    : ''
   const winner = data && data.winning_place_id !== null
     ? data.places[String(data.winning_place_id)]
     : ''
@@ -272,6 +277,24 @@ export default function Reveal({ roundId }: { roundId: number }) {
           genuinely not on screen while the dice move. `aria-hidden` while rolling so a screen
           reader is not told the winner before the sighted reader gets it; `inert` would also stop
           the trip control being reachable early. */}
+      {/* **D108 — the deciding seat is named from the first frame, before any dice are seen.**
+          That ordering is the ruling's own honesty mechanism: five results with one silently
+          chosen afterwards is indistinguishable from picking the roll somebody liked. So this
+          line sits OUTSIDE `.answer` and is visible during the tumble, deliberately.
+
+          **It is safe there and I checked rather than assumed.** `RV-16` asks that nothing on
+          screen distinguishes the WINNER mid-tumble; this names a person, carries no place and no
+          number, and is identical whichever place wins. The name comes from `counts` on the seat
+          rather than from `deciding_member`, though both are on the wire — one fact, one source,
+          so a sentence cannot name somebody a row does not mark.
+
+          **「以 … 的骰子為準」 and never 「… 擲出了」.** The seed was drawn at open and every pair
+          derives from it; the tap discloses a number that already existed. Wording that credits
+          the tap with producing it is D108's stated prohibition in prose. */}
+      {decider && (
+        <p className="decider" data-part="deciding">以 {decider} 的骰子為準。</p>
+      )}
+
       <div className="answer" data-part="answer" aria-hidden={!landed} inert={!landed}>
         {/* **`sum` is in the member payload and is deliberately NOT rendered.** It is an innocent
             number — the two dice added up — but §1's table does not list it in member state, and
@@ -317,6 +340,27 @@ export default function Reveal({ roundId }: { roundId: number }) {
           winnerId={data.winning_place_id}
           sweep={sweep}
         />
+      )}
+
+      {/* ── D108 · the commitment, and the seed that opens it ──────────────────────────────
+          **The hash is shown throughout; the seed only once the dice have landed.** The commitment
+          is a hash and discloses nothing, so it is safe during the tumble and belongs there — it is
+          the claim that the outcome predates the round. **The seed is the answer in another form**:
+          every pair, the decider and the winner recompute from it, so putting it on screen mid-
+          tumble would be the whole result sitting beside an animation built to withhold it. Nobody
+          is going to compute sha256 by hand in 1.4 seconds, and that is not the standard — `D91`
+          says the animation may not assert a fact it lacks, and a screen holding the answer in a
+          recoverable form has not withheld it.
+
+          Both are shown in full. A hash exists to be compared with another hash, and half of one
+          cannot be. */}
+      {data?.seed_commit && (
+        <p className="commit" data-part="seed-commit">
+          這一輪的結果在開局時就固定了 · {data.seed_commit}
+          {landed && data.revealed_seed && (
+            <><br />種子 · {data.revealed_seed}</>
+          )}
+        </p>
       )}
 
       {/* D106 — the trip is named, the proposal never is. Signing is the one place a member's

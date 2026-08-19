@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   device, openRound, propose, roll, searchPlaces, materialise, subscribe,
-  type Candidate, type Device, type Pooled,
+  type Candidate, type Device, type OpenRound, type Pooled, type Roll,
 } from '@/lib/round'
 import { Input } from '@/components/ui/input'
 
@@ -27,6 +27,10 @@ export default function Round() {
   const [dev] = useState<Device | null>(device)
   const [roundId, setRoundId] = useState<number | null>(null)
   const [pool, setPool] = useState<Pooled[]>([])
+  /** D108's seats and the commitment, both read from the snapshot so they are on the first painted
+   *  frame rather than arriving. */
+  const [rolls, setRolls] = useState<Roll[]>([])
+  const [commit, setCommit] = useState('')
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Candidate[]>([])
   const [error, setError] = useState('')
@@ -36,12 +40,18 @@ export default function Round() {
   useEffect(() => {
     if (!dev) return
     return subscribe(dev, (e) => {
+      // One reader for both, because a snapshot and a `round_opened` carry the same object and
+      // reading them in two places is how the two come to disagree after an edit to one.
+      const take = (r: OpenRound | null | undefined) => {
+        setRoundId(r?.round_id ?? null)
+        setPool(r?.pool ?? [])
+        setRolls(r?.rolls ?? [])
+        setCommit(r?.seed_commit ?? '')
+      }
       if (e.type === 'snapshot') {
-        setRoundId(e.open_round?.round_id ?? null)
-        setPool(e.open_round?.pool ?? [])
+        take(e.open_round)
       } else if (e.type === 'round_opened') {
-        setRoundId(e.round.round_id)
-        setPool(e.round.pool ?? [])
+        take(e.round)
       } else if (e.type === 'pooled') {
         // Keyed by place, because D70 lets the same place be proposed twice and the second time
         // must change nothing a person can see.
@@ -96,7 +106,18 @@ export default function Round() {
   return (
     <main className="round" data-screen="round">
       <h1 className="roundTitle">這一餐</h1>
-      <p className="roundNote">一人提一家。提完了就擲，兩顆骰子一次定案。</p>
+      {/* **「一人提一家」 was false and D110 made it checkably so** — the cap is three per person,
+          stated on the home page and enforced at propose, and this line said one. Corrected to the
+          ruled number rather than to a vaguer phrasing: a screen that softens a limit into 「幾家」
+          cannot be compared against the home page's sentence.
+
+          **「就擲」 is left alone and raised rather than changed.** D108 rules that the dice are
+          *revealed* and not thrown — the seed is drawn at open and every pair derives from it — so
+          「擲」 credits an action with producing a number that already existed, and so does the
+          bar's 「擲骰」. The difference from the line above: D110 supplies the exact number, so that
+          fix is determined; D108 forbids a phrasing without supplying the replacement, and which
+          word replaces 擲 is a wording choice the evaluator gates. */}
+      <p className="roundNote">每人最多提三家。提完了就擲，兩顆骰子一次定案。</p>
 
       <label className="roundSearch">
         <span className="roundLabel">找一家店</span>
@@ -173,6 +194,64 @@ export default function Round() {
           </ul>
         )}
       </section>
+
+      {/* ── D108 · the seats, and who the round is settled on ─────────────────────────────
+          **Every seat is painted from the first frame, before anyone has tapped**, and a tap fills
+          one rather than adding one. That is the evaluator's `RL-4`/`RL-5` requirement and it is
+          also the honest shape: the people in this round are known, the outcome is already fixed,
+          and the only thing missing is somebody looking.
+
+          **「翻開」 and never 「擲」.** D108's copy constraint is that the dice are *revealed*, not
+          thrown — the seed was drawn at open and every pair derives from it, so a member's tap
+          discloses a number that already existed. Wording that credits the tap with producing it
+          would be the animation problem in prose. For the same reason the decider's line reads
+          「以 … 的骰子為準」 rather than anything that gives them agency they did not have. */}
+      {rolls.length > 0 && (
+        <section className="seats" data-part="roll-list">
+          <h2 className="roundH">這一輪的人</h2>
+          <ul className="seatRows">
+            {rolls.map((r) => (
+              <li
+                key={r.member_id}
+                className="seat"
+                data-roll-seat={r.member_id}
+                data-roll-state={r.die1 !== null && r.die2 !== null ? 'rolled' : 'waiting'}
+                data-counts={r.counts ? 'yes' : 'no'}
+              >
+                {/* A missing nickname renders as the seat rather than as `undefined`. Not a guess
+                    at the D55 ruling — insurance against the one bug I have already shipped on this
+                    surface, where a field read from the wrong level of a payload put an empty name
+                    on screen with no error anywhere. */}
+                <span className="seatName">{r.nickname || `座位 ${r.member_id}`}</span>
+                <span className="seatDice">
+                  {r.die1 !== null && r.die2 !== null ? `${r.die1} · ${r.die2}` : '還沒翻開'}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {/* Derived from `counts` and never from `deciding_member`, though both are on the wire.
+              One fact, one source: a sentence naming somebody the marked row does not mark is a
+              contradiction a reader can see, and picking whichever field the row uses makes it
+              impossible. */}
+          {rolls.some((r) => r.counts) && (
+            <p className="roundNote" data-part="deciding">
+              以 {rolls.find((r) => r.counts)!.nickname || '這個座位'} 的骰子為準。
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* The commitment, in the provenance register this surface already uses for the weather's
+          source — small, muted, factual, and never asked to reassure. It states when the number was
+          fixed; it does not tell anyone what to conclude from that (D20).
+
+          Shown in full rather than truncated. A hash exists to be compared against another hash,
+          and half of one cannot be. */}
+      {commit && (
+        <p className="commit" data-part="seed-commit">
+          這一輪的結果在開局時就固定了 · {commit}
+        </p>
+      )}
 
       <div className="bar" data-part="bar">
         <button

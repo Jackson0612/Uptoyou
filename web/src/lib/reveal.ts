@@ -17,6 +17,18 @@ export type Places = Record<string, string>
 /** D106: the trip is named. One per round, and the proposal it beat is still anonymous. */
 export type Trip = { nickname: string; signed_at: string } | null
 
+/** D108's seat, as it reaches the reveal. **The member payload carries `rolls[]` and the reveal
+ *  does not render it** — the owner ruled 「同一對」 on 2026-08-19: every screen shows the deciding
+ *  pair only. A field arriving is not a field being shown, and the static per-member list is a
+ *  separate unruled feature. */
+export type Roll = {
+  member_id: number
+  nickname: string
+  die1: number | null
+  die2: number | null
+  counts: boolean
+}
+
 export type MemberReveal = {
   round_id: number
   status: string
@@ -25,6 +37,12 @@ export type MemberReveal = {
   winning_place_id: number | null
   places: Places
   trip: Trip
+  /** D108. `seed_commit` was published at open, before the first place was proposed; `revealed_seed`
+   *  is `null` until the round closes and is what makes the commitment checkable. */
+  seed_commit: string
+  revealed_seed: string | null
+  rolls: Roll[]
+  deciding_member: { id: number; nickname: string } | null
 }
 
 /** One factor the fold actually applied. `reason` is `null` unless D13 lets it travel — a

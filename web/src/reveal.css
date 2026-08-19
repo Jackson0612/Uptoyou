@@ -400,6 +400,27 @@
   background: color-mix(in oklab, currentColor 12%, transparent);
 }
 
+/* ── A6 / D108 · the deciding seat and the commitment ────────────────────────
+   **`.decider` sits above the answer region and is visible through the whole tumble**, which is
+   what D108 requires and what `RV-16` had to be checked against — it names a person, never a place,
+   and reads identically whichever place wins.
+
+   It is `note`-sized and muted rather than emphasised. The fact is *who the round is settled on*,
+   not *who won*; giving it the answer's weight would make a reader look for a connection between a
+   person and a restaurant, which is the linkage §3.0 spends its whole budget preventing.
+
+   `.commit` takes the same provenance register as the round screen's and the home screen's weather
+   source — small, muted, factual, `break-all` because a 64-character hash has no break
+   opportunity. */
+.reveal .decider {
+  margin: 0; font-size: var(--text-note); color: var(--color-muted);
+}
+.reveal .commit {
+  margin: 0; font-size: var(--text-note); color: var(--color-muted);
+  font-variant-numeric: tabular-nums; word-break: break-all;
+  max-width: min(1200px, 88vw); text-align: center;
+}
+
 /* The demo scaffolding, over the flood. **Here rather than in `switcher.css` because these
    selectors lead with `.reveal`**, and a second stylesheet claiming that class is what the
    global-namespace check refuses — the same collision that made the die render as a black blob,

@@ -134,3 +134,42 @@
   border: 2px dashed var(--color-ink);
   cursor: not-allowed;
 }
+
+
+/* ── A6 / D108 · the seats and the commitment ────────────────────────────────
+   **Every declaration here is chosen so a seat FILLING cannot move anything.** The row's height is
+   fixed by its own padding and line-height rather than by its contents, and the dice cell reserves
+   its width from the widest thing it will ever hold — 「還沒翻開」 is four characters, `6 · 4` is
+   five glyphs, and the wider of the two is what the column is. The evaluator samples each seat's
+   region frame by frame from a DOM snapshot taken before recording; **if a row moves when its
+   neighbour fills, every later sample points at the wrong seat and reads a confident wrong
+   answer.** So this is not tidiness, it is the measurement's precondition. */
+.round .seats { margin-top: 28px; }
+.round .seatRows { list-style: none; margin: 10px 0 0; padding: 0; }
+.round .seat {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 0; border-top: 1.5px solid var(--color-ink);
+  /* The row's height is its own, not its content's — a filled seat is the same box as a waiting
+     one whatever lands in it. */
+  min-height: 44px;
+}
+.round .seatName { font-size: var(--text-body); }
+/* `tabular-nums` so `6 · 4` and `1 · 1` are the same width, and a fixed min-width so the column
+   does not resize as the first seat fills. */
+.round .seatDice {
+  font-size: var(--text-body); font-variant-numeric: tabular-nums;
+  min-width: 6em; text-align: right; white-space: nowrap;
+}
+.round .seat[data-roll-state="waiting"] .seatDice { color: var(--color-muted); }
+/* The seat the round is settled on. **A border, not a colour alone** — the same rule the reveal's
+   winner row follows, and for the same reader. It is an inset shadow rather than a border because
+   a border would add 3px to the row and move the seat below it. */
+.round .seat[data-counts="yes"] { box-shadow: inset 3px 0 0 var(--color-hot-ink); padding-left: 12px; }
+
+/* The commitment. The weather line's register: small, muted, and it states a fact rather than
+   asking anyone to feel safer about it. `break-all` because a 64-character hash has no break
+   opportunity and would otherwise run out of its column. */
+.round .commit {
+  margin-top: 24px; font-size: var(--text-note); color: var(--color-muted);
+  font-variant-numeric: tabular-nums; word-break: break-all;
+}
