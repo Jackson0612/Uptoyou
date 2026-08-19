@@ -167,10 +167,60 @@ class BoundaryIsStructural(unittest.TestCase):
         self.assertEqual(unexpected, set(), "a table outside the declared set is being read")
 
     def statements(self):
+        """**Every SQL string in the module, found by parsing it — not by matching one style.**
+
+        *Rewritten 2026-08-19, after the previous version failed to see a query that read two
+        forbidden tables.* It matched triple-quoted blocks at module level, which is how every query in this
+        file happened to be written. A new query written as an inline `text("select …")` inside a
+        function was **completely invisible to it**, and `test_only_the_declared_tables_are_read`
+        passed while `round` and `member` were being read — `member` being one of H20's named
+        forbidden subjects.
+
+        So the boundary was not enforced; it was enforced *for one coding style*, which is the same
+        as not being enforced, because nobody writing the next query knows what the style was for.
+
+        An AST walk over every string constant sees them all regardless of quoting, nesting or
+        indentation. It cannot see SQL assembled from fragments at run time — that would defeat any
+        static check — so `test_no_sql_is_built_by_concatenation` closes the remaining route rather
+        than leaving it as the next silent gap.
+        """
+        import ast
+
         source = open(queries.__file__, encoding="utf-8").read()
-        found = re.findall(r'"""\s*\n(select[^"]+)"""', source, re.IGNORECASE)
+        found = []
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                text_value = node.value.strip()
+                if re.match(r"select\b", text_value, re.IGNORECASE):
+                    found.append(text_value)
         self.assertTrue(found, "no SQL found — this test would silently pass")
         return found
+
+    def test_no_sql_is_built_by_concatenation(self):
+        """A static scan can only read literals, so the module may not assemble SQL from pieces.
+
+        Without this, the AST walk above is bypassable by exactly the trick it was written to stop:
+        `text("select … from " + table)` puts the table name outside every literal. The rule is
+        therefore *no `select` literal is ever adjacent to a `+` or an f-string*, which is stricter
+        than necessary and is the kind of strictness a boundary should have.
+        """
+        import ast
+
+        source = open(queries.__file__, encoding="utf-8").read()
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.JoinedStr):   # an f-string
+                rendered = "".join(
+                    part.value for part in node.values if isinstance(part, ast.Constant)
+                )
+                self.assertNotRegex(
+                    rendered.strip(), r"(?i)^select\b",
+                    "SQL built as an f-string cannot be checked against READABLE_TABLES")
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+                for side in (node.left, node.right):
+                    if isinstance(side, ast.Constant) and isinstance(side.value, str):
+                        self.assertNotRegex(
+                            side.value.strip(), r"(?i)^select\b",
+                            "SQL built by concatenation cannot be checked against READABLE_TABLES")
 
 
 class HourMustCarryAZone(unittest.TestCase):
