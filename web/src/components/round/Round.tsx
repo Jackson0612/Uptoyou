@@ -77,6 +77,7 @@ export default function Round() {
       await propose(dev, r, id)
       setQ('')
       setHits([])
+      setError('')
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -108,6 +109,19 @@ export default function Round() {
         />
       </label>
 
+      {/* **The refusal sits directly under the control that was refused, above the results.**
+          Driven on 2026-08-19 with the error below the list: a four-place proposal answered 409,
+          and the sentence explaining it rendered at y 786 under a pinned bar whose top edge is 824
+          — **half of the one thing the person needed to read, behind a bar, below ten search
+          results they had just been told they could not use.** The list stays open on purpose (a
+          refusal is not a reason to throw away a search), so the message cannot live after it.
+
+          It is not cleared on the next keystroke either, and that is deliberate: the reason a
+          proposal was refused is still true while the person types the next query, and a message
+          that vanishes the moment they touch the keyboard is one they will meet again by trying
+          the same thing. It clears when a proposal succeeds. */}
+      {error && <p className="roundErr" data-part="round-error">{error}</p>}
+
       {hits.length > 0 && (
         <ul className="hits" data-part="typeahead">
           {hits.map((c) => (
@@ -123,8 +137,6 @@ export default function Round() {
           ))}
         </ul>
       )}
-
-      {error && <p className="roundErr" data-part="round-error">{error}</p>}
 
       <section className="poolBlock" data-part="pool">
         <h2 className="roundH">這一輪的名單</h2>
