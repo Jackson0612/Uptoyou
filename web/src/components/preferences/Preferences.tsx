@@ -277,9 +277,16 @@ export default function Preferences() {
             not a second definition. Rendering the payload's English string here would put an
             untranslated sentence on a Chinese screen; restating it as a different set would be
             the unstated denominator the gate refuses. */}
-        {inForce && inForce.breadth.removed > 0 && (
+        {/* **「擲不到」 and never 「排掉」** — backend's phrase, taken because it is right rather
+            than because it was offered. 「排掉」 says the places are excluded, and they are not:
+            an avoided place keeps its seat in the pool and can still be proposed. What changes is
+            that it holds no cells on the dice table, so no roll reaches it. **The old wording
+            carried exactly the error the old field name did**, which is why fixing one without the
+            other would have left the screen still saying the wrong thing in the reader's language
+            while the payload said the right thing in ours. */}
+        {inForce && inForce.breadth.zeroed > 0 && (
           <p className="prefsNote" data-part="pref-breadth">
-            這些選擇目前排掉 {inForce.breadth.removed.toLocaleString('en-US')} 家，
+            這些選擇目前讓 {inForce.breadth.zeroed.toLocaleString('en-US')} 家擲不到，
             範圍是這個圈子提得出來的 {inForce.breadth.proposable.toLocaleString('en-US')} 家
             （{pct(inForce.breadth.share)}）。
           </p>

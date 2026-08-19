@@ -52,7 +52,13 @@ export type Coverage = {
 
 export type Preferences = {
   breadth: {
-    removed: number
+    /** **`zeroed`, not `removed`, and the rename is a correction rather than a preference.** An
+     *  avoidance sets a place's weight to ZERO (D103/D45); it never takes the place out of
+     *  anything. The place stays proposable, can still be proposed and still appears in the pool —
+     *  it simply holds no cells on the dice table, so no roll can land on it. The old name was the
+     *  only thing in the system saying otherwise, and it was enough to put a wrong mechanism into a
+     *  spec another session wrote from reading the payload. */
+    zeroed: number
     proposable: number
     share: number
     /** Stated by the API, never composed here. A share whose denominator the screen invents is
