@@ -55,4 +55,26 @@ airflow connections add cwa_open_data \
     --conn-host opendata.cwa.gov.tw \
     --conn-password "${UPTO_CWA_API_KEY}"
 
+# A10's alert channel. **Absent is legal, and that is the whole design of the callback.** A fresh
+# clone, and `tools/split_boot_check.sh`'s isolated stack, have no bot — so the two variables are
+# read with a default and the Connection is simply not created when either is empty. The callback
+# prints a line to the task log and returns; alerting is off on a stack nobody is watching, which
+# is correct rather than degraded.
+#
+# **Rotating the token is three places, the same shape the CWA key carries** — `~/.keys/`, `.env`,
+# and this Fernet-encrypted Connection, which keeps the old value until
+# `docker compose up airflow-init --force-recreate --no-deps` re-runs this file. Delete-then-add
+# is what makes that idempotent.
+airflow connections delete telegram_alerts >/dev/null 2>&1 || true
+if [[ -n "${UPTO_TELEGRAM_BOT_TOKEN:-}" && -n "${UPTO_TELEGRAM_CHAT_ID:-}" ]]; then
+    airflow connections add telegram_alerts \
+        --conn-type http \
+        --conn-host api.telegram.org \
+        --conn-login "${UPTO_TELEGRAM_CHAT_ID}" \
+        --conn-password "${UPTO_TELEGRAM_BOT_TOKEN}"
+    echo "airflow-init: telegram_alerts created — failed tasks will send one message each"
+else
+    echo "airflow-init: no telegram token or chat id in the environment, so telegram_alerts was NOT created — failure alerting is off on this stack (A10: absent is legal)"
+fi
+
 echo "airflow-init: done — connections are stored encrypted, not in the environment of any task"

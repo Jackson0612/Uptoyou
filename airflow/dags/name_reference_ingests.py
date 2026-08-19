@@ -65,6 +65,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # A9's shape check, shared with `place_reference_ingest.py`. It defines no DAG of its own, so
 # nothing is registered twice.
 from _publication_check import make_check_task
+from _alerts import send_failure_alert
 
 POSTGRES_CONNECTION = "upto_postgres"
 
@@ -141,6 +142,10 @@ def _make(name: str, module: str, source: str, cron: str, dag_tags: list[str],
         catchup=False,
         max_active_runs=1,
         default_args={
+            # A10 — one Telegram message per failed task, after the retries are spent. It never
+            # raises and it is silently absent when the `telegram_alerts` Connection is not
+            # there, which is the designed state for a stack nobody is watching.
+            "on_failure_callback": send_failure_alert,
             "retries": 2,
             "retry_delay": timedelta(minutes=10),
             "depends_on_past": False,

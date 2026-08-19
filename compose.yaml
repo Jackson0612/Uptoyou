@@ -191,6 +191,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       UPTO_CWA_API_KEY: ${UPTO_CWA_API_KEY}
+      # A10's alert channel. Read by `init.sh` once, to create the `telegram_alerts` Connection;
+      # no task reads them afterwards (D33). `:-` because absent is legal — a stack with no bot
+      # runs with alerting off rather than refusing to start.
+      UPTO_TELEGRAM_BOT_TOKEN: ${UPTO_TELEGRAM_BOT_TOKEN:-}
+      UPTO_TELEGRAM_CHAT_ID: ${UPTO_TELEGRAM_CHAT_ID:-}
     depends_on:
       db:
         condition: service_healthy

@@ -59,6 +59,7 @@ flat. Read `doc/build-hazards.md` H43 before treating a slowing pass as a bug in
 from __future__ import annotations
 
 import os
+import sys
 import subprocess
 import urllib.error
 import urllib.request
@@ -68,6 +69,12 @@ from datetime import datetime, timedelta, timezone
 from airflow.hooks.base import BaseHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.sdk import Asset, dag, task
+
+# H46 — Airflow 3 does not put the dags folder on `sys.path` (Airflow 2 did), so a sibling import
+# inserts it. Read `doc/build-hazards.md` H46 before moving this to `PYTHONPATH`.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _alerts import send_failure_alert
 
 POSTGRES_CONNECTION = "upto_postgres"
 
@@ -132,7 +139,14 @@ having count(*) > 0
     start_date=datetime(2026, 8, 19),
     catchup=False,
     max_active_runs=1,
-    default_args={"retries": 0, "depends_on_past": False},
+    default_args={
+        # A10 — one Telegram message per failed task, after the retries are spent. It never
+        # raises, and it is silently absent when the `telegram_alerts` Connection is not
+        # there, which is the designed state for a stack nobody is watching.
+        "on_failure_callback": send_failure_alert,
+        "retries": 0,
+        "depends_on_past": False,
+    },
     tags=["classify", "A8", "gpu", "asset-triggered"],
 )
 def upto_place_classify_backfill():

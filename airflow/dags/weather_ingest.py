@@ -31,11 +31,18 @@ the limitation is the source's, and it is recorded rather than worked around.
 from __future__ import annotations
 
 import os
+import sys
 import subprocess
 from datetime import datetime, timedelta
 
 from airflow.hooks.base import BaseHook
 from airflow.sdk import dag, task
+
+# H46 — Airflow 3 does not put the dags folder on `sys.path` (Airflow 2 did), so a sibling import
+# inserts it. Read `doc/build-hazards.md` H46 before moving this to `PYTHONPATH`.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _alerts import send_failure_alert
 
 POSTGRES_CONNECTION = "upto_postgres"
 CWA_CONNECTION = "cwa_open_data"
@@ -111,7 +118,15 @@ def _run(dataset_id: str) -> str:
     start_date=datetime(2026, 8, 11),
     catchup=False,
     max_active_runs=1,
-    default_args={"retries": 2, "retry_delay": timedelta(minutes=3), "depends_on_past": False},
+    default_args={
+        # A10 — one Telegram message per failed task, after the retries are spent. It never
+        # raises, and it is silently absent when the `telegram_alerts` Connection is not
+        # there, which is the designed state for a stack nobody is watching.
+        "on_failure_callback": send_failure_alert,
+        "retries": 2,
+        "retry_delay": timedelta(minutes=3),
+        "depends_on_past": False,
+    },
     tags=["ingest", "item-10", "cwa"],
 )
 def upto_weather_ingest():
