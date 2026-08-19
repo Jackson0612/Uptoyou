@@ -7,14 +7,17 @@
 #
 # Airflow is deliberately absent. It arrives with the first pipeline DAG rather than with
 # the skeleton, because an orchestrator with nothing to orchestrate is 3 GB of idle
-# service on a 7.5 GB machine.
+# service on a small machine. (**That sentence said «7.5 GB machine» until 2026-08-19**, when
+# `free -m` read 15,732 MB total on this box — 4 cores. The argument is unchanged and the number
+# was stale, so it is gone rather than corrected: a figure nobody re-measures is a figure that
+# will be wrong again.)
 
 name: upto
 
 # **A11 ③ — every service's log is capped, owner-ruled 2026-08-19.** An uncapped `json-file` driver
 # grows without bound: the classifier prints a timing line per 25-row batch and a full township is
 # ~215 of them, the hourly weather ingest prints a verdict every hour, and nothing rotates any of it.
-# On a 7.5 GB machine the first symptom of that is not a large file, it is a stack that stops.
+# The first symptom of that is not a large file, it is a stack that stops.
 #
 # **10 MB x 3 per service, so 30 MB each and 240 MB across the eight.** Chosen to be larger than one
 # long pass's output (信義's 217 batch lines are well under a megabyte) so a single run is never
@@ -31,9 +34,83 @@ x-logging: &logging
       max-size: 10m
       max-file: "3"
 
+# **A11 ① — two networks, so the front door cannot reach the database. Owner-ruled 2026-08-19.**
+#
+# Until now every service shared one default network, which means `nginx` could open a socket to
+# PostgreSQL. Nothing in the product wants that: the proxy serves files and forwards `/api/` to the
+# api container, and the database is two hops from anything a request touches. One network made the
+# blast radius of a compromised nginx the whole stack; two make it the api's HTTP surface, which is
+# the surface it is supposed to be able to reach.
+#
+# **`proxy` is on `edge` only, and that is the whole assertion.** Docker's embedded DNS resolves a
+# service name only across a *shared* network, so from `proxy` the name `db` does not resolve at all
+# — it fails at DNS rather than at connect, which is the earlier and clearer failure. `api` is on
+# both because it is the one service that legitimately spans them.
+#
+# **`data` is deliberately NOT `internal: true`, and that is a trade rather than an omission.** An
+# internal network has no route off the host, and the ingests are 17 MB and 66 MB downloads run from
+# `airflow-scheduler`, while the classifier in `api` reaches the GPU relay at `172.17.0.1`. An
+# internal `data` would break both. **Rejected: a third `egress` network** to give those two outbound
+# reach while keeping `data` internal — it buys nothing here, because the thing being kept away from
+# the database is `proxy`, and `proxy` is already not on `data`.
+#
+# **The gateway address changes and the relay's does not.** Each user-defined network gets its own
+# subnet, so a container's default gateway is no longer `172.17.0.1` — but `172.17.0.1` is `docker0`
+# on the *host*, which is what `tools/tunnel_relay.py` binds, and a container reaches it as an
+# ordinary host address rather than as its gateway. Verified from inside `upto-api-1` after this
+# split, 2026-08-19; if it ever stops answering, read `CLAUDE.md`'s relay paragraph before assuming
+# this block caused it.
+networks:
+  edge:
+    driver: bridge
+  data:
+    driver: bridge
+
+# **A11 ② — every service has a memory ceiling and a CPU ceiling, measured. Owner-ruled 2026-08-19.**
+#
+# **Where the numbers come from:** `python3 probes/a11_container_footprint.py`, which reads each
+# container's `/sys/fs/cgroup/memory.peak` — the kernel's own high-water mark — rather than polling
+# `docker stats`. A limit has to cover the worst *moment*, and the tax source's parse peak lasts
+# seconds inside a 19-second task, so a 5-second poller has a real chance of never seeing the top.
+# One read reports the true maximum with no sampler in the measurement (H41 from the other side).
+#
+# **The window the numbers were taken over, 2026-08-19:** a fresh `--force-recreate` boot, then two
+# real DAG ingests, then the tax source's full 1,711,395-row parse under `--force-parse`, then the
+# five-agent walkthrough, then M1's idempotency suite (five sources through their real CLIs). Both
+# ends read with the same probe. **`ollama` was NOT up** — it is profile-gated (D63) — so it has no
+# limit, because a number for it would be invented rather than measured.
+#
+# **`mem_limit` is 1.5x the measured peak, except where it says otherwise beside the service.** Three
+# are set above that line for named reasons; each says which and why. **A ceiling set from a window
+# that missed the heavy path is worse than no ceiling** — it turns the first real republication into
+# an OOM kill at 03:20 — which is why the window above deliberately contains a forced full parse and
+# not just the hash short-circuit the two triggered DAGs actually took.
+#
+# **`cpus` is NOT 1.5x anything, and the reason is that the measurement cannot support it.** There is
+# no `cpu.peak`; `cpu.stat` is cumulative, so the probe reports *mean* cores over the window and a
+# burst is invisible in a mean. Measured means were 0.007 (proxy) to 0.482 (airflow-scheduler), while
+# a burst already on record is nearly a full core for ~8 s at each of the classifier's 25-row commits
+# (2026-08-19, in `CLAUDE.md`). So these are ceilings against a runaway container on a shared 4-core
+# box, set far above every mean, and they oversubscribe on purpose: 8.5 across 4 cores, because a
+# ceiling is not a reservation and a stack that can only ever use 4 in total would be slower than
+# today for no safety gained. **A `cpus` set near the mean would look exactly like the upstream
+# Ollama slowdown looked** — everything working, everything slower, nothing saying why.
+#
+# **No `memswap_limit`.** Setting it equal to `mem_limit` disables swap for the container and turns
+# every overshoot into an immediate kill; leaving it lets an overshoot page out and merely crawl,
+# which on a development box is the failure mode that can be investigated rather than the one that
+# has already happened. The 6.5 GB of swap on this box is the safety margin these ceilings lean on.
+
 services:
   db:
     <<: *logging
+    # A11 — peak 182.8 MiB. **1.5x is 274m; 512m on purpose** — the integration tests build and drop
+    #     their own databases and pgvector's kNN over the crib was not in the window, and an OOM-
+    #     killed backend is the worst failure on this list.
+    mem_limit: 512m
+    cpus: 2.0
+    networks:
+      - data
     # pgvector's own build of PostgreSQL 17, and it is here for the `vector` extension alone
     # (D88) — same major version, same settings. The collation is C (verified 2026-08-15
     # against pg_database), so the alpine→debian move leaves the existing volume
@@ -66,6 +143,15 @@ services:
 
   api:
     <<: *logging
+    # A11 — peak 143.3 MiB, reached by M1's five real ingests. **1.5x is 215m; 512m on purpose** — the
+    #     classifier and the evaluation rounds run here and their memory was NOT measured (only their
+    #     CPU: ~0.24% of a core, bursting to nearly one at each 25-row commit), so this is the one
+    #     ceiling standing over an unmeasured workload.
+    mem_limit: 512m
+    cpus: 2.0
+    networks:
+      - edge
+      - data
     build:
       context: ./api
     environment:
@@ -91,6 +177,12 @@ services:
 
   proxy:
     <<: *logging
+    # A11 — peak 15.7 MiB. **1.5x is 24m, which is under what nginx needs to start at all**, so 64m is a
+    #     floor rather than a calculation.
+    mem_limit: 64m
+    cpus: 0.5
+    networks:
+      - edge
     build:
       # app/ rather than ./proxy: the image carries the nginx config and the static front
       # end, and those are siblings. Both paths stay inside app/, which is what H18 asks.
@@ -99,12 +191,22 @@ services:
     ports:
       # The only published port. Everything else talks over the compose network, so the
       # database is not reachable from the host at all.
-      - "${UPTO_HTTP_PORT:-8080}:80"
+      #
+      # **The container side is 8080 since A11 ⑤, and the published side is unchanged.**
+      # `nginxinc/nginx-unprivileged` runs its master as uid 101 and cannot bind 80, so
+      # `upto.conf` listens on 8080 (frontend's 7a0b576) — `localhost:8080` and
+      # `UPTO_HTTP_PORT` mean exactly what they meant before.
+      - "${UPTO_HTTP_PORT:-8080}:8080"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      # **The port is written out, and leaving it implicit was a real bug caught by review.**
+      # A bare `http://127.0.0.1/health` resolves to port 80, so after the move to 8080 this
+      # healthcheck fails against a proxy that is serving perfectly — and the failure reads as
+      # "the proxy is not answering", which is the same misdirection the `listen` comment in
+      # `upto.conf` is about, one layer out. Found by the frontend session, 2026-08-19.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -121,6 +223,13 @@ services:
 
   airflow-init:
     <<: *logging
+    # A11 — one-shot: `db migrate` plus four `connections add`. **Not separately measured** — it exits
+    #     before any window can contain it — so it borrows the api's ceiling rather than claiming one
+    #     of its own.
+    mem_limit: 512m
+    cpus: 2.0
+    networks:
+      - data
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -203,6 +312,13 @@ services:
 
   airflow-scheduler:
     <<: *logging
+    # A11 — peak 664.7 MiB, the highest in the stack, and it is the highest because the ingests run as
+    #     its subprocesses: the tax source's 1.7M-row parse is **this** container's memory, not the
+    #     api's. 1.5x is 997m.
+    mem_limit: 1024m
+    cpus: 2.0
+    networks:
+      - data
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -280,6 +396,12 @@ services:
   # bug rather than a missing process.
   airflow-dag-processor:
     <<: *logging
+    # A11 — peak 429.8 MiB, all of it DAG parsing — it did not move at all under load, which is what
+    #     parsing-only should look like. 1.5x is 645m.
+    mem_limit: 768m
+    cpus: 1.0
+    networks:
+      - data
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -302,6 +424,11 @@ services:
 
   airflow-api:
     <<: *logging
+    # A11 — peak 275.1 MiB. 1.5x is 413m.
+    mem_limit: 512m
+    cpus: 1.0
+    networks:
+      - data
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -355,6 +482,11 @@ services:
   # rather than on a GPU somewhere (D64's ladder, step 1).
   ollama:
     <<: *logging
+    # A11 — **No ceiling: it was not up when the stack was measured** (profile-gated, D63), and a number
+    #     invented for it would be the exact mistake the window above was shaped to avoid. It gets one
+    #     the day it is measured resident.
+    networks:
+      - data
     image: ollama/ollama:0.12.3
     profiles: ["model"]
     environment:

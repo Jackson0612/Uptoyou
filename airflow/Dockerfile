@@ -29,3 +29,13 @@ RUN mkdir -p /opt/airflow/auth
 
 COPY --chown=airflow:root api/src /opt/upto/src
 COPY --chown=airflow:root airflow/dags /opt/airflow/dags
+
+# **A11 ⑤ — `USER airflow` stated, though it was already true. Owner-ruled 2026-08-19.**
+#
+# `apache/airflow:3.0.2` already ends on `USER airflow` (uid 50000), and nothing above switches to
+# root, so every `RUN` here and every process in the three airflow containers already ran unprivileged
+# — verified with `docker top`, not assumed. This line therefore changes no behaviour today. It is
+# here because the property is load-bearing and currently held by a *base image's* last directive: a
+# future `USER root` for one `apt-get`, or a base-image bump that reorders its own tail, would drop it
+# silently and nothing would say so. Stating it makes the guarantee this file's own.
+USER airflow

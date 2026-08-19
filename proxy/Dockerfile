@@ -44,7 +44,23 @@ COPY web/ ./
 RUN npm run build
 
 # ---- the served image ------------------------------------------------------------------
-FROM nginx:1.27-alpine
+#
+# **`nginxinc/nginx-unprivileged` since A11 ⑤ (owner-ruled 2026-08-19), not `nginx`.** The stock
+# image starts its master process as root and only drops its workers to uid 101; this one runs the
+# master as 101 too, so nothing in the container is root at any point. Same nginx, same version,
+# same modules — it is the same source built with a different default user, pid path and listen
+# port.
+#
+# **The consequence is a port, and it is not optional:** a non-root process cannot bind below 1024,
+# so `proxy/upto.conf` listens on **8080** and `compose.yaml` maps `${UPTO_HTTP_PORT:-8080}:8080`.
+# `FROM` unprivileged with `listen 80` does not fail to serve — it fails to *start*, before the log
+# can name the port as the cause. The two lines are one change and neither is safe alone.
+#
+# **What is inherited and must stay writable:** the unprivileged image's own `nginx.conf` puts the
+# pid at `/tmp/nginx.pid` and every temp path under `/tmp`. Only `conf.d/default.conf` is replaced
+# here, so that arrangement is inherited untouched — which is the thing a later read-only-rootfs
+# idea has to account for. Noted by the frontend session, 2026-08-19.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 COPY proxy/upto.conf /etc/nginx/conf.d/default.conf
 
