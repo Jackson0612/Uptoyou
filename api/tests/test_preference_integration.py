@@ -258,8 +258,8 @@ async def scenario(test_url: str) -> None:
         check("a member may avoid MORE THAN ONE category",
               [r["value"] for r in body["avoid_categories"]] == ["火鍋", "燒烤"],
               body["avoid_categories"])
-        check("and D22's breadth counts what those settings actually remove — 1 of 2",
-              (body["breadth"]["removed"], body["breadth"]["proposable"]) == (1, 2),
+        check("and D22's breadth counts what those settings actually zero — 1 of 2",
+              (body["breadth"]["zeroed"], body["breadth"]["proposable"]) == (1, 2),
               body["breadth"])
 
         answer = await client.post(
@@ -295,7 +295,16 @@ async def scenario(test_url: str) -> None:
               breadth["proposable"] == 2 and "proposable set" in breadth["denominator"],
               breadth)
         check("and 燒烤 alone removes none of the two categorised places",
-              breadth["removed"] == 0, breadth)
+              breadth["zeroed"] == 0, breadth)
+        # **The name is asserted, because the name was the defect.** `removed` taught a mechanism the
+        # product does not have — an avoidance zeroes a place's weight (D103/D45) and never takes it
+        # out of the proposable set — and a session writing a spec against this payload wrote 「拿掉」
+        # from reading the old field. A field name is a claim about behaviour; this pins the claim.
+        check("breadth reports `zeroed` and not `removed`",
+              "zeroed" in breadth and "removed" not in breadth, sorted(breadth))
+        # And the denominator still travels with it (D22): a share whose base is unstated means three
+        # different things over three candidate pools.
+        check("breadth still names its denominator", bool(breadth.get("denominator")), breadth)
         check("the threshold is null because D22 names no line — a screen may not say 'crossed'",
               breadth["threshold"] is None, breadth)
 

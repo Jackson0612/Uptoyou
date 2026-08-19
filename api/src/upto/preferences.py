@@ -182,7 +182,13 @@ proposable as (
      where p.origin = 'circle-local' and p.circle_id = :circle_id
 )
 select count(*) as proposable,
-       count(*) filter (where category = any(:avoided)) as removed
+       -- **`zeroed`, not `removed` — renamed 2026-08-19 because the old name taught the wrong
+       -- mechanism.** An avoidance sets a place's weight to zero (D103/D45); the place stays in the
+       -- proposable set, can still be proposed, and still appears in the pool. It simply holds no
+       -- cells on the dice table, so no roll can land on it. The evaluator wrote 「拿掉」 in a spec
+       -- from reading this field and the owner caught it — the name was the only thing that told it
+       -- otherwise.
+       count(*) filter (where category = any(:avoided)) as zeroed
   from proposable
 """
 
@@ -324,11 +330,16 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
         # line" and names no number**, so the line is unruled and this payload will not invent
         # one. A screen may state the share; it may not say "crossed" until there is a line.
         "breadth": {
-            "removed": breadth.removed,
+            # **`zeroed` rather than `removed`.** The mechanism is zero weight, never exclusion: an
+            # avoided place stays proposable and stays in the pool, and holds no cells on the dice
+            # table so no roll can land on it. The old name was read as *taken out of the set* by the
+            # session writing the spec against it, which is the strongest possible evidence that a
+            # field name is a claim about behaviour and not a label.
+            "zeroed": breadth.zeroed,
             "proposable": breadth.proposable,
             "share": 0.0
             if not breadth.proposable
-            else round(breadth.removed / breadth.proposable, 4),
+            else round(breadth.zeroed / breadth.proposable, 4),
             "denominator": "the circle's proposable set — every reference place in the current "
                            "publication, plus this circle's own places",
             "threshold": None,
