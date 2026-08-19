@@ -405,6 +405,25 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
         # for this kind — *show, and require the tap even for a stance* — is a screen behaviour, and
         # putting an expiry in the data to force it would silently switch an avoidance **off**,
         # which is the opposite of asking again.
+        #
+        # **The device half of that carry rule is ruled OUT of the server (2026-08-19).** B1 asks for
+        # a re-ask on a new month **or a new device**; `preference` records a member and no device, so
+        # the second half was never answerable here. Three reasons it stays that way rather than
+        # getting a column: monthly re-asking already gives the safety a new device would; the browser
+        # knows for itself that it is new, because a fresh device has no local state; and **storing a
+        # device beside an allergen is the most sensitive linkage this product could make** — it turns
+        # 「this member avoids 花生」 into 「this member, on this handset, avoids 花生」. Identity and
+        # new-phone linking are parked whole with D107, so nothing is coming that would change the
+        # arithmetic. The evaluator carries it as `A2-G13c-device`, **`n/a` with its precondition
+        # named — the table cannot express the question** — never as a pass, which is H37's rule
+        # applied to a missing *column* rather than a missing row.
+        #
+        # **The month half is still the endpoint's and is NOT built yet.** This payload resolves
+        # neither boundary today: it hands out `valid_from` and lets the screen decide, which makes
+        # the client the only deriver rather than a second one — the opposite of what D25 chose when
+        # it stored the budget's expiry, and D25's stated reason was that *a month boundary four
+        # readers each re-derive is how two of them disagree*. So the remaining work is to resolve
+        # the month here and send the asking / not-asking state already decided.
         "avoid_ingredients": [
             {
                 "value": row.value,
