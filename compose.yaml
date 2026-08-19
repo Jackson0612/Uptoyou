@@ -11,8 +11,29 @@
 
 name: upto
 
+# **A11 ③ — every service's log is capped, owner-ruled 2026-08-19.** An uncapped `json-file` driver
+# grows without bound: the classifier prints a timing line per 25-row batch and a full township is
+# ~215 of them, the hourly weather ingest prints a verdict every hour, and nothing rotates any of it.
+# On a 7.5 GB machine the first symptom of that is not a large file, it is a stack that stops.
+#
+# **10 MB x 3 per service, so 30 MB each and 240 MB across the eight.** Chosen to be larger than one
+# long pass's output (信義's 217 batch lines are well under a megabyte) so a single run is never
+# truncated mid-flight — the columns from a pass are not reconstructable afterwards, which 信義 proved
+# by losing them — and small enough that eight services cannot fill a disk between two people looking.
+#
+# **A YAML anchor rather than eight copies**, because eight copies of a policy drift and the drift is
+# invisible: a service quietly missing its cap looks exactly like one that has it until the day it is
+# the one that filled the disk.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
 services:
   db:
+    <<: *logging
     # pgvector's own build of PostgreSQL 17, and it is here for the `vector` extension alone
     # (D88) — same major version, same settings. The collation is C (verified 2026-08-15
     # against pg_database), so the alpine→debian move leaves the existing volume
@@ -44,6 +65,7 @@ services:
     restart: unless-stopped
 
   api:
+    <<: *logging
     build:
       context: ./api
     environment:
@@ -68,6 +90,7 @@ services:
     restart: unless-stopped
 
   proxy:
+    <<: *logging
     build:
       # app/ rather than ./proxy: the image carries the nginx config and the static front
       # end, and those are siblings. Both paths stay inside app/, which is what H18 asks.
@@ -97,6 +120,7 @@ services:
   # its own role. A second Postgres container would isolate nothing that matters here.
 
   airflow-init:
+    <<: *logging
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -173,6 +197,7 @@ services:
     restart: on-failure
 
   airflow-scheduler:
+    <<: *logging
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -249,6 +274,7 @@ services:
   # `dags list` is empty and `list-import-errors` is empty too, which reads like a parsing
   # bug rather than a missing process.
   airflow-dag-processor:
+    <<: *logging
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -270,6 +296,7 @@ services:
     restart: unless-stopped
 
   airflow-api:
+    <<: *logging
     build:
       context: ./
       dockerfile: airflow/Dockerfile
@@ -322,6 +349,7 @@ services:
   # running stack, with 2,919 MB available — it fits this machine, which is why it is here
   # rather than on a GPU somewhere (D64's ladder, step 1).
   ollama:
+    <<: *logging
     image: ollama/ollama:0.12.3
     profiles: ["model"]
     environment:
