@@ -5,6 +5,7 @@ import App from './App.tsx'
 import Preferences from './components/preferences/Preferences.tsx'
 import Reveal from './components/reveal/Reveal.tsx'
 import Switcher from './components/Switcher.tsx'   // demo scaffolding — see the component
+import Back from './components/Back.tsx'           // demo scaffolding — owner-ruled 2026-08-19
 
 /**
  * One path, one screen — read once at boot, with no router library.
@@ -38,11 +39,16 @@ function route() {
 
 const screen = route()
 
+/** Back is on every screen except the home entry — home is where back goes, so a back control
+ *  there is either a no-op or an exit from the product. */
+const atHome = window.location.pathname.replace(/\/+$/, '') === ''
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Demo scaffolding, ruled 2026-08-19. Removing it is this line plus the import plus the
         stylesheet import in `index.css` — deliberately three deletions and no untangling. */}
     <Switcher />
+    {!atHome && <Back />}
     {screen}
   </StrictMode>,
 )

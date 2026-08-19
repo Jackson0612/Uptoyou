@@ -37,7 +37,13 @@
   min-height: var(--die);
 }
 
-.reveal { --die: 132px; }
+/* **140, not 132 — settled by the evaluator 2026-08-19 after I measured the contradiction.**
+   132 px is 17.37% of a 760 viewport against `R-D9`'s 18% floor, so `design.md`'s token
+   contradicted the gate that measures it; 136.8 is the exact floor and 140 clears it at 18.42%
+   with room for the border. The floor was NOT moved to fit the token — a target adjusted to pass
+   its own test measures nothing. Inert while §7b parks the phone widths; correct when they
+   return. */
+.reveal { --die: 140px; }
 @media (min-width: 900px)  { .reveal { --die: 180px; } }
 @media (min-width: 2100px) {
   .reveal { --die: 240px; }
@@ -223,3 +229,14 @@
   .reveal, .reveal .answer, .reveal .cube { transition: none; }
   .reveal .cube[data-tumbling="yes"] { animation: none; }
 }
+
+/* The demo scaffolding, over the flood. **Here rather than in `switcher.css` because these
+   selectors lead with `.reveal`**, and a second stylesheet claiming that class is what the
+   global-namespace check refuses — the same collision that made the die render as a black blob,
+   caught by a rule instead of by a screenshot this time.
+
+   Paper-on-flood would read as a sticker stuck to the page. The scaffolding takes the flood's own
+   ink pair instead, which is legible on all four faces because `on-*` is exactly the pair measured
+   against that ground. */
+.reveal ~ .backLink,
+.reveal ~ .switcher { background: transparent; color: inherit; }

@@ -24,7 +24,15 @@
 /** The reveal needs a round to show. Rather than invent one, the entry carries the last round this
  *  browser actually opened — written by whatever screen last drove a roll — and hides itself until
  *  one exists. A demo link that 404s is worse than one that is not there yet. */
-const lastRound = () => localStorage.getItem('upto_last_round')
+function lastRound(): string | null {
+  // The round in the address bar wins over the remembered one. Without this the switcher renders
+  // before the reveal's effect has recorded anything, so **the screen you are standing on is
+  // missing from the switcher** — which reads as the switcher being broken rather than as a
+  // one-tick race.
+  const here = new URLSearchParams(window.location.search).get('round')
+  if (here) return here
+  return localStorage.getItem('upto_last_round')
+}
 
 type Stop = { href: string; label: string }
 

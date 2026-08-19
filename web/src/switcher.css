@@ -37,3 +37,36 @@
 .switcher a[data-here="yes"] { text-decoration: underline; text-underline-offset: 3px; }
 
 .switcher a:focus-visible { outline: 2px solid var(--color-ring); outline-offset: -2px; }
+
+/* The back affordance — owner-ruled, POC level, and out of flow for the same reason the switcher
+   is: the reveal's answer region is a measured quantity (`R-D9`) and the home entry is a pixel
+   diff, so navigation that pushes content down changes both. Top-LEFT, mirroring the switcher's
+   top-right, so the two read as one scaffolding layer rather than two decisions. */
+
+.backLink {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-right: 2px solid var(--color-ink);
+  border-bottom: 2px solid var(--color-ink);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: var(--text-note);
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-decoration: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+.backLink:focus-visible { outline: 2px solid var(--color-ring); outline-offset: -2px; }
+
+/* The reveal's flood needs these two to go transparent, and **that rule lives in `reveal.css`, not
+   here** — a selector leading with `.reveal` would claim that class from a second stylesheet, and
+   the surface test now refuses exactly that. It caught this file within minutes of the check
+   landing, which is the check working rather than an inconvenience. */
