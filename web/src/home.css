@@ -91,6 +91,40 @@ h1.headline .lit { color: var(--color-hot-ink); }
 [data-collage-state="static"] .cell img { transition: none; }
 @media (prefers-reduced-motion: reduce) { .cell img { transition: none; } }
 
+/* ── the tile lifts on hover — `design.md` §5 rule 5, evaluator-ruled 2026-08-19 ─────────────
+   Derived from this surface's own language rather than imported: the tile already carries a HARD
+   offset shadow with no blur, and the idiomatic hover for a hard-shadow object is the one that
+   reads as it leaving the page. The tile moves `-3px, -3px` and the shadow's offset grows by the
+   same 3 (`6px → 9px`), so the gap between object and shadow widens by exactly the distance the
+   object travelled. Nothing scales, nothing rotates.
+
+   **On the CELL and never on the `<img>`.** The collage swaps photographs every 10 s; an effect
+   bound to the image drops mid-hover the moment the picture changes under the cursor.
+
+   **`transform` and `box-shadow` only**, which is `D91`'s held-box family — `HV-2` asks for the
+   cell's box to be identical hovered and unhovered, and a rule that touches no layout property
+   satisfies it by construction rather than by measurement.
+
+   **`@media (hover: hover)` is an addition to the ruling, not a deviation from it.** Without it a
+   touch device applies `:hover` on tap and keeps it applied until something else is tapped — the
+   tile would sit lifted, which is not a state this design has. §7b parks the phone widths today,
+   so this is a guard against the day they return rather than a fix for something visible now.
+
+   **120 ms, and one thing about it is worth correcting rather than inheriting:** the ruling says it
+   is not a new number because the surface already has a duration for *a control acknowledging you*.
+   It does not. The only transitions here before this line were the collage's 400 ms cross-fade and
+   the reveal's .45 s flood, both ambient rather than acknowledging. 120 ms is right for the effect
+   and it is the evaluator's call to make — but it is a **new** speed, and the reason given for it
+   would have gone on being true-sounding and false. */
+@media (hover: hover) {
+  .cell { transition: transform 120ms ease-out, box-shadow 120ms ease-out; }
+  .cell:hover { transform: translate(-3px, -3px); box-shadow: 9px 9px 0 var(--color-ink); }
+  /* §5 rule 3 — the end state is kept and the transition is dropped. `HV-3` is a DIFFERENTIAL for
+     the same reason `HC-6` is: asserting only "no transition under reduce" passes identically on a
+     build where hover does nothing at all. */
+  @media (prefers-reduced-motion: reduce) { .cell { transition: none; } }
+}
+
 .tag {
   position: absolute; right: 34px; bottom: -14px; z-index: 2;
   background: var(--color-hot); color: var(--color-on-hot);
