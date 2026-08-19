@@ -49,11 +49,30 @@ READABLE_TABLES = frozenset(
         "reference_place",
         "ingest_run",
         "township_station",
+        # **Added 2026-08-19 when H20 was narrowed for `explain_round` (D108, `06c9f9f`).** D108's
+        # commitment is worthless unless somebody can recompute it, and recomputing needs the round
+        # and the member **set** — the decider is drawn from that set, so the ids are an input to the
+        # arithmetic rather than a fact about people being disclosed.
+        "round",
+        "member",
     }
 )
 
-# Named so the refusal can quote them. H20's boundary is about these three ideas.
-FORBIDDEN_SUBJECTS = ("member", "private channel", "weight", "contribution", "reason")
+# Named so the refusal can quote them. **Narrowed 2026-08-19 from `member` to a member's private
+# facts** (owner, with D55's narrowing the same day): who rolled is a public act — everybody performs
+# it, visibly, in the same moment, on purpose — while what somebody *wants* is not. So a member id may
+# be read to verify a roll; a member's preference, contribution, reason or channel may not.
+FORBIDDEN_SUBJECTS = ("preference", "contribution", "reason", "private channel")
+
+
+ROUND_COMMITMENT = """
+select id, circle_id, status, die1, die2, winning_place_id, seed_commit, outcome_seed
+from round where id = :round_id
+"""
+
+ROUND_SEATS = """
+select id from member where circle_id = :circle_id order by id
+"""
 
 
 class LineageRefused(PermissionError):
@@ -400,3 +419,91 @@ def refuse(subject: str) -> None:
         "no such row exists to aggregate. Asking a person's reason out of a lineage tool is the "
         "leak this boundary exists to stop.".format(subject)
     )
+
+
+async def explain_round(session, round_id: int) -> Answer:
+    """D108's verification, recomputed rather than asserted — the point of the whole mechanism.
+
+    The commitment is worth nothing unless somebody can check it, and **verifiability nobody
+    exercises is trust** — that was named as a cost when the mechanism was proposed, and this is the
+    payment. Everything here is derived from the revealed seed by the same module the round used, then
+    compared against what the round stored. The answer is not *we say this was fair*; it is *here is
+    the arithmetic, and here is where it agrees*.
+
+    **Member ids, never nicknames** — the trade offered when H20 was narrowed and the one the owner
+    took. The ids are an input to the arithmetic (the decider is drawn from the member set); a
+    nickname would be a fact about a person that verification does not need.
+
+    **It carries the hex-decode warning, and that is not decoration.** Found by the frontend session
+    checking the commitment by hand: the seed is 32 bytes *written as hex*, and hashing the ASCII
+    string produces a digest matching nothing. A person who tries the obvious thing first gets a
+    mismatch, and **the honest conclusion available to them at that point is that the product is
+    lying.** One sentence closes a route to exactly the wrong belief about the thing this proves.
+
+    An open round reveals no seed and says so: before close, a member holding it could compute the
+    winner and then choose whether to tap, which is the preference D91 forbids.
+    """
+    from sqlalchemy import text  # noqa: PLC0415 — the module keeps SQL imports local (see the top)
+
+    from ..engine import draw  # noqa: PLC0415 — the round's own module, never a second copy
+
+    question = "recompute round {} from its revealed seed".format(round_id)
+    row = (await session.execute(text(ROUND_COMMITMENT), {"round_id": round_id})).mappings().first()
+    if row is None:
+        return Answer(question=question, found=False, rows=[], note="no such round.")
+
+    decode = (
+        "The seed is 32 bytes WRITTEN AS HEX. Decode before hashing — "
+        "sha256(bytes.fromhex(revealed_seed)), not sha256 of the text. Hashing the string is the "
+        "obvious first attempt and matches nothing, which reads as a broken commitment when it is "
+        "only a decoding mistake."
+    )
+    if row["seed_commit"] is None:
+        return Answer(
+            question=question,
+            found=True,
+            detail={"status": row["status"]},
+            rows=[{"status": row["status"], "commitment": None}],
+            note="this round predates revision 0026 and carries no commitment. It cannot be given "
+                 "one now: a commitment made after the places were known would not be a commitment.",
+        )
+    if row["status"] != "closed":
+        return Answer(
+            question=question,
+            found=True,
+            detail={"status": row["status"]},
+            rows=[{"status": row["status"], "seed_commit": row["seed_commit"],
+                   "revealed_seed": None}],
+            note="the round is open, so the seed is not revealed and the arithmetic cannot be checked "
+                 "yet — a member holding it early could compute the winner and then choose whether "
+                 "to tap, which is what the commitment prevents. " + decode,
+        )
+
+    seed = bytes(row["outcome_seed"])
+    ids = list(
+        (await session.execute(text(ROUND_SEATS), {"circle_id": row["circle_id"]})).scalars().all()
+    )
+    decider = draw.deciding_member(seed, ids) if ids else None
+    derived = draw.deciding_pair(seed, ids) if ids else None
+    stored = (row["die1"], row["die2"])
+
+    rows: List[Dict[str, Any]] = [{
+        "commitment_published_at_open": row["seed_commit"],
+        "seed_revealed_at_close": seed.hex(),
+        # Each check states what was compared, not just a boolean nobody can trace back.
+        "sha256_of_decoded_seed_equals_commitment": draw.verify(seed.hex(), row["seed_commit"]),
+        "deciding_member_id": decider,
+        "pair_derived_from_seed": list(derived) if derived else None,
+        "pair_stored_on_the_round": list(stored) if stored[0] is not None else None,
+        "stored_pair_equals_derived_pair": (derived == stored) if derived else None,
+        "winning_place_id": row["winning_place_id"],
+    }]
+    for member_id in ids:
+        rows.append({
+            "member_id": member_id,
+            "pair_derived_from_seed": list(draw.pair_for_member(seed, member_id)),
+            "counts": member_id == decider,
+        })
+    return Answer(question=question, found=True,
+                  detail={"status": row["status"], "member_count": len(ids)},
+                  rows=rows, note=decode)

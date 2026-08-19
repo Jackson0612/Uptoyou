@@ -148,13 +148,26 @@ class RefusesTheForbiddenQuestion(unittest.TestCase):
 
 
 class BoundaryIsStructural(unittest.TestCase):
-    def test_no_query_mentions_a_member_a_channel_or_a_weight(self):
-        """The narrowness is the mitigation. If a query ever names one of these, the reviewer
-        who added it has stepped over H20 without noticing, and this fails."""
+    def test_no_query_mentions_a_members_private_facts(self):
+        """The narrowness is the mitigation. If a query ever names one of these, the reviewer who
+        added it has stepped over H20 without noticing, and this fails.
+
+        **The list is read from `queries.FORBIDDEN_SUBJECTS`, not copied.** It used to be typed here as
+        well, and when H20 was narrowed for `explain_round` (D108, `06c9f9f`) the constant moved and
+        this copy did not — so the test failed on a query the ruling had just permitted, which is a
+        test disagreeing with the decision it is supposed to enforce. One source, so a narrowing lands
+        in one place.
+
+        `principal` stays hard-coded beside it, because that one was **not** narrowed and never should
+        be: a principal is the identity behind a seat and no surface has ever had a reason to see it
+        (H19). Keeping it here rather than in the constant says out loud that it is not up for the same
+        negotiation.
+        """
+        forbidden = tuple(subject.replace(" ", "_") for subject in queries.FORBIDDEN_SUBJECTS)
         for statement in self.statements():
             lowered = statement.lower()
-            for forbidden in ("member", "principal", "weight_contribution", "channel", "preference"):
-                self.assertNotIn(forbidden, lowered, statement[:80])
+            for subject in forbidden + ("principal",):
+                self.assertNotIn(subject, lowered, statement[:80])
 
     def test_only_the_declared_tables_are_read(self):
         """Scanned over the SQL statements alone. Scanning the whole file caught `from sqlalchemy

@@ -82,6 +82,23 @@ TOOLS: Dict[str, Dict[str, Any]] = {
             "required": ["township_code", "hour", "element", "measure"],
         },
     },
+    "explain_round": {
+        "description": (
+            "Recompute one round from its revealed seed and say whether the arithmetic agrees with "
+            "what was stored (D108). Returns the commitment published at open, the seed revealed at "
+            "close, whether sha256 of the DECODED seed equals that commitment, the deciding member "
+            "id, every member's derived pair, and whether the pair stored on the round equals the "
+            "pair the seed produces. Member ids only, never nicknames. An open round reveals no seed "
+            "and says so. The seed is 32 bytes written as hex — decode before hashing."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "round_id": {"type": "integer", "description": "the round to recompute"},
+            },
+            "required": ["round_id"],
+        },
+    },
     "observation_reading_source": {
         "description": (
             "Where one station observation came from: every stored version, its publication, "
@@ -166,7 +183,9 @@ async def _call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     from ..db import session_factory
 
     async with session_factory()() as session:
-        if name == "forecast_reading_source":
+        if name == "explain_round":
+            answer = await queries.explain_round(session, arguments["round_id"])
+        elif name == "forecast_reading_source":
             answer = await queries.forecast_reading_source(
                 session,
                 arguments["township_code"],
