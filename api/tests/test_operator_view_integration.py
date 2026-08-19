@@ -165,10 +165,23 @@ async def scenario(test_url: str, base_url: str) -> None:
               set(member_body) <= set(operator_body),
               set(member_body) - set(operator_body))
 
-        # ---- no member id in either, under any nesting (H3) ------------------------------
+        # ---- no PROPOSAL authorship in either, under any nesting (D55 as narrowed) --------
+        # **Was "no member_id anywhere", and that reading died with D108** (owner: 「收窄」,
+        # `71ddbe5`). H3's concern is that a payload must not let a reader attach a private act to a
+        # person; a seat list attaches a *roll* to a person, which everybody performed visibly and on
+        # purpose, and carries no link to a place. So the assertion moves to the structures where
+        # authorship would actually be harmful — the pool of places and the weight panel.
         for label, payload in (("member", member_body), ("operator", operator_body)):
             flat = json.dumps(payload, ensure_ascii=False)
-            check("the {} payload carries no member_id".format(label), "member_id" not in flat)
+            check("the {} payload never names a proposer".format(label), "proposer" not in flat)
+            check("the {} payload carries no principal".format(label), "principal" not in flat)
+            for place_id, place_name in payload["places"].items():
+                check("place {} in the {} payload is a bare name".format(place_id, label),
+                      isinstance(place_name, str))
+        # The panel is the operator's arithmetic and names no member either — D13 labels a factor
+        # `represented_member` without saying which member, and that distinction is the whole rule.
+        panel_flat = json.dumps(operator_body["panel"], ensure_ascii=False)
+        check("the weight panel names no member", "member_id" not in panel_flat)
 
         # ---- the private row is labelled and reasonless (D13) ----------------------------
         private = [

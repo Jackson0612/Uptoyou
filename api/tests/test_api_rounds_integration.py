@@ -213,6 +213,18 @@ async def scenario(test_url: str) -> None:
             f"/rounds/{round_id}/proposals", json={"place_id": locals_[2]}, headers=auth
         )
         assert capped.status_code == 409
+        # **The sentence, not just the status — added 2026-08-19 after it was wrong for weeks.**
+        # The front end renders this `detail` verbatim and keeps no copy of its own, so this string
+        # IS the surface: nothing else states the rule to a person at the moment they meet it.
+        # It read 「一輪最多提三家。」 — *per round* — while revision 0008's trigger caps **per member
+        # per round**, so it told a five-member round it holds three places when it holds fifteen.
+        # Nothing caught it because the test asserted only the 409, and a status code cannot be
+        # wrong about a rule.
+        assert capped.json()["detail"] == "一個人最多提三家。", capped.json()
+        # And the half that keeps it honest rather than merely pinned: the sentence must name the
+        # person, because the constraint it reports is per-person. A future rewording is free to
+        # change every other word.
+        assert "一個人" in capped.json()["detail"]
 
         # The roll: the whole chain in one transaction.
         rolled = await client.post(f"/rounds/{round_id}/roll", headers=auth)
@@ -258,7 +270,19 @@ async def scenario(test_url: str) -> None:
         for kept in ("round_id", "status", "dice", "sum", "winning_place_id", "places"):
             assert kept in member_body, (kept, sorted(member_body))
         assert member_body["winning_place_id"] == result["winning_place_id"]
-        assert "member_id" not in json.dumps(member_body, ensure_ascii=False)
+        # **D55 as narrowed (owner: 「收窄」, `71ddbe5`).** This asserted `member_id` appeared nowhere
+        # in the member payload — right while nothing in a round named a person, and wrong once D108
+        # gave every member a named seat. What the narrowed rule protects is a *proposal's* author, so
+        # the check is now on `places`, which is the member's view of the pool: a place may carry a
+        # name and never a proposer.
+        for place_id, place_name in member_body["places"].items():
+            assert isinstance(place_name, str), (place_id, place_name)
+        assert "proposer" not in json.dumps(member_body, ensure_ascii=False)
+        assert "principal" not in json.dumps(member_body, ensure_ascii=False)
+        # The seat list is now expected to name people — asserted positively so that D108's own
+        # requirement is a test rather than an absence, and so that removing it fails here.
+        assert member_body["rolls"], "D108: the member shape must carry the seat list"
+        assert member_body["deciding_member"]["nickname"], "D91: the decider must be named"
         print("  D105: the member shape withholds the arithmetic and keeps the outcome")
         assert again.json()["allocation"] == result["allocation"]
 

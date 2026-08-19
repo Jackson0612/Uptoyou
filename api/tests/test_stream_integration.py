@@ -216,9 +216,32 @@ async def scenario(test_url: str, base_url: str) -> None:
         assert closed["winning_place_id"] == rolled.json()["winning_place_id"]
         assert closed["places"][str(rainy)] == "雨中的店"
 
-        # D55, asserted over the raw wire text: authorship never travels.
+        # **D55 as narrowed 2026-08-19 (owner: 「收窄」, `71ddbe5`) — it protects a *proposal's*
+        # author, not every mention of a member.** The old form asserted the string `member` never
+        # appeared anywhere in the wire, which was a correct reading of D55 while a round had nothing
+        # to say about people. D108 gives every member a seat that must be named from the first frame
+        # or D91's fairness claim cannot be shown at all, so the blanket string test would have
+        # forbidden a ruled feature.
+        #
+        # **What still must never travel is who proposed what**, because that is the fact §3.0's
+        # anonymity argument is about: knowing who put 火鍋 in the pool reveals that person's
+        # preference. A seat list reveals that somebody rolled, which everybody did, visibly, on
+        # purpose — and it carries no link to a place at all.
+        #
+        # So the check moves from the whole wire to the two structures that must stay anonymous.
+        for event in events:
+            pool = (event.get("round") or {}).get("pool") or event.get("pool") or []
+            for entry in pool:
+                assert not (set(entry) & {"member_id", "member", "principal_id", "proposer"}), (
+                    "a pooled place named its proposer: {}".format(entry))
+            panel = (event.get("result") or {}).get("panel")
+            if panel is not None:
+                flat = json.dumps(panel, ensure_ascii=False)
+                assert "principal" not in flat, "the weight panel leaked a principal"
+        # And `principal` never travels at all — that one is not narrowed. A principal is the
+        # identity behind a seat, and no surface has ever had a reason to see it (H19).
         wire = json.dumps(events, ensure_ascii=False)
-        assert "member" not in wire and "principal" not in wire
+        assert "principal" not in wire, "a principal reached the wire"
 
         # D54: after the close, a fresh snapshot carries the result and no open round.
         async with client.stream(

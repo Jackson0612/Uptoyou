@@ -13,6 +13,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import bindparam, text
 
 from .auth import credential_for, member_for
+from .engine import draw
 from .engine.fold import Contribution, fold
 
 
@@ -261,7 +262,79 @@ async def trip_for(session, round_id: int):
 # is about is how the odds got there** — `weights`, `allocation`, `panel` — not what the places are
 # called. Withholding a name would also stop a reveal saying "not 巷口麵店 this time", which is a
 # thing the screen may honestly say.
-MEMBER_KEYS = ("round_id", "status", "dice", "sum", "winning_place_id", "places", "trip")
+async def seats_for(session, round_id: int, circle_id: int, seed: bytes | None) -> list:
+    """D108's `rolls[]` — **every seat in the circle, in member order, dice null until they tap.**
+
+    *Shape agreed with the frontend session 2026-08-19, and the ordering is theirs rather than mine.*
+    I proposed `rolled_at` order so arrivals could animate without re-sorting. They refused it, and
+    correctly: **`rolled_at` order makes the layout reorder itself during the animation**, and D91's
+    zero-shift clause binds the whole roll sequence — a seat that jumps because somebody else was
+    quicker is exactly the forbidden thing. So the list must **fill**, never **grow**, which means it
+    has to hold the people who have not rolled yet.
+
+    **The dice are derived, never stored.** `member_roll` records that a member tapped and when; the
+    pair comes from the seed on every read (revision 0026 argues why at length). So a seat cannot
+    show a pair that disagrees with the seed, because there is nothing else for it to disagree with.
+
+    **`counts` is stated rather than left to the browser.** The evaluator's RP-2 asks for exactly one
+    roll *marked*, and — the frontend's argument, which is the one that settles it — *a surface that
+    computes which one counts can compute it wrong; a payload that states it cannot.* It is true on a
+    seat whose dice are still null, which is RP-3 twice over: the decider is named in
+    `deciding_member` and marked here, both before any die exists.
+    """
+    members = (
+        await session.execute(
+            text("select id, nickname from member where circle_id = :c order by id"),
+            {"c": circle_id},
+        )
+    ).all()
+    if seed is None or not members:
+        return []
+    tapped = set(
+        (
+            await session.execute(
+                text("select member_id from member_roll where round_id = :r"), {"r": round_id}
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ids = [row.id for row in members]
+    decider = draw.deciding_member(seed, ids)
+    seats = []
+    for row in members:
+        pair = draw.pair_for_member(seed, row.id) if row.id in tapped else (None, None)
+        seats.append({
+            "member_id": row.id,
+            "nickname": row.nickname,
+            "die1": pair[0],
+            "die2": pair[1],
+            "counts": row.id == decider,
+        })
+    return seats
+
+
+def deciding_member_for(seats: list) -> dict | None:
+    """The decider as its own object, kept **beside** `rolls[]` and not collapsed into it.
+
+    The frontend asked for both and their reason decides it: `deciding_member` exists from open,
+    before `rolls[]` has a single tap; `counts` marks a roll that has happened. A screen with only
+    `counts` could not name the decider before the first die lands, which is the one thing D91
+    requires it to do.
+    """
+    for seat in seats:
+        if seat["counts"]:
+            return {"id": seat["member_id"], "nickname": seat["nickname"]}
+    return None
+
+
+MEMBER_KEYS = ("round_id", "status", "dice", "sum", "winning_place_id", "places", "trip",
+               # D108: the seat list, the decider and the commitment are all member-visible — they
+               # are what the fairness claim is made of, so withholding them from a member would
+               # leave the claim unverifiable by the only people it is addressed to. The **seed** is
+               # not in this list and is not member-visible until close; `revealed_seed` is only ever
+               # populated on a closed round, which is where the reveal is safe.
+               "rolls", "deciding_member", "seed_commit", "revealed_seed")
 
 
 def for_credential(body: dict, operator: bool) -> dict:

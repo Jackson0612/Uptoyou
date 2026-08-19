@@ -33,7 +33,9 @@ from .api_common import (
     compose_names,
     place_names,
     for_credential,
+    deciding_member_for,
     panel_for,
+    seats_for,
     resolve_credential,
     resolve_member,
     result_body,
@@ -52,8 +54,8 @@ async def _snapshot(session, circle_id: int, viewer=None, operator: bool = False
     open_row = (
         await session.execute(
             text(
-                "select id, target_hour, target_hour_typed, opened_at from round "
-                "where circle_id = :c and status = 'open'"
+                "select id, target_hour, target_hour_typed, opened_at, seed_commit, "
+                "outcome_seed from round where circle_id = :c and status = 'open'"
             ),
             {"c": circle_id},
         )
@@ -70,15 +72,31 @@ async def _snapshot(session, circle_id: int, viewer=None, operator: bool = False
             .all()
         )
         names = await place_names(session, pool_ids)
+        # **D108, and this is the half D56 makes load-bearing.** The seat list and the commitment are
+        # in the snapshot, so a member who reloads or reconnects mid-round meets the same decider and
+        # the same seats they left — RP-4 is *the chosen member does not change on reload*, and a
+        # snapshot that omitted them would make the browser reconstruct a fairness claim it cannot
+        # verify. The seats come from `api_common.seats_for`, the same function the reveal uses, so
+        # the stream and the response cannot drift.
+        seed = bytes(open_row.outcome_seed) if open_row.outcome_seed is not None else None
+        seats = await seats_for(session, open_row.id, circle_id, seed)
+        open_round = {
+            "round_id": open_row.id,
+            "target_hour": open_row.target_hour.isoformat(),
+            "target_hour_typed": open_row.target_hour_typed,
+            "opened_at": open_row.opened_at.isoformat(),
+            "pool": [{"place_id": p, "name": names.get(p)} for p in pool_ids],
+            "seed_commit": open_row.seed_commit,
+            "rolls": seats,
+            "deciding_member": deciding_member_for(seats),
+            # **Never on an open round.** The seed is what a member would use to compute the winner
+            # and then decide whether to tap — the preference D91 forbids. Present and null, rather
+            # than absent, so a gate can assert the key is null instead of asserting an absence.
+            "revealed_seed": None,
+        }
         return {
             "type": "snapshot",
-            "open_round": {
-                "round_id": open_row.id,
-                "target_hour": open_row.target_hour.isoformat(),
-                "target_hour_typed": open_row.target_hour_typed,
-                "opened_at": open_row.opened_at.isoformat(),
-                "pool": [{"place_id": p, "name": names.get(p)} for p in pool_ids],
-            },
+            "open_round": open_round,
             "last_result": None,
         }
     last = (

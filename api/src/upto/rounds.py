@@ -32,15 +32,18 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from .api_common import (
+    deciding_member_for,
     for_credential,
     panel_for,
     place_names,
     resolve_credential,
     resolve_member,
     result_body,
+    seats_for,
     trip_for,
 )
 from .db import session_factory
+from .engine import draw
 from .engine.fold import Contribution, fold
 from .engine.load import load_contributions
 from .engine.store import write_roll
@@ -70,17 +73,25 @@ async def open_round(circle_id: int, body: OpenRoundBody, request: Request) -> d
     typed = body.target_hour is not None
     if typed and body.target_hour.tzinfo is None:
         raise HTTPException(status_code=422, detail="target_hour must carry a UTC offset (H17)")
+    # **D108: the seed is drawn HERE, at open, before a single place can be proposed.** That
+    # ordering is the whole commitment: the server fixes its randomness while it still does not know
+    # what the places will be, so it cannot have aimed at one. Drawn before the insert rather than
+    # after, because a round that existed for even one statement without its commitment is a round
+    # whose commitment came second.
+    seed = draw.new_seed()
     async with session_factory()() as session:
         await _resolve_member(session, request, circle_id)
         try:
             row = (
                 await session.execute(
                     text(
-                        "insert into round (circle_id, target_hour, target_hour_typed) "
-                        "values (:c, coalesce(:h, date_trunc('hour', now())), :typed) "
-                        "returning id, target_hour, target_hour_typed, opened_at"
+                        "insert into round (circle_id, target_hour, target_hour_typed, "
+                        "                   outcome_seed, seed_commit) "
+                        "values (:c, coalesce(:h, date_trunc('hour', now())), :typed, :seed, :commit) "
+                        "returning id, target_hour, target_hour_typed, opened_at, seed_commit"
                     ),
-                    {"c": circle_id, "h": body.target_hour, "typed": typed},
+                    {"c": circle_id, "h": body.target_hour, "typed": typed,
+                     "seed": seed, "commit": draw.commitment(seed)},
                 )
             ).one()
             await session.commit()
@@ -95,6 +106,11 @@ async def open_round(circle_id: int, body: OpenRoundBody, request: Request) -> d
                         "target_hour_typed": row.target_hour_typed,
                         "opened_at": row.opened_at.isoformat(),
                         "pool": [],
+                        # The commitment, from the first event. **Never `outcome_seed`** — a member
+                        # holding the seed early can compute the winner and then choose whether to
+                        # tap, which is the preference D91 forbids.
+                        "seed_commit": row.seed_commit,
+                        "rolls": [],
                     },
                 },
             )
@@ -125,6 +141,7 @@ async def open_round(circle_id: int, body: OpenRoundBody, request: Request) -> d
         "status": "open",
         "target_hour": row.target_hour.isoformat(),
         "target_hour_typed": row.target_hour_typed,
+        "seed_commit": row.seed_commit,
     }
 
 
@@ -186,8 +203,19 @@ async def propose(round_id: int, body: ProposeBody, request: Request, response: 
                 response.status_code = 200
                 return {"round_id": round_id, "place_id": body.place_id, "pooled": True}
             if "3 proposals" in message:
+                # **「一個人」, not 「一輪」 — corrected 2026-08-19 on D110.** The trigger is per
+                # member per round (`member % already holds 3 proposals in round %`, revision 0008),
+                # so the old sentence told a person the round holds three places when a five-member
+                # round holds fifteen. D110 then put 「每人最多提 3 家店」 on the home page, and the
+                # two statements of one rule contradicted each other — the home page right, the
+                # refusal wrong, and the refusal is the one you meet at the moment it matters.
+                #
+                # **This sentence is the single source: the front end renders the API's `detail`
+                # verbatim and keeps no copy** (frontend's rule, 2026-08-19). So a wording change
+                # goes here and reaches the screen; there is nothing to keep in sync, and equally
+                # nothing else to correct when it is wrong.
                 raise HTTPException(
-                    status_code=409, detail="一輪最多提三家。"
+                    status_code=409, detail="一個人最多提三家。"
                 ) from None
             raise
     return {"round_id": round_id, "place_id": body.place_id, "pooled": True}
@@ -219,6 +247,29 @@ async def _closed_body(
     # time, never the signer's id (H3). Read here rather than assembled, so the reveal, the SSE
     # snapshot and the signing response cannot drift apart.
     body["trip"] = await trip_for(session, round_id)
+    # **D108's reveal.** Read here rather than passed in, so every caller of this function — the roll
+    # response, D69's retry, the SSE close — gets the seats, the decider, the commitment and the
+    # revealed seed without any of them having to remember to. One assembly point is the same reason
+    # `trip` and `panel` are read here.
+    seed_row = (
+        await session.execute(
+            text("select circle_id, seed_commit, outcome_seed, status from round where id = :r"),
+            {"r": round_id},
+        )
+    ).one()
+    seed = bytes(seed_row.outcome_seed) if seed_row.outcome_seed is not None else None
+    seats = await seats_for(session, round_id, seed_row.circle_id, seed)
+    body["rolls"] = seats
+    body["deciding_member"] = deciding_member_for(seats)
+    body["seed_commit"] = seed_row.seed_commit
+    # **The seed is revealed only on a closed round, and this is the line that decides it.** Before
+    # close, a member holding it can compute the winner and choose whether to tap — the preference
+    # D91 forbids, and the same last-revealer attack that ruled out per-member commit–reveal. After
+    # close there is nothing left to prefer, and the reveal is what turns *this was fixed before
+    # anyone saw anything* from a promise into something anyone can check against `seed_commit`.
+    body["revealed_seed"] = (
+        seed.hex() if seed is not None and seed_row.status == "closed" else None
+    )
     # The evidence table lives in `api_common.panel_for`, because the SSE snapshot needs the same
     # thing for a reconnecting operator and two copies of a visibility rule is one copy too many.
     body["panel"] = await panel_for(session, round_id, weights, viewer)
@@ -232,7 +283,7 @@ async def roll(round_id: int, request: Request) -> dict:
             await session.execute(
                 text(
                     "select circle_id, status, target_hour_typed, die1, die2, "
-                    "winning_place_id from round where id = :r"
+                    "winning_place_id, outcome_seed, seed_commit from round where id = :r"
                 ),
                 {"r": round_id},
             )
@@ -281,6 +332,24 @@ async def roll(round_id: int, request: Request) -> dict:
             .scalars()
             .all()
         )
+        # **D108's minimum, checked before the tap is recorded.** One place is not a decision, it is
+        # a notification — and a member who taps into a one-place round has not spent their tap,
+        # because nothing was decided. So this refusal comes first and `member_roll` stays empty.
+        if len(pool) < 2:
+            raise HTTPException(
+                status_code=409, detail="一輪至少要兩家店。一家店不是決定，是通知。"
+            ) from None
+        # **The tap, recorded and idempotent.** `uq_member_roll_once` makes a second tap the same
+        # tap (D69 per person), and `on conflict do nothing` is how that reads without a round trip
+        # to find out first. The dice are NOT stored — they are derived from the seed every time, so
+        # there is only ever one source for a member's pair.
+        await session.execute(
+            text(
+                "insert into member_roll (round_id, circle_id, member_id) "
+                "values (:r, :c, :m) on conflict (round_id, member_id) do nothing"
+            ),
+            {"r": round_id, "c": round_row.circle_id, "m": member},
+        )
         weights = {
             place: fold(
                 place, [p.contribution for p in pinned if p.contribution.place_id == place]
@@ -294,7 +363,30 @@ async def roll(round_id: int, request: Request) -> dict:
                 status_code=409,
                 detail="池子是空的，或每一家的權重都是零，擲不出結果。",
             ) from None
-        dice = (secrets.randbelow(6) + 1, secrets.randbelow(6) + 1)
+        # **D108: the dice come from the seed committed at open, never from a fresh draw here.**
+        # This is the line the whole mechanism exists to change. `secrets.randbelow` at roll time was
+        # honest randomness and unprovable: nobody could check afterwards that it had not been drawn
+        # with the places in view. Now the pair is `hmac(seed, "member:<decider>")`, the seed's hash
+        # was published before any place existed, and the seed is revealed below — so the claim
+        # *this was fixed before anyone saw anything* becomes checkable instead of asserted.
+        #
+        # **A round that predates revision 0026 has no seed**, and there is no honest way to give it
+        # one, so it keeps the old behaviour rather than being refused: a commitment made after the
+        # places were known would not be a commitment.
+        if round_row.outcome_seed is not None:
+            seat_ids = (
+                (
+                    await session.execute(
+                        text("select id from member where circle_id = :c order by id"),
+                        {"c": round_row.circle_id},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            dice = draw.deciding_pair(bytes(round_row.outcome_seed), list(seat_ids))
+        else:
+            dice = (secrets.randbelow(6) + 1, secrets.randbelow(6) + 1)
         winner = place_for(table, dice[0], dice[1])
         await write_roll(session, round_id, pinned, weights, winner, dice)
         await session.commit()
