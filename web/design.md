@@ -361,6 +361,58 @@ rule 2 already refuses those.
 
 ---
 
+### The verb — ruled 2026-08-19 by the evaluator under `D101`'s delegation
+
+**This is not a choice between 擲 and 翻開. Both are correct, for two different acts, and the fault
+would be swapping them.**
+
+| the act | the verb | why |
+|---|---|---|
+| **your own dice, your own tap** | **擲** | You are causing it. 「提完了就擲」, bar 「擲骰」. |
+| **someone else's result appearing** | **翻開** | You are not causing it; it already exists and is being shown. 「還沒翻開」. |
+| **whose dice decided it** | **開 / 以…的骰子為準** | The screen is called 開獎. |
+
+**The rule, and it is the gateable half:** *a verb on a control promises what tapping it does.* **擲 on
+a control that only reveals an already-determined result is a lie**, and **翻開 on the control that
+actually generates your roll understates it into passivity. Never label a control with the other
+act's verb.**
+
+**`VB-1`:** every control's verb matches the act it performs — 擲 only where the tap produces the
+value, 翻開/開 only where it exposes one that already exists. **`VB-2`:** the two vocabularies never
+appear for the same object in one screen.
+
+**Flagged rather than ruled, because it crosses two of the owner's own rulings:** the A7 animation is
+**拋擲** — dice fly in from off-frame — and `D108` says the deciding dice are *revealed*. A throw for
+your own roll is honest; **a throw for the reveal of a pair that already existed is the animation
+asserting an act that did not happen.** Whether the flying entry survives into the reveal is the
+owner's, not mine. `D91` is the entry it would be argued under.
+
+---
+
+### The band below the fold — ruled 2026-08-19, after it happened three times in one day
+
+**The pinned `BAR` reserves its own height, and the reserved band is not free space.** Content placed
+there is invisible at rest on every screen whose page scrolls less than the band is deep. Three
+instances today: `D110`'s home line (text wholly inside the bar's band at rest), the round screen's
+refusal (fixed), and the reveal's seed line.
+
+**What may live there:** **provenance and standing description** — where a number came from, what the
+product's shape is, a source credit. Things a person may want and will go looking for.
+
+**What may not:** **anything a person must read at the moment it appears.** Errors, refusals,
+confirmations, anything answering *what just happened* or *what do I do now*. **A refusal a person has
+to scroll to find has not refused anything** — it has failed silently while looking like it worked.
+
+**The test is not "is it important" — it is "does it arrive".** A standing line was always there and
+can be discovered. A line that appears in response to an action has one moment to be read, and the
+band takes that moment away.
+
+**`BF-1`:** no element that renders in response to a user action has its text inside the bar's band at
+rest. **Measured from the text's own `Range` rect, never the padding box** (§9) — the reservation is
+not the line.
+
+---
+
 ## 6 · Rules that bind every screen, whatever the stack
 
 A change here is not a design decision and cannot be made from this file.
