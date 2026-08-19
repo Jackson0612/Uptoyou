@@ -149,6 +149,14 @@ export default function Preferences() {
    * is that no roll reaches it. `D37` stands beside this — nothing is hidden from the typeahead on
    * a preference.
    *
+   * **The second sentence is the evaluator's, and the reason is parallelism rather than accuracy.**
+   * My draft ended 「這個選擇目前不會生效」 — true, and a different frame from every other row.
+   * Four rows should read as four of the same thing; 「不會生效」 costs the reader a translation
+   * step (*what does that mean for me?*) **on the row where a translation step is most expensive**.
+   * 「沒有任何店家會因此抽不到」 lands in the vocabulary the screen already uses, so the comparison
+   * against 480 家 and 8,664 家 is immediate rather than inferred. D20 still holds: it states the
+   * consequence and advises nothing.
+   *
    * **`A2-G8-zero`: where the KIND has no coverage, the row states why there is no number instead
    * of stating zero.** The first build printed 「0 家抽不到（0.0%）」 for an ingredient, and the
    * evaluator was right that this is worse than silence: **a count of zero reads as a result —
@@ -165,7 +173,7 @@ export default function Preferences() {
    */
   const zeroLine = (a: { zeroed: number; share: number } | undefined, coverage: number) => {
     if (!a) return null
-    if (!(coverage > 0)) return '店家資料還沒有這一項，這個選擇目前不會生效。'
+    if (!(coverage > 0)) return '店家資料還沒有這一項。目前沒有任何店家會因此抽不到。'
     return `${a.zeroed.toLocaleString('en-US')} 家抽不到（${pct(a.share)}）`
   }
   const keptCategories = new Set(
