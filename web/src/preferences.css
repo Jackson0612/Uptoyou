@@ -203,8 +203,11 @@
    ruled must never be discouraged. */
 .prefs .rowStat {
   margin-left: auto; font-size: var(--text-note); color: var(--color-muted);
-  font-variant-numeric: tabular-nums; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
+/* The no-coverage sentence is a sentence and must be allowed to be one — `nowrap` is right for
+   `2,414 家抽不到（6.6%）` and wrong for a clause. */
+.prefs .rowStat[data-shape="count"] { white-space: nowrap; }
 /* The row already puts `avoid` to the right; when both are present the statement follows it. */
 .prefs .rowState + .rowStat { margin-left: 14px; }
 

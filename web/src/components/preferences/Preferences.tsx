@@ -143,12 +143,31 @@ export default function Preferences() {
     new Map((list ?? []).map((a) => [a.value, a]))
   const catStat = stat(inForce?.avoid_categories)
   const ingStat = stat(inForce?.avoid_ingredients)
-  /** The statement itself. **抽不到, never 拿掉／少掉／移除** (`A2-G8-verb`): the place keeps its
-   *  seat, stays proposable and still appears in the round and in the table at `0/36`. What changed
-   *  is that no roll reaches it. `D37` stands beside this — nothing is hidden from the typeahead on
-   *  a preference. */
-  const zeroLine = (a?: { zeroed: number; share: number }) =>
-    a ? `${a.zeroed.toLocaleString('en-US')} 家抽不到（${pct(a.share)}）` : null
+  /**
+   * The statement itself. **抽不到, never 拿掉／少掉／移除** (`A2-G8-verb`): the place keeps its
+   * seat, stays proposable and still appears in the round and in the table at `0/36`. What changed
+   * is that no roll reaches it. `D37` stands beside this — nothing is hidden from the typeahead on
+   * a preference.
+   *
+   * **`A2-G8-zero`: where the KIND has no coverage, the row states why there is no number instead
+   * of stating zero.** The first build printed 「0 家抽不到（0.0%）」 for an ingredient, and the
+   * evaluator was right that this is worse than silence: **a count of zero reads as a result —
+   * *we looked and nothing needed excluding*. What is true is that we hold no ingredient data at
+   * all, so the choice does not act.** Those are opposite meanings and the false one is the
+   * reassuring one, on the single kind the owner ruled about because 「過敏是會致死的」.
+   *
+   * **It keys on the kind's COVERAGE and never on `zeroed === 0`**, and the distinction is the
+   * whole rule. A category avoidance that genuinely zeroes nothing at 42.6% coverage HAS been
+   * measured, and 「0 家」 is then the true answer. Zero-because-measured and
+   * no-measurement-exists must not render the same way, which is exactly the absent-subject
+   * failure we have found all day — arriving here in the one place it costs more than a wrong
+   * verdict.
+   */
+  const zeroLine = (a: { zeroed: number; share: number } | undefined, coverage: number) => {
+    if (!a) return null
+    if (!(coverage > 0)) return '店家資料還沒有這一項，這個選擇目前不會生效。'
+    return `${a.zeroed.toLocaleString('en-US')} 家抽不到（${pct(a.share)}）`
+  }
   const keptCategories = new Set(
     (inForce?.avoid_categories ?? []).filter((a) => a.persist).map((a) => a.value),
   )
@@ -257,8 +276,8 @@ export default function Preferences() {
                   <span className="rowName">{c}</span>
                   {on && <span className="rowState">避開</span>}
                   {on && (
-                    <span className="rowStat" data-part="pref-stance-stat">
-                      {zeroLine(catStat.get(c))}
+                    <span className="rowStat" data-part="pref-stance-stat" data-shape={(inForce?.category_coverage.share ?? 0) > 0 ? 'count' : 'why'}>
+                      {zeroLine(catStat.get(c), inForce?.category_coverage.share ?? 0)}
                     </span>
                   )}
                 </button>
@@ -393,14 +412,13 @@ export default function Preferences() {
                   <span className="rowName">不吃 {g}</span>
                   {state === 'on' && <span className="rowState">避開</span>}
                   {state === 'asking' && <span className="rowState asking">點一下沿用</span>}
-                  {/* **The `0 家` this reports today is the point, not an oversight.** No place in
-                      the data carries ingredient information (D103), so an ingredient avoidance
-                      currently zeroes nothing — and a member who taps 不吃花生 and is shown nothing
-                      would reasonably believe otherwise. The number moves on its own the day the
-                      data does; there is no code here that has to remember. */}
+                  {/* **This row states why there is no number, not a number.** Ingredient coverage
+                      is 0.0 — nothing in the data carries it (D103) — so there is no measurement to
+                      report, and printing 「0 家」 would claim one. It becomes a count on its own
+                      the day the data does; no code here has to remember. */}
                   {state !== 'off' && (
-                    <span className="rowStat" data-part="pref-stance-stat">
-                      {zeroLine(ingStat.get(g))}
+                    <span className="rowStat" data-part="pref-stance-stat" data-shape={(inForce?.ingredient_coverage.share ?? 0) > 0 ? 'count' : 'why'}>
+                      {zeroLine(ingStat.get(g), inForce?.ingredient_coverage.share ?? 0)}
                     </span>
                   )}
                 </button>
