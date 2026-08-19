@@ -102,6 +102,24 @@ h1.headline .lit { color: var(--color-hot-ink); }
 .tag span { display: block; font-size: var(--text-note); font-weight: 700;
             letter-spacing: .06em; margin-top: 3px; }
 
+/* ── D110 · the supported shape ───────────────────────────────────────────────
+   Below the approved frame, in the note register.
+
+   **It reserves the pinned bar's height BELOW itself, and that reservation is the whole of the
+   fix.** The bar is `position: fixed`, so it covers the last 76 px of every viewport whatever the
+   page does; a line placed at the foot without a reservation is a line the bar sits on top of,
+   and it is still there in the DOM and still absent from the screen. Measured before this padding
+   existed: the text landed at y 844 with the bar's top edge at 824.
+
+   **The cost is stated rather than hidden: at 1440×900 this line is 59 px below the fold.** The
+   approved frame already ends at 804 and the bar owns 824 upward, so the clear band is 20 px and
+   no margin can fit a line of copy into it. The only placement that would need no scroll is
+   inside the approved frame, which the ruling forbids. So it scrolls, and the reservation makes
+   sure that when it is scrolled to it is fully clear of the bar rather than tucked under it. */
+.shape { width: min(1200px, 88vw); margin: 40px auto 0;
+         padding-bottom: calc(var(--bar-h) + 32px);
+         font-size: var(--text-note); color: var(--color-muted); }
+
 /* ── the pinned bar ───────────────────────────────────────────────────────── */
 .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
        background: var(--color-hot); border-top: 2px solid var(--color-ink); }

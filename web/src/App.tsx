@@ -108,6 +108,23 @@ export default function App() {
         </div>
       </div>
 
+      {/* **D110 — the supported shape, stated on the home page** (owner-ruled 2026-08-19).
+          It sits BELOW the approved frame rather than inside it: every object the pixel gate
+          measures is above it and in flow, so this adds a line without moving one.
+
+          **The shape, never the reason.** A circle holds twelve and a person proposes three; the
+          36 pairs underneath are the arithmetic that produced those two numbers and they are ours,
+          not the reader's — a home page that explained itself would be teaching the mechanism the
+          owner already ruled off this screen. D20's register holds: it says what a circle holds,
+          never what anyone should do about it.
+
+          Both limits are enforced, and this line is why neither refusal is a surprise — the 13th
+          seat is refused at join and the 4th place at propose, and a person who read this knows
+          before they hit either. */}
+      <p className="shape" data-part="shape">
+        一個圈子最多 12 人，每人最多提 3 家店。
+      </p>
+
       {/* One filled control, and its label follows device state: a person with no key would
           otherwise land on a home whose only primary action points where they cannot go. */}
       <div className="bar" data-part="bar">
