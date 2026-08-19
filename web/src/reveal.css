@@ -1,0 +1,225 @@
+/* A3 — the reveal's geometry, member state.
+
+   Scoped under `.reveal`. Colour and type come from the theme; nothing here invents a value.
+
+   **Two rules from `design.md` do most of the work here and both are about NOT moving:**
+   §5 rule 1 — the flood transitions ground and colour over .45s ease-out and nothing else about the
+   landing animates; `D91` — the tumble→land sequence shifts 0.00 px, which is achieved by animating
+   `transform` and `opacity` only, never a box. */
+
+.reveal {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px 6vw calc(var(--bar-h) + 24px);
+  /* The flood. Ground and text cross to the winning face's pair together, so no frame of the
+     transition has ink on ink. Both properties, one duration, one easing — §5 rule 1. */
+  background: var(--color-paper);
+  color: var(--color-ink);
+  transition: background-color .45s ease-out, color .45s ease-out;
+}
+
+.reveal[data-face="hot"]    { background: var(--color-flood-hot);    color: var(--color-on-hot); }
+.reveal[data-face="cobalt"] { background: var(--color-flood-cobalt); color: var(--color-on-cobalt); }
+.reveal[data-face="jade"]   { background: var(--color-flood-jade);   color: var(--color-on-jade); }
+.reveal[data-face="sun"]    { background: var(--color-flood-sun);    color: var(--color-on-sun); }
+
+/* ── the dice ───────────────────────────────────────────────────────────────
+   `R-D9`: dice ≥ 18% of viewport height at 430, and that binds BOTH states. `--die` is the one
+   variable; the cube's half-depth derives from it below and is never typed. */
+.reveal .dice {
+  display: flex;
+  gap: 24px;
+  /* the row reserves its own height from the first frame, so a landing cannot resize it */
+  min-height: var(--die);
+}
+
+.reveal { --die: 132px; }
+@media (min-width: 900px)  { .reveal { --die: 180px; } }
+@media (min-width: 2100px) {
+  .reveal { --die: 240px; }
+  /* `R-D9`'s floor at 2560 is 50% of viewport height and the region measured **49.2%** — dice top
+     to sentence bottom, 689 px of 1400. The two gaps that bound it go one step up the §3 scale
+     (24 → 32), which adds 16 px and takes it to 50.4%. A spacing step, not a new value: the
+     alternative was growing `--die` past the ruled 240, which is `design.md`'s number and not
+     mine to move. */
+  .reveal { gap: 32px; }
+  .reveal .answer { gap: 32px; }
+}
+
+/* **`perspective` belongs HERE, on the cube's direct parent, and putting it on `.dice` is why the
+   first build rendered six overlapping faces instead of a cube.** `perspective` establishes a 3D
+   viewing box for an element's *children* only — from `.dice` it applied to `.die`, which carries
+   no transform, while `.cube` one level further down got an orthographic projection and `.die`,
+   being a plain block, flattened the 3D subtree on top of that. The faces were all correctly
+   positioned in a space nothing was looking into. Measured, not guessed: every face reported a
+   0-height bounding box. */
+.reveal .die { width: var(--die); height: var(--die); perspective: 900px; }
+
+.reveal .cube {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  /* The settle. A transform-only transition, so the landing moves no layout — `D91`'s zero-shift
+     clause holds by construction rather than by measurement. */
+  transition: transform .5s cubic-bezier(.2, .8, .3, 1);
+}
+
+/* The tumble. It asserts nothing: the result was decided by the server before this element
+   existed, and this is the moment given to the reader. `D91`'s whole point is that the animation
+   may not appear to be computing the answer, which is why it stops on a face chosen elsewhere. */
+.reveal .cube[data-tumbling="yes"] { animation: tumble 1.4s cubic-bezier(.3, .1, .3, 1) forwards; }
+
+@keyframes tumble {
+  0%   { transform: rotateX(0deg)    rotateY(0deg); }
+  100% { transform: rotateX(1440deg) rotateY(1080deg); }
+}
+
+.reveal .face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  padding: 12%;
+  background: var(--color-diefill);
+  border: 2px solid var(--color-dieedge);
+  /* **The half-depth is DERIVED.** Change `--die` and the cube stays closed; type a number here
+     and it develops a seam at one breakpoint that nobody looks at. */
+  backface-visibility: hidden;
+}
+
+.reveal .face.front  { transform: translateZ(calc(var(--die) / 2)); }
+.reveal .face.back   { transform: rotateY(180deg) translateZ(calc(var(--die) / 2)); }
+.reveal .face.right  { transform: rotateY(90deg)  translateZ(calc(var(--die) / 2)); }
+.reveal .face.left   { transform: rotateY(-90deg) translateZ(calc(var(--die) / 2)); }
+.reveal .face.top    { transform: rotateX(90deg)  translateZ(calc(var(--die) / 2)); }
+.reveal .face.bottom { transform: rotateX(-90deg) translateZ(calc(var(--die) / 2)); }
+
+/* **`dieCell`, not `cell`, and the rename is the whole bug.** `home.css` already defines a global
+   `.cell` for the collage — `background: var(--color-ink)`, a hard offset shadow, per-child
+   aspect-ratios and an nth-child margin — so nine die cells inherited a black ground and a
+   staircase of offsets, and the face rendered as a black blob with the pips still correctly placed
+   on top of it. There are no CSS modules here: every class name in this directory is global, so a
+   generic one is a collision waiting for the second screen that wants it. Every selector in this
+   file is scoped under `.reveal` for the same reason. */
+.reveal .dieCell { display: grid; place-items: center; }
+
+/* §3's single radius exemption. A die's pips are round; squaring them makes the face a grid. */
+.reveal .pip {
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color-pip);
+}
+.reveal .pip[data-red="yes"] { background: var(--color-pipred); }
+
+/* ── the answer region ──────────────────────────────────────────────────────
+   **It holds its box from the first painted frame.** `opacity` alone moves — never `display`,
+   never `height`, never `visibility` — so the answer is genuinely off the screen mid-tumble while
+   the space it will occupy never changes. That is both halves of `D91`'s member-state clauses in
+   one declaration.
+
+   `R-D9` in member state is a FLOOR with no ceiling: with no table beneath it, a long name running
+   to four lines is the ceiling lifting exactly as `D105` says, not a defect to cap. */
+.reveal .answer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  text-align: center;
+  max-width: min(1200px, 88vw);
+  opacity: 0;
+  transition: opacity .45s ease-out;
+}
+.reveal[data-state="landed"] .answer { opacity: 1; }
+
+.reveal .winner {
+  /* **The sans, deliberately — NOT the display face.** The display subset is ten fixed glyphs cut
+     from the home headline's own copy; `.winner` holds an arbitrary restaurant name, so asking for
+     that family here is a promise the face cannot keep and every name would fall back silently.
+     Backend's derivation refuses the empty-literal case rather than cutting a face short, which is
+     what surfaced it. */
+  font-weight: 900;
+  font-size: var(--text-answer);
+  /* **1.16, not the display 1.08.** Measured: at 430 the name's content box was 150 px inside a
+     143 px line box — 7 px of clipped glyph, growing to 20 px at 2560. Full-width brackets and
+     CJK descenders overflow a 1.08 line, and `RV-5` measures this region, so a clip here is both
+     a visible defect and a wrong number. */
+  line-height: 1.16;
+  /* The CJK face's ascent and descent exceed even a 1.16 line box, so the element's own box
+     reported 6 px of overflow at 430 and 15 px at 2560. Nothing has `overflow: hidden`, so the
+     glyphs were painting correctly — but an overflow an inspector reports is a finding the gate
+     has to spend time dismissing, and containing the ink costs one declaration. Padding, not more
+     line-height: 1.3 would contain it and visibly loosen a display setting the design chose. */
+  padding-block: .05em;
+  letter-spacing: .01em;
+  margin: 0;
+  /* deliberately uncapped in member state — see the note above */
+}
+
+/* **The sentence — load-bearing typography, not a caption.**
+   `text-lead`: one step above body, one below the winner's block. `ink` at full strength, never
+   `muted`, which is the colour of things that may be skipped. The body face's regular weight, not
+   bold: it is a statement of fact, not an alarm. It gets its own breathing room from the flex gap
+   above so it is glued to neither the dice nor the name.
+   **It must sit on one line at every width** — a wrapped 「三十六格已按／權重分配」 reads as two
+   fragments, and `RV-4` measures it. `white-space: nowrap` states that intent rather than leaving
+   it to the measure happening to be wide enough.
+   **No link styling, no icon, no tooltip, no cursor change.** Each would promise an object that
+   `D105` removed on purpose. */
+.reveal .sentence {
+  font-size: var(--text-lead);
+  font-weight: 400;
+  color: inherit;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.reveal .revealNote, .reveal .revealErr {
+  font-size: var(--text-body);
+  text-align: center;
+  margin: 0;
+}
+.reveal .revealErr { color: var(--color-hot-ink); }
+
+/* ── the bar ────────────────────────────────────────────────────────────────
+   `BAR`: pinned, `3px ink` top rule, at most one per screen. Its box does not move, resize or
+   slide when its content changes — §5 rule 2 allows an opacity and label cross-fade and nothing
+   else, which is why the signed line and the button share one height. */
+.reveal .bar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  height: var(--bar-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 3px solid var(--color-ink);
+  background: var(--color-hot);
+  color: var(--color-on-hot);
+}
+.reveal .bar button {
+  height: 56px;
+  padding: 0 32px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-body);
+  font-weight: 900;
+  cursor: pointer;
+}
+.reveal .bar button:disabled { cursor: not-allowed; opacity: .55; }
+.reveal .bar button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
+.reveal .signed { font-size: var(--text-body); font-weight: 700; margin: 0; }
+
+/* §5 rule 3 — reduced motion removes the tumble and both transitions, and **the end states still
+   apply, instantly**. Not "no animation and no answer": the landed state is the state. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal .answer, .reveal .cube { transition: none; }
+  .reveal .cube[data-tumbling="yes"] { animation: none; }
+}

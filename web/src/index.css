@@ -6,6 +6,7 @@
 @import "tailwindcss" source("./");
 @import "./home.css";
 @import "./preferences.css";
+@import "./reveal.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 

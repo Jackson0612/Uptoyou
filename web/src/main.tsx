@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import Preferences from './components/preferences/Preferences.tsx'
+import Reveal from './components/reveal/Reveal.tsx'
 
 /**
  * One path, one screen — read once at boot, with no router library.
@@ -20,9 +21,21 @@ import Preferences from './components/preferences/Preferences.tsx'
  * diff against the owner-approved page — so an affordance added there would fail that gate before
  * the frame has been ruled.
  */
-const screen = window.location.pathname.replace(/\/+$/, '') === '/preferences'
-  ? <Preferences />
-  : <App />
+/** `/reveal?round=<id>` until the frame is ruled. **The round id is in the query rather than the
+ *  path on purpose**: a path segment is a routing decision, and how a person arrives at a reveal is
+ *  part of `[OPEN-2]`. A query parameter is the form that commits to nothing and is trivially
+ *  replaced by whatever the ruling says. */
+function route() {
+  const path = window.location.pathname.replace(/\/+$/, '')
+  if (path === '/preferences') return <Preferences />
+  if (path === '/reveal') {
+    const round = Number(new URLSearchParams(window.location.search).get('round'))
+    return Number.isFinite(round) && round > 0 ? <Reveal roundId={round} /> : <App />
+  }
+  return <App />
+}
+
+const screen = route()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
