@@ -211,15 +211,52 @@ component to obtain a part in this column; write it.
 | `FIELD` | **shadcn `Input`** | restyle: height 48/52/56, `2px ink` border, radius 0, paper ground, `text-body`, muted placeholder. Focus `outline: 2px solid hot; offset 1px`. |
 | `GHOST` | **shadcn `Button`** `variant="outline"` | transparent ground, `2px ink` border, radius 0, `text-body`, same height as `FIELD`. |
 | `PRIMARY` | **shadcn `Button`** `variant="default"` | ink ground, paper text, radius 0. **Disabled drops the ground entirely** — transparent, muted label, **dashed** ink border, `cursor: not-allowed`. Fading a fill measured **2.75:1** and failed the floor. |
-| `TABLE` | **shadcn `Table`** | header `text-note` muted; rows `text-body`; `1.5px ink` row rules; numerals right-aligned `tabular-nums`; a `CHIP` in the first column. |
+| `TABLE` | **shadcn `Table`** | header `text-note` muted; rows `text-body`; `1.5px ink` row rules; numerals right-aligned `tabular-nums`; a `CHIP` in the first column. **Operator state only — see §4b.** |
+| `ALLOC36` | **custom** | the 36 cells in each place's face colour, drawn from the shares the evidence table prints. **It is the round's real allocation, not an illustration** — so it carries no 「示意」 caveat. **Operator state only — see §4b.** |
 | `PICKER` | **shadcn `Select`** | the district picker. Restyle the trigger to `FIELD`; radius 0 on the content panel too. |
 | `BADGE` | **shadcn `Badge`** | the home entry's eyebrow. `2px ink` border, radius 0, `text-note`. |
 | `BLOCK` | **custom** | full-bleed flat colour band, `width: 100vw`, no radius/shadow/border. Ground is one of the palette; text is that ground's `on-*`. Blocks stack edge to edge — **the colour change is the separation**. |
 | `BAR` | **custom** | pinned primary control, `fixed inset-x-0 bottom-0`, `3px ink` top rule, content box 56 + 10 padding, `--bar-h: calc(76px + env(safe-area-inset-bottom))`. **At most one per screen.** Every screen carrying one sets `main { padding-bottom: calc(var(--bar-h) + 16px) }`. |
 | `ROW` | **custom** | one place in a list. `min-height` 56/60/68, `1.5px ink` bottom rule (last row none), name `text-body`, a `CHIP` at the left. Rows never alternate ground. |
 | `CHIP` | **custom** | `12 × 12 px` square, radius 0, `1.5px ink` border, filled from the `FACES = [hot, cobalt, jade, sun]` cycle keyed by pool seat. **Identity, never quantity** — no share, weight or count. |
-| `COLLAGE` | **custom** | the home entry's four images (`D95`), 2×2 offset, each `2px ink` border + the §3 hard offset shadow, radius 0. Every image carries `alt` describing what is actually in the frame. |
+| `COLLAGE` | **custom** | the home entry's images (`D95`), 2×2 offset, each `2px ink` border + the §3 hard offset shadow, radius 0. **A pool of ten, four visible, one cell swapping every 10 s** (owner-ruled 2026-08-18) — the geometry never moves, only the photograph inside a fixed box. Every image carries `alt` naming the dish and describing the frame, and **the `alt` swaps with the image**. **A picture that cannot be named truthfully does not ship** (owner-ruled 2026-08-18: the menu is drawn only from dishes the generator renders truthfully, and breadth across `D38`'s ten categories chooses it — not taste in food). Rotation, loading, pool order and the `HC` gate: `idea & img/evaluator/spec-home-collage-rotation.md`. |
 | `DIE` | **custom** | the 3-D cube. One variable, `--die`, at 132/180/240 px; the `translateZ` that closes the six faces **derives from it** — change the value, never the derivation. |
+
+### §4b · The reveal has two states, and they are not a permission toggle over one design — `D105`
+
+**Member state — what a person in the circle sees after the roll:** the winner, the dice, **one line
+「三十六格已按權重分配」**, and the bar. **No per-place shares. No reasons. No table. No allocation
+grid.**
+
+**Operator state — demo and operator only, gated on a flag on the `device_secret`, set at issue
+(`python -m upto.issue <circle_id> <nickname> --operator`), never on a URL flag:** everything above
+**plus** `TABLE` and `ALLOC36`. **The role rides the credential, not the person** — `D12` keeps
+`principal` holding an id and a stamp and nothing else — so the response shape is chosen by which
+credential authenticated, and no parameter can carry it. The operator holds a seat like any member.
+
+**Why, and it is the same argument as `B1`'s veto carried past the roll:** a narrow exclusion with an
+obvious cause — 麻辣火鍋 at 0/36 — is **one guess in a five-person circle**. Publishing the shares
+after the roll leaks precisely what the anonymity machinery exists to protect, and it leaks it to
+the four people best placed to use it.
+
+**Two consequences for how this is built and measured, and both are easy to get wrong:**
+
+1. **`R-D9`'s answer-region targets apply to the MEMBER state.** Its non-negotiable clause — *the
+   evidence table's first data row stays above the fold* — **has no object in member state, because
+   there is no table.** With nothing below it, the answer region can be **more generous than 40 /
+   45 / 50%**, not less. That is a gain, not a loosening.
+2. **`D91`'s regression splits.** *Zero layout shift* and *the answer hidden mid-tumble* apply to
+   **both** states. *The evidence table fully drawn while the dice move* and *the hit row at
+   neighbour weight until it lands* apply to the **operator** state only — **members have no table
+   for a hit row to leak from.**
+
+**The cost, stated because nobody else will say it:** the home promises 「每一個數字都查得到出處」
+and the reveal is where that promise was kept. **A member can now no longer check it.** The claim
+becomes something the product does rather than something a user can verify, and its visible proof
+lives in demo mode. That is a real trade and D105 makes it deliberately; it is not an oversight to
+be quietly repaired by leaking a share back into the member view.
+
+---
 
 **The fill follows reversibility, not the part (`R-2`, `R-11`).** A control carrying a safe,
 reversible act may be filled. **A control carrying an irreversible act is a ghost at rest** and
