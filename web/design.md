@@ -313,9 +313,12 @@ The idiomatic hover for a hard-shadow object is the one that reads as it leaving
 
 - **`transform: translate(-3px, -3px)`** and the shadow's offset **grows by the same 3 px**, so the gap
   between object and shadow widens. **Nothing scales and nothing rotates.**
-- **`120 ms`, matching the `BAR`'s existing state change.** Not a new number — this surface already has
-  a duration for *a control acknowledging you*, and inventing a second one is how a surface acquires
-  two speeds.
+- **`120 ms`. It IS a new number, and the reason first given for it was false** — corrected
+  2026-08-19 by `frontend`, which checked. This surface had no acknowledging duration before today:
+  the only transitions were the collage's 400 ms cross-fade and the reveal's .45 s flood, **both
+  ambient rather than acknowledging.** The value stands on its own merits; **the justification that
+  it was already here did not, and that kind of reason goes on sounding true.**
+- **Wrapped in `@media (hover: hover)`** — without it a touch device parks the tile lifted on tap.
 - **The lift is on the CELL, not on the `<img>`.** The collage swaps every 10 s; an effect bound to the
   image would drop mid-hover when the photograph changes under the cursor.
 - **`transform` and `box-shadow` only — no layout property.** `D91`'s held-box family: the tile moves
@@ -333,8 +336,10 @@ set is worth keeping for effects we cannot build — this is not one. **Anything
 dependency goes to orchestrator first.**
 
 **Gate:** `HV-1` the rest frame is unchanged with and without the cursor — hover must not move
-anything the fidelity gate measures · `HV-2` the cell's `getBoundingClientRect` is identical hovered
-and unhovered (0.00 px) · `HV-3` under `reduced_motion: reduce` hovered and unhovered still differ and
+anything the fidelity gate measures · `HV-2` the cell's **`offsetTop`/`offsetLeft`** are unchanged and **every neighbour's rect is
+identical** — **corrected 2026-08-19: `getBoundingClientRect` includes transforms, so it fails any
+transform-based hover by construction, here by exactly the ruling's own 3 px. Right intent, wrong
+instrument** — the same family as §9's box-vs-content rule · `HV-3` under `reduced_motion: reduce` hovered and unhovered still differ and
 the transition duration is 0.
 
 ### Ambient loops — the fourth rule, added 2026-08-18
@@ -446,6 +451,10 @@ whose **entire scroll range is 75 px** — i.e. it reported the line as unreacha
 position, a defect that does not exist. **The reservation is not the line; it is the empty space
 that exists so the line is not sat on. Measuring it as if it were the line reports the reservation
 as the failure it was added to prevent.**
+
+**A `preserve-3d` element's own rect is one PLANE through the solid, not its hull.** `.cube`'s border
+box read `top: 1.2 px` while the union of its six `.face` rects read `-16.5 px` on the same build —
+the faces are what project the hull. **Derive a 3-D object's region from its faces.**
 
 **Use the text's own `Range` rect, not the element box**, whenever a check asks whether something is
 *visible* rather than whether it is *placed*. This is a distinct failure from a probe pointed at an
