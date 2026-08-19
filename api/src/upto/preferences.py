@@ -193,6 +193,38 @@ select count(*) as proposable,
 """
 
 
+# **D22's per-stance breakdown (owner-ruled 2026-08-19, `f51aec0`).** The combined figure above is
+# what the threshold is applied to; this is what each stance zeroes on its own, so the screen can state
+# every choice rather than only the total.
+#
+# **The two cannot be added up and must not be presented as if they could.** Categories are disjoint, so
+# today the parts happen to sum to the whole — but the combined query is the authority and this one is
+# the breakdown, and if a future kind ever overlaps (a place matching two stances) the sum would exceed
+# the combined count while the combined count stayed right. Computed separately for that reason rather
+# than derived from one pass, and the payload never invites the addition.
+BREADTH_BY_STANCE = """
+with latest as (
+    select id from place_publication order by detected_at desc, id desc limit 1
+),
+proposable as (
+    select p.category
+      from reference_place rp
+      join latest on true
+      left join place p
+        on p.registry_no = rp.registry_no and p.origin = 'reference'
+     where rp.publication_id = latest.id
+    union all
+    select p.category
+      from place p
+     where p.origin = 'circle-local' and p.circle_id = :circle_id
+)
+select category, count(*) as zeroed
+  from proposable
+ where category = any(:avoided)
+ group by category
+"""
+
+
 class PreferenceBody(BaseModel):
     kind: str
     value: str
@@ -322,6 +354,15 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
                 {"circle_id": circle_id, "avoided": [row.value for row in avoided]},
             )
         ).one()
+        per_stance = {
+            row.category: row.zeroed
+            for row in (
+                await session.execute(
+                    text(BREADTH_BY_STANCE),
+                    {"circle_id": circle_id, "avoided": [row.value for row in avoided]},
+                )
+            ).all()
+        }
     return {
         # **D22's breadth, with its denominator stated in the payload rather than assumed.** The
         # evaluator refuses an unstated denominator at the gate and is right to: the same share
@@ -342,7 +383,19 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
             else round(breadth.zeroed / breadth.proposable, 4),
             "denominator": "the circle's proposable set — every reference place in the current "
                            "publication, plus this circle's own places",
-            "threshold": None,
+            # **0.5, owner-ruled 2026-08-19 (`f51aec0`), applied to the member's COMBINED breadth** —
+            # all their stances together over the proposable set, which is what `share` above is. It
+            # was `null` until today and D22's warning could therefore never render; the evaluator had
+            # split its own gate line into a real half and an `n/a` half for exactly that reason.
+            "threshold": 0.5,
+            # **Decided here, not in the browser.** The same argument as `counts` on A6's seat list:
+            # a surface that computes whether the line was crossed can compute it wrong, and a payload
+            # that states it cannot. It also keeps the comparison's direction in one place — `>` and
+            # not `>=`, so a member sitting exactly on half is not warned about it.
+            "crossed": bool(
+                breadth.proposable
+                and (breadth.zeroed / breadth.proposable) > 0.5
+            ),
         },
         # **What an avoid can currently reach.** Not decoration: only a place with a category can be
         # avoided, so this is the honest bound on the whole feature. The screen states it and never
@@ -400,11 +453,23 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
             # expired band — so the flag is here for the prompt, not as a deletion signal.
             "expired": bool(budget_row.expired),
         },
+        # **Each stance says what it zeroes on its own (D22's amendment, `f51aec0`).** So the screen
+        # can state every choice — 「火鍋 讓 354 家擲不到」 — rather than only the total, which is the
+        # number a member can actually act on: the combined figure tells them they have narrowed a lot
+        # and not which choice did it.
+        #
+        # **`zeroed` here and `zeroed` in `breadth` are the same word for the same thing on purpose**,
+        # and neither is `removed`: an avoidance sets a place's weight to zero (D103/D45), the place
+        # stays proposable, and it simply holds no cells on the dice table.
         "avoid_categories": [
             {
                 "value": row.value,
                 "persist": row.persist,
                 "valid_from": row.valid_from.isoformat(),
+                "zeroed": per_stance.get(row.value, 0),
+                "share": 0.0
+                if not breadth.proposable
+                else round(per_stance.get(row.value, 0) / breadth.proposable, 4),
             }
             for row in avoided
         ],
@@ -440,6 +505,15 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
                 "value": row.value,
                 "persist": row.persist,
                 "valid_from": row.valid_from.isoformat(),
+                # **Zero, and reported rather than omitted (D103's shape).** An ingredient is a stance
+                # like a category, so D22's amendment applies to it — and the honest answer today is
+                # that it zeroes nothing, because no place carries ingredient data and there is no
+                # source for it. Sending the key at 0 keeps the screen from special-casing one kind,
+                # and it makes the day the number moves visible instead of a surprise. It is also why
+                # this cannot be folded into `breadth`: the combined figure would then claim an
+                # avoidance narrowed the pool when it narrowed nothing.
+                "zeroed": 0,
+                "share": 0.0,
             }
             for row in ingredients
         ],

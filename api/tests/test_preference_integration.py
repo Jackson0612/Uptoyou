@@ -305,8 +305,36 @@ async def scenario(test_url: str) -> None:
         # And the denominator still travels with it (D22): a share whose base is unstated means three
         # different things over three candidate pools.
         check("breadth still names its denominator", bool(breadth.get("denominator")), breadth)
-        check("the threshold is null because D22 names no line — a screen may not say 'crossed'",
-              breadth["threshold"] is None, breadth)
+        # **D22's threshold, and the invariant that decides whether it can ever fire.**
+        check("breadth carries the ruled threshold", breadth.get("threshold") == 0.5, breadth)
+        # `crossed` is decided server-side, never by the browser — same argument as `counts` on A6's
+        # seat list: a surface that computes it can compute it wrong.
+        check("breadth states whether the line was crossed rather than leaving it to the client",
+              isinstance(breadth.get("crossed"), bool), breadth)
+        # **The ceiling: an uncategorised place can never be zeroed by a category avoidance**, so
+        # `breadth.share` can never exceed the categorised share. Measured 2026-08-19 by avoiding all
+        # ten of D38's categories at once: 15,555 of 36,499 = 0.4262, exactly `category_coverage.share`.
+        # **That is why threshold 0.5 cannot be crossed until the classifier passes 50% coverage**, and
+        # it is asserted here so the relationship is a property rather than an observation somebody made
+        # once. If this ever fails, either an uncategorised place is being zeroed or the two figures have
+        # stopped sharing a denominator.
+        check("breadth.share cannot exceed the categorised share",
+              breadth["share"] <= body["category_coverage"]["share"] + 1e-9,
+              (breadth["share"], body["category_coverage"]["share"]))
+        # **This asserted `threshold is None` until 2026-08-19, and it was right until it wasn't.**
+        # D22 named no line, so the payload refused to invent one and a screen could state the share
+        # but never say *crossed*. The owner then ruled 0.5 (`f51aec0`) and this assertion became a
+        # test requiring the absence of something the ruling requires to be present — the fourth time
+        # today that a decision moved and a statement of the decision stayed behind. Replaced by the
+        # threshold and `crossed` checks above; kept as a comment because the *reason* the field was
+        # null is still the rule for any future figure D22 has not named.
+        #
+        # **What is still true and now measurable: the warning cannot fire yet.** `breadth.share` is
+        # capped by the categorised share (asserted above), so 0.5 is unreachable until the classifier
+        # passes 50% coverage — 42.62% on the day it was ruled. The precondition is a number now
+        # rather than "when a threshold exists", which is a better `n/a` than the evaluator had.
+        check("crossed is false while nothing is avoided",
+              breadth["crossed"] is False, breadth)
 
         # --- the API's lists and the database's CHECKs agree -------------------------
         # **One transaction per row, and the reason is a property worth knowing.** PostgreSQL's
