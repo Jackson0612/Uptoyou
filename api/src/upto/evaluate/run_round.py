@@ -83,6 +83,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 import time
 import urllib.error
@@ -246,6 +247,21 @@ class Local:
             with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=10) as response:
                 tags = json.load(response)
         except (urllib.error.URLError, OSError, ValueError) as error:
+            # **A name that does not resolve and a service that is off raise the same `URLError`,
+            # and exit 3 says "ordinary, come back later" for both.** That bit on 2026-08-19: the
+            # `edge`/`data` network split left a four-day-old `ollama` container alone on
+            # `upto_default`, so `ollama:11434` stopped resolving from the api container — and a
+            # round would have reported the designed quiet day for a misconfiguration. The exit
+            # code is unchanged (waiting genuinely is the right action for both), but the sentence
+            # now says which, because "the service is off" sends the reader to the wrong command.
+            if isinstance(getattr(error, "reason", None), socket.gaierror):
+                raise ComeBackLater(
+                    f"the NAME in {OLLAMA_URL} does not resolve ({error.reason}) — this is DNS, "
+                    "not a service that is off. Most likely the container is not on the same "
+                    "compose network as this one: `docker compose --profile model up -d "
+                    "--force-recreate ollama` puts it back on `data`. A network change only covers "
+                    "the containers it recreates."
+                )
             raise ComeBackLater(
                 f"the model service at {OLLAMA_URL} is not answering ({error}). It sits behind "
                 "a compose profile and is off unless a backfill or a round is running: "

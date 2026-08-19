@@ -86,10 +86,15 @@ PLACE_PUBLICATION = Asset("place_publication")
 MODEL = "gemma2:2b"
 EMBEDDER = "snowflake-arctic-embed2"
 
-# `UPTO_MODEL_HOST` and `UPTO_MODEL` are the classifier's variables; there is no `UPTO_OLLAMA_URL`
-# anywhere in this codebase whatever a message may once have said. `172.17.0.1:11434` is what the
-# relay exposes to the containers — the same address that was connection-refused *before* the relay
-# existed, which is the measurement the relay was built to answer rather than a contradiction of it.
+# `UPTO_MODEL_HOST` and `UPTO_MODEL` are the classifier's variables. **`UPTO_OLLAMA_URL` is a
+# different tool's and it does exist** — `evaluate/run_round.py:119`, the evaluation round runner's
+# own model service, defaulting to the compose container `http://ollama:11434`. This comment said it
+# existed nowhere in the codebase until 2026-08-19, when the evaluator grepped it; the true claim was
+# only ever "not the classifier's", and overreaching made a real variable unfindable.
+#
+# `172.17.0.1:11434` is what the relay exposes to the containers — the same address that was
+# connection-refused *before* the relay existed, which is the measurement the relay was built to
+# answer rather than a contradiction of it.
 MODEL_HOST = os.environ.get("UPTO_MODEL_HOST", "172.17.0.1:11434")
 
 POKE_SECONDS = 90

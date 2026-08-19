@@ -427,8 +427,20 @@ services:
     <<: *logging
     # A11 — peak 429.8 MiB, all of it DAG parsing — it did not move at all under load, which is what
     #     parsing-only should look like. 1.5x is 645m.
+    #
+    #     **`cpus` was 1.0 and it throttled. Raised to 2.0 on 2026-08-19, the same day it was set.**
+    #     Measured from this container's own `cpu.stat`: 982 throttled periods of 6,904 — **14.2%**,
+    #     58.6 s of stall — while every other service in the stack read 0.0–0.5%. Found by the
+    #     evaluator, who reported 13.8%; it had grown to 14.2% by the time I confirmed it, which is
+    #     itself the point.
+    #
+    #     **This is exactly the failure the A11 ② block warned about in the abstract:** a ceiling set
+    #     near a *mean* clips the bursts, and DAG parsing is nothing but bursts — eight DAG files
+    #     re-parsed on a timer. A throttled container does not log, does not fail a healthcheck, and
+    #     does not appear in `docker stats` as anything but slower. The mean that justified 1.0 was
+    #     0.355 cores, and it was true.
     mem_limit: 768m
-    cpus: 1.0
+    cpus: 2.0
     networks:
       - data
     build:
@@ -518,6 +530,15 @@ services:
     #     resident and `memory.stat`'s `file` separated from `anon`. Read the A11 ② block above: the
     #     first version of that block said this container was not running, and it had been up four
     #     days.
+    #
+    #     **Recreated 2026-08-19 for a reason that was not about the ceiling.** The four-day-old
+    #     container predated the `edge`/`data` split, so it sat alone on `upto_default` and
+    #     `ollama:11434` **did not resolve from `api`** — which `evaluate/run_round.py` uses by
+    #     default. Found by the evaluator. `docker compose --profile model up -d --force-recreate
+    #     ollama` put it on `data`; verified from inside `upto-api-1`, six models. **A network split
+    #     only covers the containers it recreates**, and a long-lived one is exactly the container
+    #     nobody rebuilds. Its `memory.peak` is now 26.3 MiB with nothing loaded, so the resident
+    #     measurement this service needs is finally takeable from a clean start.
     networks:
       - data
     image: ollama/ollama:0.12.3
