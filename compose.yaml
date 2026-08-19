@@ -119,9 +119,23 @@ services:
     #     84% higher two hours later**, after the walkthrough and the split-boot gate had run again.
     #     Neither reading was wrong — a high-water mark is a *lower bound on the true peak*, and one
     #     window is not the maximum. 1.5x the new figure is 503m, which the original 512m cleared by
-    #     2%; too close to leave, so 768m. The integration tests build and drop their own databases
-    #     and pgvector's kNN over the crib is still in no measured window, and an OOM-killed backend
-    #     is the worst failure on this list.
+    #     2%; too close to leave, so 768m — 2.3x, which is where the room is.
+    #
+    #     **The load that produced 335.5 MiB is VERSIONED AND GROWS, so this figure is not a fixed
+    #     quantity waiting to be observed — it is a moving one.** `tools/agent_walkthrough.py` drives
+    #     five agents through the whole product and **its check list grows with every ruling by
+    #     design**: 16 checks at A5's first run, four commits to it on 2026-08-19 alone. Each new
+    #     assertion is more requests against this container in one burst. Pointed out by the frontend
+    #     session, which commits that script — and it is the half I had not stated.
+    #
+    #     **So when this number is next re-read, take it DURING or right after a walkthrough run,
+    #     never on a quiet stack.** An idle box reads ~200 MiB, and a reader who measures that against
+    #     a 768m ceiling concludes it is three times too generous and shrinks it — which is the same
+    #     wrong-window error as the 182.8 above, arrived at from the other direction.
+    #
+    #     Still in no measured window at all: the integration tests that build and drop their own
+    #     databases, and pgvector's kNN over the crib. An OOM-killed backend is the worst failure on
+    #     this list, which is why the room stays.
     mem_limit: 768m
     cpus: 2.0
     networks:
