@@ -333,9 +333,24 @@ async def preferences_in_force(circle_id: int, request: Request) -> dict:
                            "publication, plus this circle's own places",
             "threshold": None,
         },
-        # **What an avoid can currently reach.** Not decoration: only a place with a category can
-        # be avoided, so this is the honest bound on the whole feature, and it is 6.2% today
-        # because one township has been classified. The screen states it and never advises on it.
+        # **What an avoid can currently reach.** Not decoration: only a place with a category can be
+        # avoided, so this is the honest bound on the whole feature. The screen states it and never
+        # advises on it.
+        #
+        # **No number in this comment, deliberately — it had one and the number rotted.** It read
+        # "6.2% today because one township has been classified"; five townships later the live figure
+        # is nearly a third, and a stale figure in a comment beside the code that computes the live
+        # one is worse than no figure, because a reader trusts the nearby prose over the query.
+        # `with_category / reference_rows` below is the answer, and it is the only place that has it.
+        #
+        # **The word matters as much as the number (adopted 2026-08-19 from the evaluator).** Three
+        # different quantities have all been called "coverage" and they were 28 points apart: rows the
+        # classifier *processed*, rows that came out *categorised*, and rows carrying a category that
+        # actually *discriminates* (其他 alone was 41% of processed). This field is **categorised** —
+        # what the avoid machinery can read — which is the right one for this surface, because a
+        # member gains nothing from a row the model looked at and declined to categorise. Never write
+        # `coverage` bare; the denominator being named did not save anyone here, because it was the
+        # *numerator* that was ambiguous.
         "category_coverage": {
             "with_category": coverage.with_category,
             "reference_rows": coverage.reference_rows,
