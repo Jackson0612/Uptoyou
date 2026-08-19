@@ -8,19 +8,45 @@ import { useEffect, useRef, useState } from 'react'
  * instead would blank the box for the decode, and a white flash inside a bordered tile is louder
  * than the swap it was hiding.
  *
- * The pool is whatever exists: four today, ten when gpu-imggen delivers. Nothing here reads the
- * length except the selection rule, which handles any pool of five or more without change — and
- * degrades honestly below that, see `nextFile`.
+ * The pool is whatever exists — **nine as of 2026-08-19**. Nothing here reads the length except
+ * the selection rule, which handles any pool of five or more without change and degrades honestly
+ * below that, see `nextFile`.
+ *
+ * **Nine, not ten, and the shipped numbers are contiguous while the source numbers are not.** The
+ * 早餐 slot was dropped after five attempts across two dishes failed the nameability gate — the
+ * spec's own rule, rather than burning GPU time reaching a round number. The source folder
+ * `idea & img/collage/` is a historical record and its filenames never change, so it still holds a
+ * `collage-09` and a `collage-10` with no `collage-08`. **The shipped names are made by the copy**,
+ * so `public/img/` runs 01–09 with no gap: `HC-1` asserts the pool exists at `collage-01…NN` and a
+ * hole at 08 would fail a check that is right to be literal. The mapping between the two lives
+ * here, in the same constant that already had to carry the `alt` strings.
  */
 
 /** `alt` describes what is actually in the frame and travels WITH the image — an alt describing
  *  a different photograph is worse than no alt. A constant, not fetched (§6) and not derived from
- *  the filename, because a filename is not a sentence. */
+ *  the filename, because a filename is not a sentence.
+ *
+ *  **Three of these are constrained by what the pictures actually contain, not by taste**, and each
+ *  came from the generation log rather than from looking at a brief:
+ *  · `collage-07` — the slices read as salmon and tuna and the log will certify neither, so **no
+ *    species is named**; the green spheres in the foreground are unidentifiable and are not
+ *    enumerated.
+ *  · `collage-08` — the tapioca is rafted at the top of the cup and tapioca sinks. It is
+ *    unmistakably bubble tea, so it ships; **the position of the pearls is not described**, because
+ *    describing what is there would describe a drink that is made wrong.
+ *  · `collage-06` — glazed grilled meat skewers, and the white granules are **coarse salt, not
+ *    sesame**.
+ *  `collage-05` reaches "a red-broth hot pot" and no regional style. */
 export const POOL = [
   { file: '/img/collage-01.webp', alt: '牛肉麵：寬麵條、大塊紅燒牛肉、深褐色湯頭，厚陶碗放在木桌上' },
   { file: '/img/collage-02.webp', alt: '滷肉飯：白飯上鋪滿滷肉燥，旁邊一顆滷蛋與青菜' },
   { file: '/img/collage-03.webp', alt: '水餃：白瓷盤裡的水餃，一雙筷子夾起一顆，旁邊一碟醬油醋' },
   { file: '/img/collage-04.webp', alt: '鹽酥雞：炸得金黃的雞塊，撒上胡椒鹽與九層塔' },
+  { file: '/img/collage-05.webp', alt: '火鍋：黑鍋裡的紅湯，浮著肉片、豆腐與辣椒，鍋口冒著熱氣' },
+  { file: '/img/collage-06.webp', alt: '烤肉串：竹籤上刷了亮亮醬汁的烤肉塊，撒了粗鹽粒' },
+  { file: '/img/collage-07.webp', alt: '生魚片：深色漆盤上幾片厚切生魚片，旁邊一小碟醬油' },
+  { file: '/img/collage-08.webp', alt: '珍珠奶茶：透明杯裝的奶茶，杯裡有黑色粉圓，插著一根吸管' },
+  { file: '/img/collage-09.webp', alt: '小籠包：竹蒸籠裡的小籠包，摺子收在頂上' },
 ] as const
 
 const CELLS = 4
@@ -30,7 +56,7 @@ const FADE_MS = 400
  *  screen, so the not-currently-displayed rule has nothing to return. Measured with today's
  *  four — the interval ran for 44 s and changed nothing while the hook still reported
  *  `rotating`. Both halves of that are wrong: the state must not claim motion that cannot
- *  happen, and a timer nobody can ever see is still a timer. Ten images make it live again
+ *  happen, and a timer nobody can ever see is still a timer. The pool of nine makes it live again
  *  with no change here. */
 const CAN_ROTATE = POOL.length > CELLS
 

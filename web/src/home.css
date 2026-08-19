@@ -171,7 +171,13 @@ h1.headline .lit { color: var(--color-hot-ink); }
 [data-part="picker"] {
   display: inline-flex; align-items: center; gap: 8px; height: auto;
   border: 2px solid var(--color-ink); padding: 6px 12px;
-  font-size: var(--text-body); font-weight: 700;
+  /* **`line-height` is declared, not inherited, and that is the whole masthead defect.** shadcn's
+     trigger ships its own line-height; overriding only `font-size` left it in place, so the
+     trigger drew 4 px shorter than the reference's plain `.picker`, the masthead inherited it,
+     and every object on the page sat 2 px high — a rigid offset a pixel diff cannot forgive,
+     because every glyph edge differs. The reference has no override at all; it inherits the
+     body's 1.65, so that is what is restated here. */
+  font-size: var(--text-body); font-weight: 700; line-height: 1.65;
   background: var(--color-paper); color: var(--color-ink);
 }
 [data-part="picker"] svg { display: none; }

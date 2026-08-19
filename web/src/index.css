@@ -218,7 +218,13 @@
     @apply bg-background text-foreground;
     font-size: var(--text-body);
     font-weight: 400;
-    line-height: 1.6;
+    /* **1.65, and the .05 is not a rounding preference — it is the approved page's own value.**
+       `d-home-v2.html` sets `font: 400 var(--t-body)/1.65`. Shipping 1.6 made every multi-line
+       block one to two pixels shorter than the reference and the error compounded down the
+       column: at 430 the collage ended up 7.7 px high, at the edge of the ±8 px tolerance, and
+       the pixel diff could not be rescued by any uniform offset because the page was a
+       progressively tighter copy rather than the same page moved. */
+    line-height: 1.65;
     -webkit-font-smoothing: antialiased;
   }
   /* §3 · radius 0 everywhere. Stated as a base rule as well as in the theme, because a

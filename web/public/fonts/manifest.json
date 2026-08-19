@@ -11,13 +11,13 @@
       "source": "NotoSerifTC.ttf"
     },
     "sub": {
-      "covered_by_source_face": 3720,
+      "covered_by_source_face": 3724,
       "dropped": "̛̃̈กขดทนมยลวัาแไ่้์㵘䋚䴺乐仧侧内処凪刹勲叄噽夿嬷専崊廰徳忈曟楼楽汢汣湾灇焿畐秓粋糆舗莲蔵蘫蛳貮逹鄕鐡镹霳靓顺鱿鳯麺건그𥺧𦹔",
       "dropped_absent_from_source_face": 84,
       "dropped_means": "the source face has no glyph for these characters, so no subset of it can carry them — not characters the subsetter lost",
       "file": "charset-sub.txt",
-      "requested": 3804,
-      "sha256": "c8520b0f2af4d2c3153062284bde0e478e9e8008959e8346990ca3d37425538e",
+      "requested": 3808,
+      "sha256": "587b36269b8cd816ef89da9cb4420c13f46310625c90fd77a8d92e4ae4ac8687",
       "source": "NotoSansTC.ttf"
     }
   },
@@ -43,16 +43,16 @@
       "wght": "variable 200-900"
     },
     "noto-sub-variable.woff2": {
-      "bytes": 1135088,
-      "characters_in_the_built_face": 3720,
+      "bytes": 1135760,
+      "characters_in_the_built_face": 3724,
       "charset": "sub",
       "font_weight_declaration": "font-weight: 100 900",
-      "sha256": "5be75e941c7cd25cdf2141fb83e26fb8b6076477e7637deece8fb8eb3a3ac721",
+      "sha256": "7c94b23dc4b267e0453f6d02ceedab646cf3702d2136c2f5d9faaabd53eaffbf",
       "source": "NotoSansTC.ttf",
       "wght": "variable 100-900"
     }
   },
-  "generated_at": "2026-08-19T05:01:51+00:00",
+  "generated_at": "2026-08-19T05:30:10+00:00",
   "sources": {
     "NotoSansTC.ttf": {
       "path": "/home/jackson/.fonts/NotoSansTC.ttf",
