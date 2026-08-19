@@ -142,11 +142,24 @@ export default function Reveal({ roundId }: { roundId: number }) {
         <p className="sentence" data-part="sentence">三十六格已按權重分配</p>
       </div>
 
-      {/* **The operator's addition, and it appends BELOW the answer region** — §0: the operator
-          state is the member state plus two components, and nothing in the member state moves when
-          they are present. For a member `evidence` is null and this line renders nothing, because
-          nothing arrived to render. */}
-      {evidence && data && <Evidence ev={evidence} places={data.places} />}
+      {/* **§0b, owner-amended: the member sees the LIST, never the numbers.** 「使用者畫面我認為可
+          以套用開發者的這頁，只是需要移除36格的畫面，以及權重點數」 — the same panel as the
+          operator's, minus the grid and minus the counts. D105 removed the whole thing because
+          「麻辣火鍋 0/36」 in a circle of five is one guess; **the guessable object was always the
+          number, never the name** — the places were proposed openly by the people in the room.
+
+          One component renders both states, and that is the point rather than a convenience: §0
+          says the operator state is the member state *plus* two things, so the two states cannot
+          drift into two layouts. `evidence` is null for a member because nothing arrived, and every
+          numeric column is gated on it — so a member's screen cannot show a count even if someone
+          later adds one to the markup without thinking.
+
+          **No proposer name on any row** (owner-ruled 2026-08-19, separately): the winning place
+          would reveal whose pick won, and a repeat winner becomes a pattern about a person. The
+          spec's §0b still calls that question open — it was ruled after that line was written. */}
+      {data && (
+        <Evidence ev={evidence} places={data.places} winnerId={data.winning_place_id} />
+      )}
 
       {/* D106 — the trip is named, the proposal never is. Signing is the one place a member's
           identity is recorded and kept; the proposal's author was erased by D14's trigger when the

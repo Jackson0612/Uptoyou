@@ -48,8 +48,12 @@ function cells(
   return out
 }
 
-export default function Evidence({ ev, places }: { ev: EvidenceData; places: Places }) {
-  const grid = cells(ev, places)
+export default function Evidence({
+  ev,
+  places,
+  winnerId,
+}: { ev: EvidenceData | null; places: Places; winnerId: number | null }) {
+  const grid = ev ? cells(ev, places) : []
   const seats = Object.keys(places)
 
   return (
@@ -57,7 +61,7 @@ export default function Evidence({ ev, places }: { ev: EvidenceData; places: Pla
       {/* ALLOC36 — beside the table as evidence, never above it as decoration. Cells are ≥ 36 px
           square (§3's rescue floor): below that the colour blocks stop being countable and the
           figure reads as a texture rather than as thirty-six things. */}
-      <div className="alloc36" data-part="alloc36" aria-hidden="true">
+      {ev && <div className="alloc36" data-part="alloc36" aria-hidden="true">
         {grid.map((c, i) => (
           <span
             key={i}
@@ -69,35 +73,37 @@ export default function Evidence({ ev, places }: { ev: EvidenceData; places: Pla
             data-run-start={c.startsRun ? (c.col === 1 ? 'top' : 'left') : undefined}
           />
         ))}
-      </div>
+      </div>}
 
       <table className="evTable" data-part="table">
         <thead>
           <tr>
             <th scope="col" className="evPlace">提名</th>
-            <th scope="col" className="evNum">格數</th>
+            {ev && <th scope="col" className="evNum">格數</th>}
             {/* 「權重來源」 rather than 「理由」: what this column prints is the contributor and the
                 factor it applied. A *reason* is a sentence, and D13 lets one travel only at `table`
                 visibility — so most rows would have carried a column heading promising something
                 the payload is not allowed to hand over. */}
-            <th scope="col" className="evWhy">權重來源</th>
+            {ev && <th scope="col" className="evWhy">權重來源</th>}
           </tr>
         </thead>
         <tbody>
           {seats.map((placeId, seat) => {
-            const n = ev.allocation[placeId] ?? 0
-            const factors = ev.panel[placeId]?.factors ?? []
+            const n = ev?.allocation[placeId] ?? 0
+            const factors = ev?.panel[placeId]?.factors ?? []
             return (
               <tr key={placeId} data-part="table-row">
-                <td className="evPlace">
-                  {/* CHIP — identity, never quantity. The square says which place; the number
-                      beside it says how much, and the two never merge into a coloured bar. */}
-                  <span className="chip" data-face={FACES[seat % FACES.length]} />
+                <td className="evPlace" data-won={String(placeId) === String(winnerId) ? 'yes' : 'no'}>
+                  {/* CHIP — identity, never quantity, and **operator only**. It exists to key a row
+                      to its cells in `ALLOC36`; with no grid to key to, it would be a colour that
+                      means nothing, and above four places it would repeat and mean something
+                      wrong. */}
+                  {ev && <span className="chip" data-face={FACES[seat % FACES.length]} />}
                   {places[placeId]}
                 </td>
                 {/* tabular-nums and right-aligned, so the column reads as a column */}
-                <td className="evNum">{n}<span className="evOf">/36</span></td>
-                <td className="evWhy">
+                {ev && <td className="evNum">{n}<span className="evOf">/36</span></td>}
+                {ev && <td className="evWhy">
                   {factors.length === 0
                     ? <span className="evNone">—</span>
                     : factors.map((f, i) => (
@@ -111,7 +117,7 @@ export default function Evidence({ ev, places }: { ev: EvidenceData; places: Pla
                           {f.reason && <span className="evReason">（{f.reason}）</span>}
                         </span>
                       ))}
-                </td>
+                </td>}
               </tr>
             )
           })}

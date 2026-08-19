@@ -335,3 +335,7 @@
 .reveal .evWhy { font-size: var(--text-note); }
 .reveal .evFactor { display: block; }
 .reveal .evNone { opacity: .55; }
+
+/* §0b — the member's list. No chip, no counts, so the row is a name and the winner is the one the
+   headline already named; marking it again in bold is the only distinction the row needs. */
+.reveal .evPlace[data-won="yes"] { font-weight: 900; }
