@@ -77,8 +77,19 @@ networks:
 # **The window the numbers were taken over, 2026-08-19:** a fresh `--force-recreate` boot, then two
 # real DAG ingests, then the tax source's full 1,711,395-row parse under `--force-parse`, then the
 # five-agent walkthrough, then M1's idempotency suite (five sources through their real CLIs). Both
-# ends read with the same probe. **`ollama` was NOT up** — it is profile-gated (D63) — so it has no
-# limit, because a number for it would be invented rather than measured.
+# ends read with the same probe.
+#
+# **`ollama` was up the whole time and I wrote that it was not. Corrected 2026-08-19, same day.** It
+# is profile-gated (D63), but a `--profile model` container from an earlier session had been running
+# four days — so it was never restarted into the window, and the probe's service list did not even
+# name it. Its `memory.peak` reads **10.79 GB**: larger than everything else in this stack put
+# together, on a 15.7 GB box, against 1.37 GB current with no model resident. It still has no ceiling,
+# and now for a reason rather than for a wrong fact — **that 10.79 GB is mostly reclaimable page cache
+# from reading model weights off disk**, so a `mem_limit` derived from it would bound memory the
+# kernel hands back for free, and one set below it could make a model load fail outright. A real
+# ceiling here needs a window with a model resident and cache separated from anonymous memory
+# (`memory.stat`'s `file` against `anon`), and nobody has taken that measurement. **So the number
+# missing from this page is the largest one on it, which is worth a reader knowing.**
 #
 # **`mem_limit` is 1.5x the measured peak, except where it says otherwise beside the service.** Three
 # are set above that line for named reasons; each says which and why. **A ceiling set from a window
@@ -104,10 +115,14 @@ networks:
 services:
   db:
     <<: *logging
-    # A11 — peak 182.8 MiB. **1.5x is 274m; 512m on purpose** — the integration tests build and drop
-    #     their own databases and pgvector's kNN over the crib was not in the window, and an OOM-
-    #     killed backend is the worst failure on this list.
-    mem_limit: 512m
+    # A11 — peak **335.5** MiB, and the first figure written here was 182.8: **the same probe read
+    #     84% higher two hours later**, after the walkthrough and the split-boot gate had run again.
+    #     Neither reading was wrong — a high-water mark is a *lower bound on the true peak*, and one
+    #     window is not the maximum. 1.5x the new figure is 503m, which the original 512m cleared by
+    #     2%; too close to leave, so 768m. The integration tests build and drop their own databases
+    #     and pgvector's kNN over the crib is still in no measured window, and an OOM-killed backend
+    #     is the worst failure on this list.
+    mem_limit: 768m
     cpus: 2.0
     networks:
       - data
@@ -482,9 +497,13 @@ services:
   # rather than on a GPU somewhere (D64's ladder, step 1).
   ollama:
     <<: *logging
-    # A11 — **No ceiling: it was not up when the stack was measured** (profile-gated, D63), and a number
-    #     invented for it would be the exact mistake the window above was shaped to avoid. It gets one
-    #     the day it is measured resident.
+    # A11 — **No ceiling, and here it is a gap rather than a decision.** `memory.peak` 10.79 GB
+    #     against 1.37 GB current with nothing resident — but that peak is mostly reclaimable page
+    #     cache from reading weights, so a limit derived from it would bound what the kernel returns
+    #     anyway, and a lower one could make a model load fail. It needs a window with a model
+    #     resident and `memory.stat`'s `file` separated from `anon`. Read the A11 ② block above: the
+    #     first version of that block said this container was not running, and it had been up four
+    #     days.
     networks:
       - data
     image: ollama/ollama:0.12.3
