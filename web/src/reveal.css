@@ -228,7 +228,15 @@
   font-weight: 900;
   cursor: pointer;
 }
-.reveal .bar button:disabled { cursor: not-allowed; opacity: .55; }
+/* Same rule as the round screen's bar: a disabled control is never filled (§4). The reveal's bar
+   is disabled only for the moment the dice are still tumbling, which is exactly when a filled
+   control would invite a press that does nothing. */
+.reveal .bar:has(button:disabled) {
+  background: var(--color-paper);
+  color: var(--color-muted);
+  border-top: 3px dashed var(--color-ink);
+}
+.reveal .bar button:disabled { cursor: not-allowed; }
 .reveal .bar button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
 .reveal .signed { font-size: var(--text-body); font-weight: 700; margin: 0; }
 

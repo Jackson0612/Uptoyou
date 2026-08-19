@@ -100,10 +100,19 @@
   height: 56px; padding: 0 32px; border: 0; background: transparent; color: inherit;
   font-size: var(--text-body); font-weight: 900; cursor: pointer;
 }
-/* Disabled drops the ground entirely rather than fading it — §4's PRIMARY rule; a faded fill
-   measured 2.75:1 and failed the floor. Here the bar keeps its ground and the LABEL goes muted,
-   because the bar is the ground. */
-.round .bar button:disabled { cursor: not-allowed; opacity: .5; }
+/* **A disabled control is never "filled" — §4 says it in those words, and the bar is a control.**
+   Fading the label while keeping the hot ground left a screen resting with a filled control that
+   cannot be pressed, which is both the fill grammar broken and the thing §4's PRIMARY rule refuses
+   for contrast reasons: a faded fill measured 2.75:1 against the floor. So the whole bar drops its
+   ground and takes the disabled shape — paper, muted label, dashed rule — and fills only when
+   there is something to roll. Caught by sweeping every screen after the day's changes rather than
+   by a gate. */
+.round .bar:has(button:disabled) {
+  background: var(--color-paper);
+  color: var(--color-muted);
+  border-top: 3px dashed var(--color-ink);
+}
+.round .bar button:disabled { cursor: not-allowed; }
 .round .bar button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
 
 /* PRIMARY — ink ground, paper text, radius 0, and it is this screen's ONE filled control. Sized to
