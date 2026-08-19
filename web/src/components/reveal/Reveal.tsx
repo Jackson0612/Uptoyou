@@ -61,8 +61,7 @@ export default function Reveal({ roundId }: { roundId: number }) {
     if (!dev || signing) return
     setSigning(true)
     try {
-      const { trip: t } = await signTrip(dev, roundId)
-      setTrip(t)
+      setTrip(await signTrip(dev, roundId))
     } catch (e) {
       setError((e as Error).message || '簽不上')
     } finally {

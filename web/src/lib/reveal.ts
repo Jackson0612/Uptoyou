@@ -86,26 +86,30 @@ export async function fetchReveal(d: Device, roundId: number): Promise<MemberRev
  *
  * Three outcomes and none of them is an error the screen should shout about: **201** this member
  * signed, **200** the same member tapped twice (D69's idiom — a retry is not a conflict), **409**
- * somebody else already signed, and the body carries who and when. The 409 is the one that changes
- * the screen, and it changes it to *the same thing a success would have*: the trip, named.
+ * somebody else already signed.
+ *
+ * **The two response shapes are different and I got both wrong first time, so they are written
+ * down here rather than remembered.** 201 and 200 answer `{"trip": {nickname, signed_at}}` —
+ * **nested**, not flat; reading `body.nickname` yields `undefined`, which rendered a signed bar
+ * with an empty name and no error anywhere. 409 answers `{"detail": "<name>已經在 <時間>
+ * 記下這一趟了。"}` — **a finished sentence for a person, not fields**, so there is nothing to
+ * destructure.
+ *
+ * So the 409 branch **re-reads the reveal** instead of parsing prose. The round's own payload
+ * carries `trip`, which is the same object every other member is looking at, and that makes the
+ * losing signer's screen identical to the winner's rather than a second rendering of the same
+ * fact. D68's shape — the loser gets what it lost — applied to a table that already holds it.
  */
-export async function signTrip(
-  d: Device,
-  roundId: number,
-): Promise<{ trip: Trip; alreadySigned: boolean }> {
+export async function signTrip(d: Device, roundId: number): Promise<Trip> {
   const r = await fetch(`/api/rounds/${roundId}/trip`, {
     method: 'POST',
     headers: { authorization: `Bearer ${d.token}` },
   })
-  const body = await r.json().catch(() => ({}))
   if (r.status === 201 || r.status === 200) {
-    return { trip: { nickname: body.nickname, signed_at: body.signed_at }, alreadySigned: false }
+    const body = await r.json().catch(() => ({}))
+    return body.trip ?? null
   }
-  if (r.status === 409) {
-    return {
-      trip: { nickname: body.nickname ?? body.detail?.nickname, signed_at: body.signed_at ?? body.detail?.signed_at },
-      alreadySigned: true,
-    }
-  }
+  if (r.status === 409) return (await fetchReveal(d, roundId)).trip
+  const body = await r.json().catch(() => ({}))
   throw new Error(body.detail || `簽不上（${r.status}）`)
 }
