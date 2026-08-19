@@ -49,13 +49,13 @@ export default function Pairs({ rolls }: { rolls: Roll[] }) {
           )
         })}
       </ul>
-      {/* The mark is stated as well as drawn. A left rule alone is a convention a first-time reader
-          has not been taught, and this list's whole job is to be checkable by someone who has never
-          seen it before. */}
+      {/* **It says what the marked row does not, rather than repeating the line above it.** Under
+          D111's composition the decider is already named at the top of this column, 400 px up; a
+          second sentence naming them again is the same fact twice and reads as the screen not
+          trusting the reader. What is NOT stated anywhere else is where the other pairs came
+          from — and that is the sentence that makes the seed printed underneath mean something. */}
       {rolls.some((r) => r.counts) && (
-        <p className="pairsNote">
-          以 {rolls.find((r) => r.counts)!.nickname || '標記的座位'} 的骰子為準，其餘同時產生。
-        </p>
+        <p className="pairsNote">每一對都由同一顆種子產生，開局時就固定了。</p>
       )}
     </section>
   )

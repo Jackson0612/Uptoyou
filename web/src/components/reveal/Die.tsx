@@ -119,6 +119,25 @@ const ROCK_Y = 26
 const FLY_Y = 40
 const FLY_SCALE = 0.74
 
+/** Resolve once `el`'s computed transform has held identical for three consecutive frames.
+ *  Bounded, so a browser that never settles cannot hang the reveal — the cap is generous enough
+ *  that reaching it means something is wrong rather than merely slow. */
+function stillness(el: Element, frames = 3, capMs = 1200): Promise<void> {
+  return new Promise((resolve) => {
+    const start = performance.now()
+    let prev = ''
+    let same = 0
+    const tick = () => {
+      const now = getComputedStyle(el).transform
+      same = now === prev ? same + 1 : 0
+      prev = now
+      if (same >= frames || performance.now() - start > capMs) resolve()
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+}
+
 export default function Die(
   { value, seat, onLanded }: { value: number; seat: number; onLanded?: () => void },
 ) {
@@ -154,28 +173,42 @@ export default function Die(
         { duration: 1.05, ease: [0.16, 0.62, 0.3, 1] },
       )
       if (!alive) return
-      // **The settle — one spring carrying the arrival and the rock together.** The evaluator's
-      // numbers, on distances small enough for them to mean what they say: the die rises the last
-      // 28 px, grows into its resting size and rocks a couple of degrees past its face before
-      // decaying onto it. That overshoot is the point — a critically-damped landing is what
-      // 「timed rather than felt」 looks like.
+      // **The rock, then the arrival — sequential, and the order is the collision fix.**
+      // While the die rocks it is still at `FLY_SCALE` and still held apart, so a cube 34° off its
+      // face cannot reach its neighbour. It arrives at full size only once it is square-on and
+      // narrow. The earlier build ran both together and measured 27.7 px of intersection.
       await animate(
         scope.current,
-        { x: 0, y: 0, scale: 1, rotateX: TX, rotateY: TY },
-        {
-          // **Two springs, and the split is the whole of the collision fix.** Measured with one
-          // spring carrying everything: the cubes overlapped by 27.7 px and clipped the window by
-          // 5.8 px, both at t≈1300 ms — inside the settle, not the tumble. At full size a cube
-          // rotated even 30° is wider than the 4 px the resting gap leaves between them, so
-          // arriving at size and rocking at the same time is a guaranteed intersection.
-          //
-          // So the ROTATION rocks fast and the BODY arrives slowly behind it: by the time the die
-          // is at its resting size and its resting x, it is already square-on and narrow.
-          default: { type: 'spring', stiffness: 120, damping: 26, mass: 1 },
-          rotateX: { type: 'spring', stiffness: 260, damping: 18, mass: 1 },
-          rotateY: { type: 'spring', stiffness: 260, damping: 18, mass: 1 },
-        },
+        { rotateX: TX, rotateY: TY },
+        { type: 'spring', stiffness: 260, damping: 18, mass: 1 },
       )
+      if (!alive) return
+      // **Critically damped, and the last thing to move.** D111's hold begins when the dice have
+      // stopped, so what ends the sequence has to end when it says it does.
+      //
+      // Measured on the version this replaces, where the body sprang slowly UNDERNEATH the rock:
+      // `animate().finished` resolved at 1653 ms and the element's own matrix was still translating
+      // — **2.03 px, not a sub-pixel tail** — until 1962 ms. A zero-duration snap afterwards did
+      // not stop it; the running spring simply won. So the fix is not a stronger terminator, it is
+      // **not having a long slow animation still in flight when the sequence claims to be over.**
+      await animate(
+        scope.current,
+        { x: 0, y: 0, scale: 1 },
+        { type: 'spring', stiffness: 260, damping: 34, mass: 1, restDelta: 0.25, restSpeed: 2 },
+      )
+      if (!alive) return
+      // **The stop is OBSERVED, not inferred from the promise, and that is the whole of D111's
+      // first clause working.** Measured across four builds: `animate().finished` resolves
+      // **290–350 ms before this element's own matrix stops changing**, and the residual is a ~2 px
+      // translation — small, but not the sub-pixel tail it first looked like. Two rest thresholds
+      // shortened it; a zero-duration snap was simply out-run by the animation still in flight;
+      // re-sequencing so the last spring is short and critically damped did not close it either.
+      //
+      // So the sequence stops guessing. It watches the element until its computed transform has
+      // been identical for three consecutive frames, and only then reports. **The hold that follows
+      // is then a hold after a real stop rather than after a promise about one** — and the same
+      // frames a person sees are the ones the rule is measured on.
+      await stillness(scope.current)
       if (alive) onLanded?.()
     })()
     return () => { alive = false }

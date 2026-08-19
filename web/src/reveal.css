@@ -541,3 +541,112 @@
 .reveal .pairsNote {
   margin: 12px 0 0; font-size: var(--text-note); color: var(--color-muted);
 }
+
+
+/* ══ D111 · the staged composition, owner-ruled 2026-08-19 ═══════════════════
+   *「分階段這件事對」* — the same screen changes who the hero is. While the dice tumble they are
+   300 px and centred and the name does not exist: **the mechanism is the hero.** When they stop
+   they shrink to 42% and retreat to the left column as a record, and the name enters at 104 px:
+   **the result is the hero.**
+
+   **The order is not negotiable and it is `D91`'s.** The dice come to a complete stop, the screen
+   holds a beat, and only then does anything move. `Reveal.tsx` separates `landed` (the dice have
+   stopped) from `staged` (the screen has reacted); the beat between them is the only moment where
+   the result is settled and nothing has claimed it.
+
+   **Guarded to ≥1100 px on purpose.** The ruling was made from a 1440 prototype and §7b parks the
+   phone widths; below the guard the reveal keeps the centred column it has always had, so nothing
+   that was measured at another width is disturbed by a composition nobody has ruled there.
+
+   **One conflict, named rather than buried: `R-D9` is a floor on the resting dice, and at 1440 the
+   staged record is 126 px against a 180 px floor.** I have built the ruling and not the gate line,
+   because the ruling is newer and was made from a rendered page — but the gate line is the
+   evaluator's and it should be amended or upheld deliberately. **The argument for amending it: the
+   floor exists so the mechanism is readable, and under staging the mechanism is 300 px — bigger
+   than it has ever been — at exactly the moment it is the subject.** What shrinks afterwards is a
+   record of a number already read. */
+@media (min-width: 1100px) {
+  .reveal { --stage-pad: 104px; --die: 300px; }
+
+  /* The canvas. The reveal stops being a column and becomes a composition; everything inside is
+     placed against this box rather than stacked. */
+  .reveal { display: block; padding: 0; }
+  /* **The left column FLOWS; only the dice group and the right column are absolute.** The first
+     build placed everything absolutely and the page could not grow: `scrollHeight` equalled the
+     viewport exactly, so the commitment and the revealed seed sat at 843–890 behind a bar whose top
+     edge is 824 and **there was no scroll that could reach them.** Absolutely-positioned content
+     adds nothing to its parent's height, so the padding meant to reserve the bar was reserving
+     space under content that was not there. The whole verifiability claim was invisible.
+
+     In flow, the column grows with its content and the page scrolls when it needs to — and the
+     reservation goes back to doing what it was written for. */
+  .reveal .stage {
+    position: relative;
+    width: 100%; min-height: 100vh; box-sizing: border-box;
+    padding: 238px var(--stage-pad) calc(var(--bar-h) + 32px);
+  }
+
+  /* ── the dice group ───────────────────────────────────────────────────────
+     Anchored at its LANDED place. `transform-origin: top left` so the 42% shrink pulls it into the
+     column's left edge rather than toward its own centre — the decider and the name start at the
+     same 104, and a group that shrank about its centre would sit 190 px to the right of them and
+     read as a third column. */
+  .reveal .group {
+    position: absolute; left: var(--stage-pad); top: 96px;
+    transform-origin: top left;
+    z-index: 2;
+  }
+  .reveal .dice { gap: 56px; min-height: var(--die); }
+
+  /* ── the left column ─────────────────────────────────────────────────────── */
+  /* The column's own width stops short of the right column and its gutter, so a long name wraps
+     inside the composition rather than running under the list. */
+  .reveal .decider { margin: 0; max-width: 62ch; letter-spacing: .16em; opacity: .72; }
+  .reveal .answer {
+    margin-top: 40px; max-width: calc(100% - 460px);
+    display: block; text-align: left; gap: 0;
+  }
+  .reveal .winner {
+    font-size: 104px; line-height: 1.06; letter-spacing: -.02em;
+    min-height: 0; padding-block: 0; display: block; text-align: left;
+  }
+  .reveal .sentence { margin-top: 34px; font-size: 20px; text-align: left; }
+
+  /* ── the right column ─────────────────────────────────────────────────────
+     The list sits beside the dice from the first frame, which is what makes the sweep legible as
+     「these are the names in play」 while the mechanism is still running.
+
+     **`:has(.evNum)` widens it for the operator**, whose table carries two more columns. The
+     column is as wide as its content needs and no CSS anywhere has to know which credential is
+     looking — the same rule `Evidence` follows one level up, where every numeric column is gated
+     on the payload rather than on a flag. */
+  .reveal .right { position: absolute; right: var(--stage-pad); top: 96px; width: 400px; z-index: 2; }
+  .reveal .right:has(.evNum) { width: min(680px, 46vw); }
+
+  /* ── the lower left ───────────────────────────────────────────────────────
+     **The evaluator left the lower half empty on purpose and asked for a proposal; this is it.**
+     The pairs and the commitment go there rather than below the fold. They are the receipt for the
+     result the left column has just announced, so putting them under it is where a reader looking
+     for them would look — and it fills the hole with evidence that already exists instead of with
+     larger type or invented content. */
+  .reveal .under { margin-top: 72px; max-width: calc(100% - 460px); }
+  .reveal .pairs { width: 100%; background: none; color: inherit; padding: 0; }
+  .reveal .pairs .pairsH { color: inherit; opacity: .6; }
+  .reveal .pairRow { border-top-color: color-mix(in oklab, currentColor 26%, transparent); }
+  .reveal .pairRow[data-counts="yes"] {
+    box-shadow: inset 3px 0 0 currentColor; padding-left: 12px;
+  }
+  .reveal .pairsNote { color: inherit; opacity: .6; }
+  .reveal .commit { margin-top: 18px; text-align: left; max-width: none; }
+
+  /* The places list crosses to the flood's own ink, since it now sits ON the flood rather than on
+     its own paper panel — `FL-1`: nothing here may be a fixed grey. */
+  .reveal .evidence { background: none; color: inherit; padding: 0; width: 100%; }
+  .reveal .evTable th, .reveal .evTable td {
+    border-top-color: color-mix(in oklab, currentColor 26%, transparent);
+  }
+  .reveal .evTable th { color: inherit; opacity: .6; }
+  .reveal .evTable tr[data-sweep="on"] .evPlace {
+    background: color-mix(in oklab, currentColor 16%, transparent);
+  }
+}

@@ -34,6 +34,41 @@ import {
 /** How long one row should hold, near enough. The real dwell is derived from it and from the row
  *  count so that every row gets exactly the same number of visits of exactly the same length —
  *  this is the target the derivation rounds to, never a duration anything is scheduled on. */
+/**
+ * **The hold, in milliseconds** — see `staged` below. A timer is right here and nowhere else on
+ * this screen: it does not measure a thing that is happening, it *is* the thing that is happening,
+ * and its whole content is that nothing else is.
+ *
+ * **700 and not the prototype's 380, and the number came from frames rather than from taste.** The
+ * die reports itself landed when `motion`'s animation resolves, and that resolution runs
+ * **290–350 ms ahead of the element actually coming to rest** — measured four ways across four
+ * builds, and not fixable from this side: rest thresholds shortened the tail, a zero-duration snap
+ * was out-run by the animation still in flight, re-sequencing the springs did not close it, and
+ * watching the computed transform for stillness sees style writes rather than paint.
+ *
+ * So the recording settled it. At 380 the whole-frame pixel diff went
+ * `…13078 · 583 · 8350 · 8123 · 771 · 133754…` — **one still frame, then more movement, then the
+ * flood.** The beat existed on paper and not on the screen. The tail is ~300 ms, so a beat a person
+ * can see needs the hold to be that plus the beat.
+ *
+ * **What this does NOT paper over:** the retreat has never begun while the dice were settling — the
+ * prohibition half of D111's rule held at 380 and holds now. What was missing was the positive
+ * half, the visible pause, and that is what this buys.
+ */
+const HOLD_MS = 700
+
+/**
+ * The dice group's two places, as transforms from its resting CSS position.
+ *
+ * `ROLLING` puts it centred and full size; `STAGED` is the identity, which is the left column at
+ * `--stage-pad`. **Derived from the stylesheet's own numbers rather than typed twice** — the
+ * group is 2×300 + 56 = 656 wide, so centring it in a 1440 canvas puts its left edge at 392, and
+ * it sits 114 px lower while it tumbles. Change the composition in CSS and these two lines are the
+ * ones that have to move with it; there is no third copy.
+ */
+const ROLLING = { x: 288, y: 114, scale: 1 }
+const STAGED = { x: 0, y: 0, scale: 0.42 }
+
 const TARGET_DWELL_MS = 120
 
 /** **The floor, and it is the evaluator's instrument that sets it, not taste.** The tumble is
@@ -132,6 +167,21 @@ export default function Reveal({ roundId }: { roundId: number }) {
    *  measurement taken on the second one while believing it was the first is exactly the reading
    *  that gets a defect reported against the wrong thing. */
   const [landedBy, setLandedBy] = useState<'animation' | 'fallback' | 'reduced' | null>(null)
+  /**
+   * **D111's second stage, and the gap between it and `landed` is the whole ruling.**
+   *
+   * `landed` means *the dice have stopped*. `staged` means *the screen has reacted to that*. They
+   * are separated by a deliberate beat, because a screen that begins rearranging while the dice are
+   * still settling has reacted before the answer was final — the animation asserting something it
+   * does not yet have, which is `D91` word for word.
+   *
+   * **So the flood, the retreat and the name all hang off `staged`, and nothing hangs off `landed`
+   * except the beat itself.** The owner's prototype makes the pause visible on purpose; the
+   * evaluator's instruction was not to tighten it away as dead time, and the reason it is not dead
+   * time is that it is the only moment on this screen where the result is settled and nothing has
+   * claimed it yet.
+   */
+  const [staged, setStaged] = useState(false)
   /** Why the sweep did not run, when it did not. Published on the element for the same reason
    *  `landedBy` is: an absent effect and a broken effect look identical in a recording. */
   const [skipped, setSkipped] = useState<'one-row' | 'too-many-rows' | null>(null)
@@ -211,6 +261,16 @@ export default function Reveal({ roundId }: { roundId: number }) {
     return () => window.clearInterval(h)
   }, [data, landed])
 
+  /** The beat. Long enough to read as a stop rather than as a stutter — the prototype's own
+   *  proportion, 6% of a 6.4 s loop. Reduced motion has no stages to separate, so it goes straight
+   *  through. */
+  useEffect(() => {
+    if (!landed) return
+    if (landedBy === 'reduced') { setStaged(true); return }
+    const h = window.setTimeout(() => setStaged(true), HOLD_MS)
+    return () => window.clearTimeout(h)
+  }, [landed, landedBy])
+
   const sign = useCallback(async () => {
     if (!dev || signing) return
     setSigning(true)
@@ -257,11 +317,17 @@ export default function Reveal({ roundId }: { roundId: number }) {
       className="reveal"
       data-screen="reveal"
       data-state={landed ? 'landed' : 'rolling'}
+      data-stage={staged ? 'staged' : 'rolling'}
       data-landed-by={landedBy ?? undefined}
       data-sweep-skipped={skipped ?? undefined}
-      data-face={landed && face ? face : undefined}
+      // **The flood moves with the stage, not with the stop.** Flooding the instant the dice
+      // settle would put a full-screen colour change inside the beat, and the beat's entire
+      // content is that nothing has reacted yet. The screen reacts once, after it.
+      data-face={staged && face ? face : undefined}
     >
       <Field />
+
+      <div className="stage">
 
       {/* **The dice mount only once the round is known, and that closed a latent bug.** They used
           to render immediately with a placeholder 1 and start tumbling, so the landing angle was
@@ -274,14 +340,33 @@ export default function Reveal({ roundId }: { roundId: number }) {
           **a spring has no duration anyone outside it can know**, which is precisely why it feels
           different from an ease, and the die calls back when its spring has decayed onto the
           face. */}
-      <div className="dice" data-part="dice" data-dice-state={landed ? 'landed' : 'tumbling'}>
-        {data && (
-          <>
-            <Die value={data.dice[0]} seat={0} onLanded={() => land('animation')} />
-            <Die value={data.dice[1]} seat={1} onLanded={() => land('animation')} />
-          </>
-        )}
-      </div>
+      {/* **The group is anchored where it ENDS and transformed to where it starts.** The landed
+          position is the CSS one — left column, x 104 — and 「centred and large」 is a transform
+          away from it. That way the resting composition is what the stylesheet says, and the
+          animation is the only thing that has to be undone; the other way round leaves the final
+          frame depending on an animation having run.
+
+          Transform only, so the retreat reflows nothing: the name's box, the list's box and the
+          bar are exactly where they were before the dice moved. */}
+      <m.div
+        className="group"
+        data-part="dice-group"
+        animate={reduce ? { x: 0, y: 0, scale: 1 } : staged ? STAGED : ROLLING}
+        transition={
+          reduce
+            ? { duration: 0 }
+            : { type: 'spring', stiffness: 140, damping: 22, mass: 1.1 }
+        }
+      >
+        <div className="dice" data-part="dice" data-dice-state={landed ? 'landed' : 'tumbling'}>
+          {data && (
+            <>
+              <Die value={data.dice[0]} seat={0} onLanded={() => land('animation')} />
+              <Die value={data.dice[1]} seat={1} onLanded={() => land('animation')} />
+            </>
+          )}
+        </div>
+      </m.div>
 
       {/* **The answer region holds its box from the first frame.** `opacity` alone moves — never
           `display`, never `height` — so the tumble→land sequence shifts 0.00 px and the answer is
@@ -309,10 +394,10 @@ export default function Reveal({ roundId }: { roundId: number }) {
       <m.div
         className="answer"
         data-part="answer"
-        aria-hidden={!landed}
-        inert={!landed}
+        aria-hidden={!staged}
+        inert={!staged}
         initial={false}
-        animate={{ opacity: landed ? 1 : 0, y: reduce || landed ? 0 : 14 }}
+        animate={{ opacity: staged ? 1 : 0, y: reduce || staged ? 0 : 26 }}
         transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 24, mass: 1 }}
       >
         {/* **`sum` is in the member payload and is deliberately NOT rendered.** It is an innocent
@@ -352,6 +437,7 @@ export default function Reveal({ roundId }: { roundId: number }) {
           **No proposer name on any row** (owner-ruled 2026-08-19, separately): the winning place
           would reveal whose pick won, and a repeat winner becomes a pattern about a person. The
           spec's §0b still calls that question open — it was ruled after that line was written. */}
+      <div className="right" data-part="right-column">
       {data && (
         <Evidence
           ev={evidence}
@@ -360,12 +446,14 @@ export default function Reveal({ roundId }: { roundId: number }) {
           sweep={sweep}
         />
       )}
+      </div>
 
       {/* Owner-ruled 「要」 2026-08-19. **After the dice land**, not before: the pairs are the
           receipt for a result the screen has just shown, and printing them while the dice are still
           in the air would be the answer available in numbers beside an animation withholding it —
           the same argument that keeps the revealed seed until the landing. */}
-      {landed && data && <Pairs rolls={data.rolls ?? []} />}
+      <div className="under">
+      {staged && data && <Pairs rolls={data.rolls ?? []} />}
 
       {/* ── D108 · the commitment, and the seed that opens it ──────────────────────────────
           **The hash is shown throughout; the seed only once the dice have landed.** The commitment
@@ -382,11 +470,14 @@ export default function Reveal({ roundId }: { roundId: number }) {
       {data?.seed_commit && (
         <p className="commit" data-part="seed-commit">
           這一輪的結果在開局時就固定了 · {data.seed_commit}
-          {landed && data.revealed_seed && (
+          {staged && data.revealed_seed && (
             <><br />種子 · {data.revealed_seed}</>
           )}
         </p>
       )}
+      </div>
+
+      </div>
 
       {/* D106 — the trip is named, the proposal never is. Signing is the one place a member's
           identity is recorded and kept; the proposal's author was erased by D14's trigger when the
