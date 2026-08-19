@@ -28,9 +28,87 @@ import {
  * nothing here changes a layout box at any point in the sequence.
  */
 
-/** The tumble's length. The result is already known when it starts — this is a moment given to the
- *  reader, not a computation being waited on, and `D91` is the rule that keeps those two apart. */
-const TUMBLE_MS = 1400
+/** How long one row should hold, near enough. The real dwell is derived from it and from the row
+ *  count so that every row gets exactly the same number of visits of exactly the same length —
+ *  this is the target the derivation rounds to, never a duration anything is scheduled on. */
+const TARGET_DWELL_MS = 120
+
+/** **The floor, and it is the evaluator's instrument that sets it, not taste.** The tumble is
+ *  gated from video at ~25 fps, so a frame is 40 ms; a dwell under two frames cannot be told apart
+ *  from a dropped frame, and *equal dwell per row* stops being a claim anyone can confirm or
+ *  refute. Their floor is 80 ms and this is 90, because a schedule that lands exactly on an
+ *  instrument's limit is one rounding away from being unmeasurable. */
+const FLOOR_DWELL_MS = 90
+
+/** The tumble's length, read from `--tumble` on the reveal's own element rather than typed here.
+ *  The CSS animation and this schedule must divide the *same* number: a second copy drifting by
+ *  even 50 ms truncates the sweep's last cycle, and a truncated cycle is one row visited fewer
+ *  times than its neighbours — §0c's unequal dwell, arriving as a rounding error instead of as a
+ *  decision. Falls back to the value in `reveal.css` if the property is ever absent. */
+function tumbleMs(el: HTMLElement | null): number {
+  const raw = el ? getComputedStyle(el).getPropertyValue('--tumble').trim() : ''
+  if (raw.endsWith('ms')) return parseFloat(raw) || 1400
+  if (raw.endsWith('s')) return (parseFloat(raw) || 1.4) * 1000
+  return 1400
+}
+
+/** Fisher–Yates, on a copy. Used for decoration and for nothing else — the roll itself was decided
+ *  by the server before this file ran, which is the whole of `D91`. */
+function shuffled<T>(xs: readonly T[]): T[] {
+  const a = xs.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/**
+ * The sweep's order — **§0c's three constraints, built rather than tuned.**
+ *
+ * **Equal visits and equal dwell, exactly.** The schedule is whole cycles of a permutation of every
+ * row, so each row is visited the same number of times; the dwell is the tumble divided by the step
+ * count, so each visit is the same length. Not *approximately* — a schedule that merely aims at
+ * equality has to be measured to be believed, and `RV-13` is an honesty line rather than a
+ * tolerance.
+ *
+ * **The order is uniformly random and the winner is not consulted.** This function is not given the
+ * winning place and could not favour it if it tried. **The tempting extra step — forbidding the
+ * winner from the final position, so the sweep visibly does not stop on the answer — is refused,
+ * and it is worth saying why**: that is also a correlation with the winner, merely negative, and a
+ * gate looking for *does the order correlate* would find it just as surely. Zero correlation is a
+ * uniform shuffle and nothing else. Landing last on the winner one roll in `n` is what chance looks
+ * like, and engineering that away would be the lie the constraint exists to prevent.
+ *
+ * The one adjustment: a row is never allowed to appear twice in a row across a cycle boundary,
+ * which would read as a single double-length dwell. That is a fact about consecutive positions and
+ * carries no information about which row it is.
+ */
+function sweepOrder(ids: readonly string[], total: number): string[] | null {
+  if (ids.length < 2) return null
+  // **A pool too large to sweep honestly is not swept, and the surface says so.** One whole cycle
+  // at the floor needs `n × 90 ms`; past about fifteen places that exceeds the tumble, and the
+  // three ways out are all worse than stopping. Going faster makes the dwell unmeasurable — the
+  // effect would still *look* fine, which is the point. Visiting a subset makes the visits
+  // unequal, which is the constraint itself. Stretching the tumble makes the animation's length a
+  // function of the pool size, so a big round takes visibly longer to decide and the reader has
+  // every reason to think the size mattered. **And a strobe across twenty rows in 1.4 s does not
+  // read as choosing anyway** — it reads as noise, so the honest option is also the better-looking
+  // one, which is not always how this goes.
+  if (ids.length * FLOOR_DWELL_MS > total) return null
+  const fits = Math.floor(total / (FLOOR_DWELL_MS * ids.length))
+  const wanted = Math.round(total / (TARGET_DWELL_MS * ids.length))
+  const cycles = Math.max(1, Math.min(wanted, fits))
+  const order: string[] = []
+  for (let c = 0; c < cycles; c++) {
+    const next = shuffled(ids)
+    if (order.length > 0 && next[0] === order[order.length - 1]) {
+      ;[next[0], next[1]] = [next[1], next[0]]
+    }
+    order.push(...next)
+  }
+  return order
+}
 
 export default function Reveal({ roundId }: { roundId: number }) {
   const [dev] = useState<Device | null>(device)
@@ -42,7 +120,31 @@ export default function Reveal({ roundId }: { roundId: number }) {
    *  this component declined to read something that did. D105's whole point. */
   const [evidence, setEvidence] = useState<EvidenceData | null>(null)
   const [signing, setSigning] = useState(false)
+  /** Which row the sweep is lighting, or `null`. A place id, never an index — the row order is the
+   *  pool's and an index would silently re-point if it ever changed. */
+  const [sweep, setSweep] = useState<string | null>(null)
+  /** `animation` on the normal path, `fallback` if the failsafe below had to land the screen.
+   *  **Published on the element rather than kept private**: the two paths differ in timing, and a
+   *  measurement taken on the second one while believing it was the first is exactly the reading
+   *  that gets a defect reported against the wrong thing. */
+  const [landedBy, setLandedBy] = useState<'animation' | 'fallback' | 'reduced' | null>(null)
+  /** Why the sweep did not run, when it did not. Published on the element for the same reason
+   *  `landedBy` is: an absent effect and a broken effect look identical in a recording. */
+  const [skipped, setSkipped] = useState<'one-row' | 'too-many-rows' | null>(null)
   const timer = useRef<number | undefined>(undefined)
+  const root = useRef<HTMLElement | null>(null)
+
+  /** **The dice landing is observed, not predicted.** `animationend` from the cube's own `tumble`
+   *  is the moment the tumble is over; a `setTimeout` matching the CSS duration is a second clock
+   *  that agrees until something makes it not — a throttled tab, a slower device, an edited
+   *  duration — and when it disagrees the answer appears over a die still moving. Both dice fire
+   *  it and the first one wins, because they run the same animation for the same length. */
+  const land = useCallback((by: 'animation' | 'fallback' | 'reduced') => {
+    setLanded((was) => {
+      if (!was) setLandedBy(by)
+      return true
+    })
+  }, [])
 
   useEffect(() => {
     if (!dev) return
@@ -60,12 +162,50 @@ export default function Reveal({ roundId }: { roundId: number }) {
         localStorage.setItem('upto_last_round', String(roundId))
         // **Reduced motion lands instantly and still lands** (§5 rule 3: the end states apply, the
         // transitions do not). Not "no animation and no reveal" — the person still gets the answer.
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) setLanded(true)
-        else timer.current = window.setTimeout(() => setLanded(true), TUMBLE_MS)
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) land('reduced')
+        // **The failsafe, and it is deliberately late and deliberately labelled.** If the tumble
+        // never runs — a background tab, an animation that never started — `animationend` never
+        // fires and the reveal hangs on a screen whose whole purpose is to show an answer it is
+        // already holding. A quarter-second past the tumble is long enough that it cannot beat a
+        // healthy animation, and `data-landed-by` says which path won so a slow reading is never
+        // mistaken for a slow animation.
+        else timer.current = window.setTimeout(
+          () => land('fallback'), tumbleMs(root.current) + 250,
+        )
       })
       .catch((e: Error) => { if (live) setError(e.message || '讀取失敗') })
     return () => { live = false; window.clearTimeout(timer.current) }
   }, [dev, roundId])
+
+  /**
+   * The sweep. **It starts with the tumble and it is over when the tumble is over** — the schedule
+   * divides `--tumble` into whole cycles, so the last step ends as the dice stop and the highlight
+   * clears into the landed state rather than stopping on a row.
+   *
+   * **A row lit at the moment of landing would be the animation pointing at an answer**, which is
+   * the one thing §0c forbids however random the order was that got it there. So `landed` clears it
+   * unconditionally, before anything else is read.
+   */
+  useEffect(() => {
+    if (!data || landed) { setSweep(null); return }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const ids = Object.keys(data.places)
+    const total = tumbleMs(root.current)
+    const order = sweepOrder(ids, total)
+    // **Never a silent cap.** A recording with no sweep in it should say which of the two it is —
+    // an effect that was skipped by rule, or an effect that was built and does not work.
+    if (!order) { setSkipped(ids.length < 2 ? 'one-row' : 'too-many-rows'); return }
+    setSkipped(null)
+    const dwell = total / order.length
+    let i = 0
+    setSweep(order[0])
+    const h = window.setInterval(() => {
+      i += 1
+      if (i >= order.length) { window.clearInterval(h); return }
+      setSweep(order[i])
+    }, dwell)
+    return () => window.clearInterval(h)
+  }, [data, landed])
 
   const sign = useCallback(async () => {
     if (!dev || signing) return
@@ -104,14 +244,27 @@ export default function Reveal({ roundId }: { roundId: number }) {
     // .45s ease-out. `data-face` carries it; the colour lives in CSS, so no palette value is
     // written in a component.
     <main
+      ref={root}
       className="reveal"
       data-screen="reveal"
       data-state={landed ? 'landed' : 'rolling'}
+      data-landed-by={landedBy ?? undefined}
+      data-sweep-skipped={skipped ?? undefined}
       data-face={landed && face ? face : undefined}
     >
-      <div className="dice" data-part="dice">
-        <Die value={data?.dice[0] ?? 1} tumbling={!landed} />
-        <Die value={data?.dice[1] ?? 1} tumbling={!landed} />
+      {/* `data-dice-state` is set from the animation's own end, never from a timer that thinks it
+          knows the duration — the evaluator's `RL-2`/`RL-3` need a start and an end they can read
+          off the page rather than infer from the driver's wall clock. `onAnimationEnd` catches the
+          cube's event as it bubbles; the name guard matters because the camera runs its own
+          animation of the same length beside it. */}
+      <div
+        className="dice"
+        data-part="dice"
+        data-dice-state={landed ? 'landed' : 'tumbling'}
+        onAnimationEnd={(e) => { if (e.animationName === 'tumble') land('animation') }}
+      >
+        <Die value={data?.dice[0] ?? 1} tumbling={!landed} seat={0} />
+        <Die value={data?.dice[1] ?? 1} tumbling={!landed} seat={1} />
       </div>
 
       {/* **The answer region holds its box from the first frame.** `opacity` alone moves — never
@@ -158,7 +311,12 @@ export default function Reveal({ roundId }: { roundId: number }) {
           would reveal whose pick won, and a repeat winner becomes a pattern about a person. The
           spec's §0b still calls that question open — it was ruled after that line was written. */}
       {data && (
-        <Evidence ev={evidence} places={data.places} winnerId={data.winning_place_id} />
+        <Evidence
+          ev={evidence}
+          places={data.places}
+          winnerId={data.winning_place_id}
+          sweep={sweep}
+        />
       )}
 
       {/* D106 — the trip is named, the proposal never is. Signing is the one place a member's

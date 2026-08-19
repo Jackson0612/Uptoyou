@@ -52,7 +52,17 @@ export default function Evidence({
   ev,
   places,
   winnerId,
-}: { ev: EvidenceData | null; places: Places; winnerId: number | null }) {
+  sweep = null,
+}: {
+  ev: EvidenceData | null
+  places: Places
+  winnerId: number | null
+  /** A7 — the place id the sweep is lighting during the tumble, or `null`. **It is handed in and
+   *  never derived here**: the schedule that guarantees equal dwell and an order uncorrelated with
+   *  the winner lives in one place, and a component that decided its own highlight would be a
+   *  second, unmeasured one. */
+  sweep?: string | null
+}) {
   const grid = ev ? cells(ev, places) : []
   const seats = Object.keys(places)
 
@@ -106,14 +116,28 @@ export default function Evidence({
             const n = ev?.allocation[placeId] ?? 0
             const factors = ev?.panel[placeId]?.factors ?? []
             return (
-              <tr key={placeId} data-part="table-row">
+              <tr
+                key={placeId}
+                data-part="table-row"
+                data-sweep={sweep === placeId ? 'on' : undefined}
+              >
                 <td className="evPlace" data-won={String(placeId) === String(winnerId) ? 'yes' : 'no'}>
                   {/* CHIP — identity, never quantity, and **operator only**. It exists to key a row
                       to its cells in `ALLOC36`; with no grid to key to, it would be a colour that
                       means nothing, and above four places it would repeat and mean something
                       wrong. */}
                   {ev && <span className="chip" data-face={FACES[seat % FACES.length]} />}
-                  {places[placeId]}
+                  {/* **The name is laid out twice and painted once**, and `reveal.css` explains
+                      why: the winner's mark is a real 900 weight that appears at the landing
+                      frame, and on a name that ends near a line's edge a weight change adds a
+                      line. Measured at 1440: a space-breaking name at the boundary grew the row
+                      by 29.64 px. The ghost in `::before` reserves the BOLD box from first paint,
+                      so the visible text can change weight inside a box that was never the
+                      regular weight's to begin with. `data-name` feeds the ghost; the one real
+                      text node is the one below. */}
+                  <span className="evName" data-name={places[placeId]}>
+                    <span className="evNameInk">{places[placeId]}</span>
+                  </span>
                 </td>
                 {/* tabular-nums and right-aligned, so the column reads as a column */}
                 {ev && <td className="evNum">{n}<span className="evOf">/36</span></td>}

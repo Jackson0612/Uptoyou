@@ -44,6 +44,14 @@
    its own test measures nothing. Inert while §7b parks the phone widths; correct when they
    return. */
 .reveal { --die: 140px; }
+
+/* **A7 — the tumble's length lives HERE and nowhere else.** The CSS animation uses it and
+   `Reveal.tsx` reads it back off the computed style, because the sweep across the list has to
+   divide exactly this number into equal parts. Two copies of one duration is how the sweep's last
+   cycle comes to be truncated — and a truncated cycle means one row was visited fewer times than
+   the others, which is the *unequal dwell* the ruling forbids, arriving as a rounding error rather
+   than as a decision. One number, read by both. */
+.reveal { --tumble: 1400ms; }
 @media (min-width: 900px)  { .reveal { --die: 180px; } }
 @media (min-width: 2100px) {
   .reveal { --die: 240px; }
@@ -65,24 +73,134 @@
    0-height bounding box. */
 .reveal .die { width: var(--die); height: var(--die); perspective: 900px; }
 
+/* ── A7 · the camera ─────────────────────────────────────────────────────────
+   **§0c: tumble tilted, read flat — both, not a trade.** A resting die seen at an angle is a
+   three-dimensional object and its pip count is ambiguous; a die that never tilts is a picture of
+   a number. So the OBJECT keeps spinning about its own axes and the VIEWER moves: `.dieScene`
+   rotates the whole space, which is what a camera swinging overhead is.
+
+   **It ends at identity, and that is what makes `RV-14` true by construction rather than by
+   tuning.** Camera at identity plus a cube resting on an axis-aligned angle means the front face
+   is exactly parallel to the screen. There is no residual tilt to notice, because there is no
+   number here that could carry one.
+
+   **The swing runs as its own animation ending with the tumble, not as a transition after it, and
+   that is a deviation from a literal reading of 「then」 — stated rather than hidden.** Two chained
+   phases means two end signals, and the second one desyncs silently: nothing on screen says the
+   camera arrived late, and a still frame taken at rest looks identical either way. One animation,
+   one `animationend`, one moment where the result is asserted. The tilt is held through the fast
+   part and unwound over the last third, so the sequence a person sees is still tumble-then-arrive. */
+.reveal .dieScene {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.reveal .die:has(.cube[data-tumbling="yes"]) .dieScene {
+  animation: camera var(--tumble) cubic-bezier(.3, .1, .3, 1) forwards;
+}
+
+/* **The `scale3d` is a dolly, and it is here to stop the cube being clipped rather than for the
+   look.** A cube's projection is widest across its body diagonal — up to √3 of its side — so while
+   it is tilted and spinning it is far larger than the 180 px box it occupies in flow. Sampled every
+   20 ms across a real tumble at 1440×900: the cubes reached **`top: -14.5 px`**, i.e. their corners
+   were cut off by the top of the window, against a `.dice` box sitting at 24. The horizontal
+   overflow (13 px left, 10 px right) has 500 px of room and clips nothing.
+
+   **The downward offset is the second half of the same fix, and it exists because the first
+   measurement of it was taken on the wrong object.** `getBoundingClientRect()` on `.cube` returns
+   that element's own box after transform — one PLANE through the middle of the die, not the solid.
+   It read `top: 1.2 px` and said the clipping was cured. The projected solid is the union of the
+   six `.face` rects, and measured that way the same build reached **`-16.5 px`**. So the dolly
+   alone was never enough, and the reading that said it was had measured a cross-section of the
+   thing rather than the thing. Shifting the flight path down for the part of the tumble that is
+   wide costs nothing at rest, where the offset is 0 and the frame is `A3`'s.
+
+   **The offset was raised a second time after the barrel roll went in** (`--turnz` in `Die.tsx`):
+   a cube rolling about Z presents its diagonal to the vertical, so the same flight reached `-3.9`
+   again from `5.3`. Every change to the ROTATION changes the projection, and the clearance has to
+   be re-measured after each one rather than reasoned about from the last number.
+
+   **The number was found by re-measuring, not by reasoning.** The first attempt used `.86`/`.88`,
+   derived from the centre and the overflow, and still clipped by 4.9 px — because the widest
+   projection does not happen at either keyframe, it happens somewhere between them where the body
+   diagonal points at the camera, and no arithmetic over the two ends can see that moment.
+
+   Pulling the camera back for the tilted part and returning it to 1 costs nothing anywhere else:
+   the landed frame is `scale3d(1,1,1)` with no rotation, so it is the frame `A3` was gated on,
+   unchanged to the pixel. **The alternative was 16 px of headroom above the dice**, which fixes it
+   by moving every object on the screen down — a layout change to solve a projection problem, and
+   one that would have to be re-measured at all three `--die` steps. */
+@keyframes camera {
+  0%   { transform: translate3d(0, 36px, 0) scale3d(.80, .80, .80) rotateX(-24deg) rotateZ(8deg); }
+  55%  { transform: translate3d(0, 38px, 0) scale3d(.82, .82, .82) rotateX(-19deg) rotateZ(-6deg); }
+  /* The pinch. Timestamped sampling put the worst frame at ~65% of the tumble, not at either end,
+     so deepening the start bought almost nothing — `.86 → .80` at 0% moved the overflow by 0.9 px
+     while the same change had moved it by 9.6 px when the binding frame was early. The dolly has
+     to be held low THROUGH that moment, which is what this keyframe does. */
+  72%  { transform: translate3d(0, 26px, 0) scale3d(.84, .84, .84) rotateX(-12deg) rotateZ(-3deg); }
+  /* Held up through the cube's overshoot at 74%, which timestamped sampling identified as the
+     binding frame (t≈1139 ms of 1400). Raising the earlier offsets by 10 px had moved the
+     clearance by 2.2 px, because the frame that clips is not the frame that is lowest. */
+  86%  { transform: translate3d(0, 17px, 0) scale3d(.92, .92, .92) rotateX(-5deg) rotateZ(-1deg); }
+  100% { transform: translate3d(0, 0, 0)    scale3d(1, 1, 1)       rotateX(0deg)   rotateZ(0deg); }
+}
+
 .reveal .cube {
   position: relative;
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  /* The settle. A transform-only transition, so the landing moves no layout — `D91`'s zero-shift
-     clause holds by construction rather than by measurement. */
-  transition: transform .5s cubic-bezier(.2, .8, .3, 1);
+  /* The resting orientation — the same two numbers the tumble's last keyframe adds whole turns to.
+     A transform and nothing else, so the landing moves no layout: `D91`'s zero-shift clause holds
+     by construction rather than by measurement. */
+  transform: rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
 }
 
 /* The tumble. It asserts nothing: the result was decided by the server before this element
    existed, and this is the moment given to the reader. `D91`'s whole point is that the animation
-   may not appear to be computing the answer, which is why it stops on a face chosen elsewhere. */
-.reveal .cube[data-tumbling="yes"] { animation: tumble 1.4s cubic-bezier(.3, .1, .3, 1) forwards; }
+   may not appear to be computing the answer, which is why it stops on a face chosen elsewhere.
+
+   **It ENDS on that face rather than being transitioned onto it, and the rewrite was a real fix.**
+   The first build spun to a generic `rotateX(1440deg) rotateY(1080deg)` and then transitioned to
+   the landing angle — and because CSS interpolates matching transform lists numerically, that
+   transition ran X from 1440 back to its target: **four turns of reverse spin in half a second,
+   every roll.** Adding four and three whole turns to `--tx`/`--ty` instead means the last keyframe
+   IS the landing orientation (1440 and 1080 are multiples of 360, so the composite matrix is
+   identical to the resting one). The die decelerates forward into its own face, and removing the
+   animation at the end cannot jump, because there is nothing left to travel. */
+.reveal .cube[data-tumbling="yes"] {
+  /* `ease-out` rather than the old custom curve: with four keyframes the curve applies between
+     each pair, and a curve that decelerates hard inside every segment makes a throw stutter four
+     times instead of once. */
+  animation: tumble var(--tumble) ease-out forwards;
+}
 
 @keyframes tumble {
-  0%   { transform: rotateX(0deg)    rotateY(0deg); }
-  100% { transform: rotateX(1440deg) rotateY(1080deg); }
+  /* Thrown from below and to the left, small because it is far away. Both dice are fully inside
+     the window in this first frame — `RV-15`. */
+  0%   { transform: translate3d(var(--ex, 0px), var(--ey, 0px), 0) scale3d(.72, .72, .72)
+                    rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+  /* Arrived, at size, still spinning hard — and held apart by `--hold`, which is the only thing
+     stopping the two body diagonals from passing through each other. */
+  40%  { transform: translate3d(var(--hold, 0px), 0, 0) scale3d(1, 1, 1)
+                    rotateX(calc(var(--turnx, 1080deg) - 360deg))
+                    rotateY(calc(var(--turny, 720deg) - 360deg))
+                    rotateZ(calc(var(--turnz, 0deg) * .48)); }
+  /* The overshoot. A die that stops exactly on its face has been placed; one that goes a little
+     past and comes back has been thrown. The separation is given back over the same stretch, so
+     it is spent while the cube is still wide and returned before it is not. */
+  74%  { transform: translate3d(calc(var(--hold, 0px) * .72), 0, 0) scale3d(1, 1, 1)
+                    rotateX(calc(var(--turnx, 1080deg) + var(--tx, 0deg) + 22deg))
+                    rotateY(calc(var(--turny, 720deg) + var(--ty, 0deg) + 16deg))
+                    rotateZ(calc(var(--turnz, 0deg) * .92)); }
+  /* The landing orientation itself. `--turnx`/`--turny` are whole turns, so this composite matrix
+     is identical to `.cube`'s resting transform — the animation ends where the element already is
+     and removing it cannot jump. */
+  100% { transform: translate3d(0, 0, 0) scale3d(1, 1, 1)
+                    rotateX(calc(var(--turnx, 1080deg) + var(--tx, 0deg)))
+                    rotateY(calc(var(--turny, 720deg) + var(--ty, 0deg)))
+                    rotateZ(var(--turnz, 0deg)); }
 }
 
 .reveal .face {
@@ -254,7 +372,32 @@
    apply, instantly**. Not "no animation and no answer": the landed state is the state. */
 @media (prefers-reduced-motion: reduce) {
   .reveal, .reveal .answer, .reveal .cube { transition: none; }
+  /* **All three of A7's moving parts, and the third is the one that would have been missed.** The
+     cube's spin and the camera's swing are obvious; the sweep across the list is JavaScript and
+     cannot be stopped from here, so `Reveal.tsx` asks the same media query before it schedules a
+     single step. A rule that silences two of three reads as complete precisely because the two it
+     silences are the loud ones. */
   .reveal .cube[data-tumbling="yes"] { animation: none; }
+  .reveal .die:has(.cube[data-tumbling="yes"]) .dieScene { animation: none; }
+  .reveal .evTable tr[data-sweep="on"] .evPlace { background: none; }
+}
+
+/* ── A7 · the sweep across the list ──────────────────────────────────────────
+   **What it is allowed to mean: *these are the names in play*. What it must not mean: *this one is
+   being chosen*.** §0c's three constraints are what keep those apart, and two of the three are
+   enforced in `Reveal.tsx` where the schedule is built, not here.
+
+   **This rule's job is the third one: it may not move anything.** Background only — no border, no
+   padding, no `font-weight`. A weight change re-measures every glyph in the cell, so the row a
+   person is looking at would be the one that twitches, and `D91`'s zero-shift clause binds the
+   whole tumble→land sequence and not just its ends. The landed winner is marked by weight and
+   that is correct — it happens once, after the sequence, and it is the assertion.
+
+   Deliberately weaker than the winner's own mark, and drawn from the ink at low alpha rather than
+   from a face colour: a sweep wearing a place's face would be the animation claiming an identity
+   it has not been given. */
+.reveal .evTable tr[data-sweep="on"] .evPlace {
+  background: color-mix(in oklab, currentColor 12%, transparent);
 }
 
 /* The demo scaffolding, over the flood. **Here rather than in `switcher.css` because these
@@ -337,5 +480,42 @@
 .reveal .evNone { opacity: .55; }
 
 /* §0b — the member's list. No chip, no counts, so the row is a name and the winner is the one the
-   headline already named; marking it again in bold is the only distinction the row needs. */
-.reveal .evPlace[data-won="yes"] { font-weight: 900; }
+   headline already named; marking it again in bold is the only distinction the row needs.
+
+   **`[data-state="landed"]` is the fix for a leak this rule shipped with, found by A7 on
+   2026-08-19.** The mark was unconditional, and the list is NOT inside `.answer` — so while the
+   headline was held at `opacity: 0` and the dice were still tumbling, the winning row sat there in
+   900 weight. Measured mid-tumble on round 353: `state=rolling`, 「18號麵線」 `won=yes`
+   `weight=900`, every other row 400. **The answer was on the screen for the whole tumble, in the
+   one place nobody was looking for it.**
+
+   It arrived with `D105`'s amendment, which put the list on the member screen beside an answer
+   region built to hide exactly this — the hiding mechanism and the new element were correct
+   separately and wrong together. A7's sweep is what surfaced it, because the sweep drew the eye to
+   the rows for the first time. */
+.reveal[data-state="landed"] .evPlace[data-won="yes"] .evNameInk { font-weight: 900; }
+
+/* **The row reserves the BOLD box from its first painted frame, so the mark cannot reflow it.**
+   `D91`'s zero-shift clause binds the whole tumble→land sequence, and the mark lands inside it.
+
+   Measured at 1440 before this existed. Repeated CJK, Latin and digits never shifted at any length
+   — the CJK faces are full-width and carry the same advance at every weight, which is why the real
+   names in the demo circle looked safe and were not. **A space-breaking name is the case that
+   breaks**: at the length where the regular weight just fits a line, the bold pushes a word over
+   and the row grows one line — `50.64 → 80.28`, twenty such lengths in the first sixty word
+   counts. The operator table reaches it sooner than the member list, because its place column is
+   one of three rather than the whole width.
+
+   The mechanism: `::before` lays the name out at 900 and is hidden, so it contributes the box and
+   no ink; `.evNameInk` is painted over exactly that box and is the only real text node. Changing
+   its weight therefore changes strokes and never metrics. **Faux bold via `text-shadow` was the
+   one-line alternative and is rejected** — it is metric-free for the same reason it is muddy, and
+   this surface ships a real variable face with a real 900 on purpose. */
+.reveal .evName { position: relative; flex: 1 1 auto; min-width: 0; }
+.reveal .evName::before {
+  content: attr(data-name);
+  display: block;
+  font-weight: 900;
+  visibility: hidden;
+}
+.reveal .evNameInk { position: absolute; inset: 0; }
