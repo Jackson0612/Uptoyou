@@ -37,6 +37,20 @@
   font-display: swap;
 }
 
+/* The display face — ten glyphs, 5,932 bytes, the masthead and the headline alone.
+   **`200 900`, not the sans's `100 900`, and the difference is not cosmetic.** This face's weight
+   axis floors at 200 and its default instance is ExtraLight; declaring a 100 it has not got makes
+   `home.css`'s `font-weight: 900` resolve against a clamp instead of the axis. Same family of trap
+   as the sans's Thin default, one value along. `manifest.json` carries `font_weight_declaration`
+   per face, so this is checkable rather than remembered, and `test_web_surface.py` pins it. */
+@font-face {
+  font-family: "UpTo Serif";
+  src: url("/fonts/noto-display-var.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── shadcn's semantic layer, remapped onto D101. Nothing grayscale survives.
       There are no muted surfaces in this system — separation is colour or a rule
       (§3) — so `--muted` resolves to paper and only its foreground carries the

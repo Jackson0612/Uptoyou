@@ -1,20 +1,24 @@
 {
   "charsets": {
-    "sub": {
-      "covered_by_source_face": 3725,
-      "dropped": "̛̃̈กขดทนมยลวัาแไ่้์▾⚀⚁⚂㵘䋚䴺乐仧侧内処凪刹勲区叄噽夿嬷専崊廰徳忈曟楼楽汢汣湾灇焿畐秓粋糆舗莲蔵蘫蛳貮逹鄕鐡镹霳靓顺鱿鳯麺건그𥺧𦹔",
-      "dropped_absent_from_source_face": 89,
-      "file": "charset-sub.txt",
-      "requested": 3814,
-      "sha256": "16cf482e82830da73a81ff65a1e4e339aa339f03881c097cbefe8cd15df4f92a"
+    "display": {
+      "covered_by_source_face": 10,
+      "dropped": "",
+      "dropped_absent_from_source_face": 0,
+      "dropped_means": "the source face has no glyph for these characters, so no subset of it can carry them — not characters the subsetter lost",
+      "file": "charset-display.txt",
+      "requested": 10,
+      "sha256": "bf9f187f9ab727a078b999c16b1a72eb695dbf2b74e4e9ad6abf0d8097d53ec3",
+      "source": "NotoSerifTC.ttf"
     },
-    "ui": {
-      "covered_by_source_face": 368,
-      "dropped": "▾⚀⚁⚂区",
-      "dropped_absent_from_source_face": 5,
-      "file": "charset-ui.txt",
-      "requested": 373,
-      "sha256": "eb3bbce0def9951294004a472029f535b4e1166eb822eb008204115a324e80b1"
+    "sub": {
+      "covered_by_source_face": 3720,
+      "dropped": "̛̃̈กขดทนมยลวัาแไ่้์㵘䋚䴺乐仧侧内処凪刹勲叄噽夿嬷専崊廰徳忈曟楼楽汢汣湾灇焿畐秓粋糆舗莲蔵蘫蛳貮逹鄕鐡镹霳靓顺鱿鳯麺건그𥺧𦹔",
+      "dropped_absent_from_source_face": 84,
+      "dropped_means": "the source face has no glyph for these characters, so no subset of it can carry them — not characters the subsetter lost",
+      "file": "charset-sub.txt",
+      "requested": 3804,
+      "sha256": "c8520b0f2af4d2c3153062284bde0e478e9e8008959e8346990ca3d37425538e",
+      "source": "NotoSansTC.ttf"
     }
   },
   "derived_from": {
@@ -25,40 +29,40 @@
   },
   "files": {
     "OFL.txt": {
-      "bytes": 4457,
-      "sha256": "4e772aee7fa037ce224d466aad901ae714b5215c07f0ebf3271482ee71ac5bd0",
+      "bytes": 4569,
+      "sha256": "17d473310bfea3b3facfaf97efcfae9d3fdcfadc4b99fcde4a9bb44528e3de6b",
       "why": "OFL 1.1 — a subset is a derivative work and the notice travels with it (D66, amended 2026-08-18)"
     },
-    "noto-sub-900.woff2": {
-      "bytes": 600772,
-      "characters_in_the_built_face": 3725,
-      "charset": "sub",
-      "sha256": "947adcf9298a9f8ae8b3b10c141d69c1af441affa964bd4dd06fcfd525667166",
-      "wght": 900
+    "noto-display-var.woff2": {
+      "bytes": 5932,
+      "characters_in_the_built_face": 10,
+      "charset": "display",
+      "font_weight_declaration": "font-weight: 200 900",
+      "sha256": "40e3ba9754a5d3f39c7d0de8e201ffca7540b9c0e4dab862a8a7c13e516a892c",
+      "source": "NotoSerifTC.ttf",
+      "wght": "variable 200-900"
     },
     "noto-sub-variable.woff2": {
-      "bytes": 1135404,
-      "characters_in_the_built_face": 3725,
+      "bytes": 1135088,
+      "characters_in_the_built_face": 3720,
       "charset": "sub",
-      "sha256": "b56a33106288d3079bdaa275e14b1302ea3d51876fc94a32f850dba4976d10ca",
-      "wght": "variable 100-900"
-    },
-    "noto-ui-900.woff2": {
-      "bytes": 68824,
-      "characters_in_the_built_face": 368,
-      "charset": "ui",
-      "sha256": "d030e934055fffc33cd5f0b8b5ed5a67070b8baef4e95e328ee1306598988bac",
-      "wght": 900
-    },
-    "noto-ui-var.woff2": {
-      "bytes": 128048,
-      "characters_in_the_built_face": 368,
-      "charset": "ui",
-      "sha256": "26032e4b62ad2d15dffd7cb1fff983fe3937f2379b41690fc59b24c9ca564a3c",
+      "font_weight_declaration": "font-weight: 100 900",
+      "sha256": "5be75e941c7cd25cdf2141fb83e26fb8b6076477e7637deece8fb8eb3a3ac721",
+      "source": "NotoSansTC.ttf",
       "wght": "variable 100-900"
     }
   },
-  "generated_at": "2026-08-18T01:12:59+00:00",
-  "source_font": "/home/jackson/.fonts/NotoSansTC.ttf",
-  "source_sha256": "864727d210d54f2537bbe23b3a839436c3992af72de9322af5270897246bd44f"
+  "generated_at": "2026-08-19T05:01:51+00:00",
+  "sources": {
+    "NotoSansTC.ttf": {
+      "path": "/home/jackson/.fonts/NotoSansTC.ttf",
+      "sha256": "864727d210d54f2537bbe23b3a839436c3992af72de9322af5270897246bd44f",
+      "wght": "font-weight: 100 900"
+    },
+    "NotoSerifTC.ttf": {
+      "path": "/home/jackson/.fonts/NotoSerifTC.ttf",
+      "sha256": "0077e18f57c6908f4a000969880940bdb0dad057c0e8d98b49dc364c3d1b09c6",
+      "wght": "font-weight: 200 900"
+    }
+  }
 }
