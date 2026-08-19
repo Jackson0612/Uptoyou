@@ -220,7 +220,32 @@ component to obtain a part in this column; write it.
 | `ROW` | **custom** | one place in a list. `min-height` 56/60/68, `1.5px ink` bottom rule (last row none), name `text-body`, a `CHIP` at the left. Rows never alternate ground. |
 | `CHIP` | **custom** | `12 × 12 px` square, radius 0, `1.5px ink` border, filled from the `FACES = [hot, cobalt, jade, sun]` cycle keyed by pool seat. **Identity, never quantity** — no share, weight or count. |
 | `COLLAGE` | **custom** | the home entry's images (`D95`), 2×2 offset, each `2px ink` border + the §3 hard offset shadow, radius 0. **A pool of ten, four visible, one cell swapping every 10 s** (owner-ruled 2026-08-18) — the geometry never moves, only the photograph inside a fixed box. Every image carries `alt` naming the dish and describing the frame, and **the `alt` swaps with the image**. **A picture that cannot be named truthfully does not ship** (owner-ruled 2026-08-18: the menu is drawn only from dishes the generator renders truthfully, and breadth across `D38`'s ten categories chooses it — not taste in food). Rotation, loading, pool order and the `HC` gate: `idea & img/evaluator/spec-home-collage-rotation.md`. |
-**`R-D9`'s dice figure is a FLOOR and has been read as a SIZE — named 2026-08-19 by `frontend`, unresolved.** *At least 18% of viewport height at 430* says how small the dice may get before the screen has failed. **Nothing has ever ruled how large they should be when there is room**, so at 900+ they sit at 180 px under a winner name six times their height — **the mechanism of the whole product as the smallest, most crowded object on the screen.** A floor answers *when is it broken*; it does not answer *what should this look like*. **This is a composition ruling nobody has made, and it is probably most of why six animations were rejected on it.**
+**`R-D9`'s floor applies to the TUMBLING stage, not the resting one — ruled 2026-08-19 by the
+evaluator from the staged recording, and it is conditional.**
+
+Under `D111`'s staging the mechanism is **300 px** at the moment it is the subject — larger than it
+has ever been — and what remains afterwards is a **record of a number already read**. So the resting
+dice may sit below 180 px (the staged build records 126 px).
+
+**The condition, and it is the whole of the ruling: the resting dice may fall below the floor ONLY
+while the pairs list states every pair as text.** In the staged build it does — `Amy 5·1`, `Op 2·6` —
+so the number is carried in two places and the small die is an illustration of a value that is also
+written down. **Remove or hide that list and the floor reapplies immediately**, because the die
+would then be the only carrier of a number at a size that cannot be trusted to deliver it.
+
+**The evidence for the condition rather than a plain amendment:** `frontend` **misread the resting
+die as a 6 when it was a 5**, checked `data-value`, and reported it against its own argument. One
+misread is not a finding, but **5 and 6 are the confusable pair at small size** — four corners plus a
+centre against two columns of three — and it happened at exactly the size the ruling produces.
+**A record nobody can read is not a record; a record beside its own text is.**
+
+**And the case the floor was really protecting: someone arriving late.** A member who reconnects, or
+opens the reveal afterwards, **never sees the 300 px stage** — for them 126 px is the only size the
+dice are ever shown at. **The text list is what makes that acceptable, which is why it is a condition
+and not a footnote.**
+
+**`RV-18`:** wherever the resting dice are below `R-D9`'s floor, the pairs list is present and states
+each pair as text. Failing either half fails the line.
 
 | `DIE` | **custom** | the 3-D cube — **it already is one**; six faces, `rotateX`/`rotateY`, `translateZ`. It lands **face-on**, which is why the resting state reads flat to a viewer. **If a tilted resting angle is ever ruled (raised by the owner 2026-08-19, unruled), one constraint binds it and it is not cosmetic: the landed face's pip count must stay unambiguous — a person reads the number without counting twice.** The landed face is the only place the roll's result is legible, and `D91` forbids the animation misrepresenting a decided result; the resting frame is where that result is asserted. Foreshortening the winning face while neighbouring faces contribute pips is exactly that failure, so **a small angle that keeps one face dominant is the target — near-corner-on views, where three faces sit at similar prominence, are where it breaks.** Choose by rendering candidates and ruling from them, never by picking a number (frontend's constraint, 2026-08-19). One variable, `--die`, at **140**/180/240 px; the `translateZ` that closes the six faces **derives from it** — change the value, never the derivation. **140, not 132, ruled 2026-08-19** (frontend found the conflict; the recommendation was its): 132 is **17.37%** of 760 against `R-D9`'s **18%** floor, so the token contradicted the gate it is measured by. 136.8 px is the exact floor and 140 clears it at 18.42% with margin for a border. **The floor was not moved to fit the token** — a target adjusted to pass its own test measures nothing, and 18% came from R-D9's measurement of the reference. Parked-width note: 430 is out of scope under §7b, so this changes nothing today; it is fixed now because a known contradiction left in this file is one the next reader has to rediscover. |
 
@@ -432,8 +457,13 @@ to scroll to find has not refused anything** — it has failed silently while lo
 can be discovered. A line that appears in response to an action has one moment to be read, and the
 band takes that moment away.
 
-**`BF-1`:** no element that renders in response to a user action has its text inside the bar's band at
-rest. **Measured from the text's own `Range` rect, never the padding box** (§9) — the reservation is
+**`BF-1` has TWO halves and the first one reads like the whole rule — corrected 2026-08-19.**
+**(a)** no element that renders in response to a user action has its text inside the bar's band at rest;
+**(b)** **the page must be able to grow past the band.** `frontend`'s absolute-positioned column satisfied
+(a) and failed (b): `scrollHeight` equalled the viewport, the commitment sat at 843–890 behind a bar whose
+top edge is 824, **and no scroll existed that could reach it.** It was standing provenance — allowed in the
+band — and still unreachable. **A rule about what may live there is worthless if the page cannot be scrolled
+to it.** **Measured from the text's own `Range` rect, never the padding box** (§9) — the reservation is
 not the line.
 
 ---
