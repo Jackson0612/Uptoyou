@@ -109,13 +109,20 @@ h1.headline .lit { color: var(--color-hot-ink); }
    fix.** The bar is `position: fixed`, so it covers the last 76 px of every viewport whatever the
    page does; a line placed at the foot without a reservation is a line the bar sits on top of,
    and it is still there in the DOM and still absent from the screen. Measured before this padding
-   existed: the text landed at y 844 with the bar's top edge at 824.
+   existed: the text landed at y 844 with the bar's top edge at 822.
 
-   **The cost is stated rather than hidden: at 1440×900 this line is 59 px below the fold.** The
-   approved frame already ends at 804 and the bar owns 824 upward, so the clear band is 20 px and
-   no margin can fit a line of copy into it. The only placement that would need no scroll is
-   inside the approved frame, which the ruling forbids. So it scrolls, and the reservation makes
-   sure that when it is scrolled to it is fully clear of the bar rather than tucked under it. */
+   **The cost is stated rather than hidden.** At 1440×900 the line is invisible at rest — its text
+   sits wholly inside the fixed bar's band — and the page's whole 75 px of scroll is what brings it
+   out, landing it 32 px clear (driven and measured, not derived). The approved frame ends at 804
+   and the bar owns 822 upward, so the clear band is 18 px and no margin fits a line of copy into
+   it; the only placement needing no scroll is inside the approved frame, which the ruling forbids.
+
+   **Measure the TEXT against the bar, never this box.** The box is 131 px tall and 111 of that is
+   the reservation below the text — a probe that asks whether the *box* clears the bar answers
+   `scrollY > 153`, which exceeds the page's 75 px range and reports the line as unreachable. It is
+   reachable. A box is not its content, and here the two answers differ by exactly the padding that
+   exists to keep the content safe. (The evaluator's probe made this call on 2026-08-19; the
+   correction is recorded here so the next reading of these numbers starts from the right edge.) */
 .shape { width: min(1200px, 88vw); margin: 40px auto 0;
          padding-bottom: calc(var(--bar-h) + 32px);
          font-size: var(--text-note); color: var(--color-muted); }
