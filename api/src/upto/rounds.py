@@ -86,8 +86,10 @@ async def open_round(circle_id: int, body: OpenRoundBody, request: Request) -> d
                 await session.execute(
                     text(
                         "insert into round (circle_id, target_hour, target_hour_typed, "
-                        "                   outcome_seed, seed_commit) "
-                        "values (:c, coalesce(:h, date_trunc('hour', now())), :typed, :seed, :commit) "
+                        "                   outcome_seed, seed_commit, seat_ids) "
+                        "values (:c, coalesce(:h, date_trunc('hour', now())), :typed, :seed, :commit, "
+                        "        (select array_agg(id order by id) from member "
+                        "          where circle_id = :c)) "
                         "returning id, target_hour, target_hour_typed, opened_at, seed_commit"
                     ),
                     {"c": circle_id, "h": body.target_hour, "typed": typed,
@@ -253,12 +255,14 @@ async def _closed_body(
     # `trip` and `panel` are read here.
     seed_row = (
         await session.execute(
-            text("select circle_id, seed_commit, outcome_seed, status from round where id = :r"),
+            text("select circle_id, seed_commit, outcome_seed, status, seat_ids "
+                 "from round where id = :r"),
             {"r": round_id},
         )
     ).one()
     seed = bytes(seed_row.outcome_seed) if seed_row.outcome_seed is not None else None
-    seats = await seats_for(session, round_id, seed_row.circle_id, seed)
+    seats = await seats_for(session, round_id, seed_row.seat_ids, seed,
+                            closed=seed_row.status == "closed")
     body["rolls"] = seats
     body["deciding_member"] = deciding_member_for(seats)
     body["seed_commit"] = seed_row.seed_commit
@@ -283,7 +287,8 @@ async def roll(round_id: int, request: Request) -> dict:
             await session.execute(
                 text(
                     "select circle_id, status, target_hour_typed, die1, die2, "
-                    "winning_place_id, outcome_seed, seed_commit from round where id = :r"
+                    "winning_place_id, outcome_seed, seed_commit, seat_ids "
+                    "from round where id = :r"
                 ),
                 {"r": round_id},
             )
@@ -374,17 +379,24 @@ async def roll(round_id: int, request: Request) -> dict:
         # one, so it keeps the old behaviour rather than being refused: a commitment made after the
         # places were known would not be a commitment.
         if round_row.outcome_seed is not None:
-            seat_ids = (
-                (
-                    await session.execute(
-                        text("select id from member where circle_id = :c order by id"),
-                        {"c": round_row.circle_id},
+            # **The seats pinned at open, never live membership.** Reading `member` here is the bug
+            # revision 0027 exists for: the decider moved whenever the circle's membership changed, so
+            # a closed round's arithmetic stopped checking out and an open round's decider could change
+            # under a member who joined mid-round. A round with a seed and no pinned seats predates
+            # 0027 and falls back, because there is nothing honest to reconstruct.
+            seat_ids = list(round_row.seat_ids or [])
+            if not seat_ids:
+                seat_ids = list(
+                    (
+                        await session.execute(
+                            text("select id from member where circle_id = :c order by id"),
+                            {"c": round_row.circle_id},
+                        )
                     )
+                    .scalars()
+                    .all()
                 )
-                .scalars()
-                .all()
-            )
-            dice = draw.deciding_pair(bytes(round_row.outcome_seed), list(seat_ids))
+            dice = draw.deciding_pair(bytes(round_row.outcome_seed), seat_ids)
         else:
             dice = (secrets.randbelow(6) + 1, secrets.randbelow(6) + 1)
         winner = place_for(table, dice[0], dice[1])

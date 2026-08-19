@@ -262,54 +262,69 @@ async def trip_for(session, round_id: int):
 # is about is how the odds got there** — `weights`, `allocation`, `panel` — not what the places are
 # called. Withholding a name would also stop a reveal saying "not 巷口麵店 this time", which is a
 # thing the screen may honestly say.
-async def seats_for(session, round_id: int, circle_id: int, seed: bytes | None) -> list:
-    """D108's `rolls[]` — **every seat in the circle, in member order, dice null until they tap.**
+async def seats_for(session, round_id: int, seat_ids: list | None, seed: bytes | None,
+                    closed: bool) -> list:
+    """D108's `rolls[]` — **every seat drawn at open, in member order, in one of two states.**
 
-    *Shape agreed with the frontend session 2026-08-19, and the ordering is theirs rather than mine.*
-    I proposed `rolled_at` order so arrivals could animate without re-sorting. They refused it, and
-    correctly: **`rolled_at` order makes the layout reorder itself during the animation**, and D91's
-    zero-shift clause binds the whole roll sequence — a seat that jumps because somebody else was
-    quicker is exactly the forbidden thing. So the list must **fill**, never **grow**, which means it
-    has to hold the people who have not rolled yet.
+    *Ordering agreed with the frontend session 2026-08-19, and it is theirs rather than mine.* I
+    proposed `rolled_at` order so arrivals could animate without re-sorting. They refused it and were
+    right: **that makes the layout reorder itself during the animation**, and D91's zero-shift clause
+    binds the whole roll sequence — a seat that jumps because somebody else was quicker is exactly the
+    forbidden thing. The list must **fill**, never **grow**.
 
-    **The dice are derived, never stored.** `member_roll` records that a member tapped and when; the
-    pair comes from the seed on every read (revision 0026 argues why at length). So a seat cannot
-    show a pair that disagrees with the seed, because there is nothing else for it to disagree with.
+    **Two states, and the second is the owner's 「要」 (D108, `9765a0d`).**
 
-    **`counts` is stated rather than left to the browser.** The evaluator's RP-2 asks for exactly one
-    roll *marked*, and — the frontend's argument, which is the one that settles it — *a surface that
-    computes which one counts can compute it wrong; a payload that states it cannot.* It is true on a
-    seat whose dice are still null, which is RP-3 twice over: the decider is named in
-    `deciding_member` and marked here, both before any die exists.
+    * **Open** — a seat shows dice only if that member has tapped. In practice no seat ever fills here,
+      because the first tap closes the round; the frontend measured that and it is the deadlock fix
+      working rather than a defect.
+    * **Closed** — **every** seat's pair is filled, for everyone, regardless of who tapped. A static
+      list of all the pairs with the decider marked, beside the commitment. That is what makes a tap
+      after close record nothing (D69 stands): there is no seat left for it to fill.
+
+    **The seats come from `round.seat_ids`, pinned at open — never from live membership.** Reading
+    `member` here was the bug revision 0027 exists for: the decider is drawn from the seat set, so a
+    live read made it move whenever the circle changed. A round predating 0027 has no pin and falls
+    back to the current membership, which is wrong in the same way but is the only thing left.
+
+    **Nicknames are looked up and may be absent.** A member erased after the round keeps their seat as
+    an id — that is what a verifiable past requires — and their nickname does not come back. `None`
+    rather than a placeholder, because inventing 「已離開」 here would put copy in the API that the
+    surface should be choosing.
     """
-    members = (
-        await session.execute(
-            text("select id, nickname from member where circle_id = :c order by id"),
-            {"c": circle_id},
-        )
-    ).all()
-    if seed is None or not members:
+    if seed is None or not seat_ids:
         return []
-    tapped = set(
+    names = dict(
         (
             await session.execute(
-                text("select member_id from member_roll where round_id = :r"), {"r": round_id}
+                text("select id, nickname from member where id = any(:ids)"),
+                {"ids": list(seat_ids)},
             )
-        )
-        .scalars()
-        .all()
+        ).all()
     )
-    ids = [row.id for row in members]
-    decider = draw.deciding_member(seed, ids)
+    tapped = (
+        set()
+        if closed
+        else set(
+            (
+                await session.execute(
+                    text("select member_id from member_roll where round_id = :r"), {"r": round_id}
+                )
+            )
+            .scalars()
+            .all()
+        )
+    )
+    decider = draw.deciding_member(seed, list(seat_ids))
     seats = []
-    for row in members:
-        pair = draw.pair_for_member(seed, row.id) if row.id in tapped else (None, None)
+    for member_id in sorted(seat_ids):
+        show = closed or member_id in tapped
+        pair = draw.pair_for_member(seed, member_id) if show else (None, None)
         seats.append({
-            "member_id": row.id,
-            "nickname": row.nickname,
+            "member_id": member_id,
+            "nickname": names.get(member_id),
             "die1": pair[0],
             "die2": pair[1],
-            "counts": row.id == decider,
+            "counts": member_id == decider,
         })
     return seats
 

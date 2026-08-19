@@ -66,7 +66,7 @@ FORBIDDEN_SUBJECTS = ("preference", "contribution", "reason", "private channel")
 
 
 ROUND_COMMITMENT = """
-select id, circle_id, status, die1, die2, winning_place_id, seed_commit, outcome_seed
+select id, circle_id, status, die1, die2, winning_place_id, seed_commit, outcome_seed, seat_ids
 from round where id = :round_id
 """
 
@@ -480,7 +480,14 @@ async def explain_round(session, round_id: int) -> Answer:
         )
 
     seed = bytes(row["outcome_seed"])
-    ids = list(
+    # **The seats pinned on the round, never live membership — and this line was wrong once already.**
+    # `explain_round` found the live-read bug in the *roll* and then reproduced it in itself: it read
+    # `member` by circle, so a member joining after the round still moved the recomputed decider and
+    # the verdict stayed `false` after the roll was fixed. **A verifier that reads a different
+    # question from the thing it verifies is worse than no verifier**, because its disagreement is
+    # indistinguishable from a real one.
+    pinned = list(row["seat_ids"] or [])
+    ids = pinned or list(
         (await session.execute(text(ROUND_SEATS), {"circle_id": row["circle_id"]})).scalars().all()
     )
     decider = draw.deciding_member(seed, ids) if ids else None
@@ -489,6 +496,10 @@ async def explain_round(session, round_id: int) -> Answer:
 
     rows: List[Dict[str, Any]] = [{
         "commitment_published_at_open": row["seed_commit"],
+        # Said out loud, because the verdict below means different things in the two cases: a round
+        # predating revision 0027 has no pinned seats, so its decider is recomputed against today's
+        # membership and a mismatch proves nothing about the round.
+        "seats_pinned_at_open": bool(pinned),
         "seed_revealed_at_close": seed.hex(),
         # Each check states what was compared, not just a boolean nobody can trace back.
         "sha256_of_decoded_seed_equals_commitment": draw.verify(seed.hex(), row["seed_commit"]),
@@ -496,6 +507,13 @@ async def explain_round(session, round_id: int) -> Answer:
         "pair_derived_from_seed": list(derived) if derived else None,
         "pair_stored_on_the_round": list(stored) if stored[0] is not None else None,
         "stored_pair_equals_derived_pair": (derived == stored) if derived else None,
+        "verdict": (
+            "the stored result is what the committed seed produces"
+            if derived == stored
+            else "seats were not pinned when this round ran, so the decider cannot be recomputed"
+            if not pinned
+            else "MISMATCH — the stored result is not what the committed seed produces"
+        ),
         "winning_place_id": row["winning_place_id"],
     }]
     for member_id in ids:

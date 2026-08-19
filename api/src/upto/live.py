@@ -55,7 +55,7 @@ async def _snapshot(session, circle_id: int, viewer=None, operator: bool = False
         await session.execute(
             text(
                 "select id, target_hour, target_hour_typed, opened_at, seed_commit, "
-                "outcome_seed from round where circle_id = :c and status = 'open'"
+                "outcome_seed, seat_ids from round where circle_id = :c and status = 'open'"
             ),
             {"c": circle_id},
         )
@@ -79,7 +79,7 @@ async def _snapshot(session, circle_id: int, viewer=None, operator: bool = False
         # verify. The seats come from `api_common.seats_for`, the same function the reveal uses, so
         # the stream and the response cannot drift.
         seed = bytes(open_row.outcome_seed) if open_row.outcome_seed is not None else None
-        seats = await seats_for(session, open_row.id, circle_id, seed)
+        seats = await seats_for(session, open_row.id, open_row.seat_ids, seed, closed=False)
         open_round = {
             "round_id": open_row.id,
             "target_hour": open_row.target_hour.isoformat(),
