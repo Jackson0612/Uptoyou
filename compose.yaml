@@ -439,6 +439,13 @@ services:
     #     re-parsed on a timer. A throttled container does not log, does not fail a healthcheck, and
     #     does not appear in `docker stats` as anything but slower. The mean that justified 1.0 was
     #     0.355 cores, and it was true.
+    #
+    #     **After the raise, measured again: 25 throttled periods of 745 — 3.4%.** Better by four
+    #     times and **not zero**, which is worth stating rather than rounding away: 2.0 is already
+    #     half of this 4-core box for one service that only parses files, so the remaining clipping
+    #     at the very peaks is accepted rather than unnoticed. If it ever matters, the instrument is
+    #     `docker compose exec airflow-dag-processor cat /sys/fs/cgroup/cpu.stat` and the number to
+    #     watch is `nr_throttled` against `nr_periods`.
     mem_limit: 768m
     cpus: 2.0
     networks:
