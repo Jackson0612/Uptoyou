@@ -321,6 +321,61 @@ class TheVendoredFaces(unittest.TestCase):
                              "the sans source face is wght 100–900; declaring anything else claims "
                              "a weight it has not got")
 
+    def test_the_serif_declares_the_range_its_source_face_actually_has(self):
+        """`200 900`, and specifically **not** the sans's `100 900`.
+
+        The two ranges differ and the manifest now spells each one out per face, because the tempting
+        mistake is to copy the working declaration: `100 900` on the serif claims a weight the file
+        has not got, and the masthead's `font-weight: 900` then resolves against a clamp rather than
+        against the axis.
+        """
+        if not built():
+            self.skipTest("dist absent")
+        serif = [f for f in self.faces() if "serif" in f.get("font-family", "").lower()]
+        if not serif:
+            self.skipTest("no serif face ships yet")
+        for face in serif:
+            self.assertEqual(face.get("font-weight"), "200 900",
+                             "the serif source face is wght 200–900, not the sans's 100–900; "
+                             "declaring the sans's range claims a weight it has not got")
+
+    def test_every_family_the_stylesheets_ask_for_first_is_actually_declared(self):
+        """**The failure this exists for: a stack whose first family nothing declares.**
+
+        `home.css` set `font-family: "UpTo Serif", "Noto Serif TC", serif` on the masthead while no
+        `@font-face` named `UpTo Serif`, so the largest text on the product silently rendered in
+        whatever serif the machine happened to have — and on a machine with none, in whatever the
+        generic keyword resolved to. §6 forbids an external asset, so there is no webfont behind the
+        fallback to be right instead; a screenshot on this machine looks fine and the same page on a
+        phone does not.
+
+        **The first family in a stack, and only the first.** Everything after it is a fallback by
+        definition and is *supposed* to be absent — demanding those be declared would forbid writing
+        a fallback at all. So the rule is exactly: what the page asks for first, the page must ship.
+        """
+        if not built():
+            self.skipTest("dist absent")
+        declared = {f.get("font-family", "").strip("\"'") for f in self.faces()}
+        asked = {}
+        for path in dist_files(".css"):
+            text = CSS_COMMENT.sub(" ", read(path))
+            for stack in re.findall(r"font-family\s*:\s*([^;}]+)", text):
+                first = stack.split(",")[0].strip().strip("\"'")
+                # A generic keyword or a bare custom property is not a family this repo can ship.
+                if not first or first.startswith("var(") or first in (
+                        "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui",
+                        "inherit", "initial", "unset", "revert"):
+                    continue
+                asked.setdefault(first, os.path.relpath(path, WEB))
+        missing = {name: where for name, where in asked.items() if name not in declared}
+        self.assertEqual(
+            missing, {},
+            "asked for first and never declared: {} — declared faces are {}.\n"
+            "  A family nothing declares falls back in silence. Build it with "
+            "tools/subset_fonts.py --build, place it in public/fonts/, and rebuild the proxy (H28)."
+            .format(missing, sorted(declared) or "none"),
+        )
+
     def test_every_face_points_at_a_file_that_actually_shipped(self):
         """A face whose `src` 404s degrades silently to a fallback — no error, wrong glyphs."""
         if not built():
