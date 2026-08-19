@@ -41,8 +41,10 @@ import os
 import subprocess
 from datetime import datetime, timedelta
 
+from airflow.exceptions import AirflowSkipException
 from airflow.hooks.base import BaseHook
-from airflow.sdk import dag, task
+from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.sdk import Asset, dag, task
 
 POSTGRES_CONNECTION = "upto_postgres"
 
@@ -52,6 +54,11 @@ POSTGRES_CONNECTION = "upto_postgres"
 SOURCE = "fda-97"
 
 DISAGREEMENT = 2
+
+# **A8's asset — `from airflow.sdk import Asset`, and the path matters.** This is Airflow 3.0.2;
+# `airflow.Asset` does not exist and `airflow.Dataset` does but is deprecated. Checked rather than
+# assumed, because getting it wrong is an import error at parse time and a DAG that never appears.
+PLACE_PUBLICATION = Asset("place_publication")
 
 
 def _database_url() -> str:
@@ -127,7 +134,53 @@ def upto_place_reference_ingest():
             )
         return finished.stdout.strip()
 
-    reference_places()
+    @task(task_id="publication_stored", outlets=[PLACE_PUBLICATION])
+    def publication_stored(verdict: str) -> str:
+        """Emit the asset event **only** when the run actually stored a publication (A8 (a)).
+
+        **Why this is its own task rather than an outlet on the ingest.** Airflow does not let a task
+        choose to emit: it registers outlet events when the task **succeeds** — verified in
+        `api_fastapi/execution_api/routes/task_instances.py`, where `register_asset_changes_in_db` is
+        called only under `TISuccessStatePayload`. So the only way to suppress an event is for the task
+        to skip. Putting the outlet on the ingest would therefore mean **skipping the ingest** on a
+        `no_change` day, and that would be a lie: the ingest fetched 17 MB, hashed it, and correctly
+        found nothing new. That is a success, and the UI would say otherwise — on the page the evaluator
+        reads this requirement from. So the ingest stays green and this small task skips instead.
+        Owner-ruled reading, 2026-08-19.
+
+        **The outcome comes from the ledger, never from the verdict text.** `verdict` is passed in only
+        so this task depends on the ingest and appears downstream of it; the decision is a `select` on
+        `ingest_run.outcome`. Reading prose for a decision is H36's shape — a guard that reads text
+        fires on the sentence that states the rule — and "stored" appears in more sentences than the
+        one that means it.
+
+        **`max_active_runs=1` is what makes «the latest row for this source» unambiguous**, and it is
+        set on this DAG. Without it two concurrent runs could each read the other's row.
+        """
+        rows = PostgresHook(postgres_conn_id=POSTGRES_CONNECTION).get_records(
+            "select outcome, rows_written from ingest_run "
+            " where source = %s order by started_at desc limit 1",
+            parameters=(SOURCE,),
+        )
+        if not rows:
+            raise RuntimeError(
+                "{}: the ingest returned success and wrote no ledger row — nothing to emit an asset "
+                "for, and a missing row is a bug rather than a quiet day".format(SOURCE)
+            )
+        outcome, rows_written = rows[0]
+        if outcome != "stored":
+            # Skipped, not failed: nothing was stored and that is the ordinary case, twenty-nine days
+            # in thirty. A skipped task emits no asset event, which is precisely the requirement.
+            raise AirflowSkipException(
+                "{}: outcome is `{}`, so no publication landed and no asset event is emitted. The "
+                "ingest above succeeded — this is the designed quiet day, not a failure.".format(
+                    SOURCE, outcome)
+            )
+        print("{}: stored, {} rows newly accepted — emitting {}".format(
+            SOURCE, rows_written, PLACE_PUBLICATION.name))
+        return verdict
+
+    publication_stored(reference_places())
 
 
 upto_place_reference_ingest()
