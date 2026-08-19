@@ -17,7 +17,7 @@
       "dropped_means": "the source face has no glyph for these characters, so no subset of it can carry them — not characters the subsetter lost",
       "file": "charset-sub.txt",
       "requested": 3812,
-      "sha256": "5019d69fea0ec89cf812bb18d74b34fd78630f7d386bc1ff5814d0ff98798676",
+      "sha256": "1f44233e697b6c7ee02ee9deb8da660184d781379ea53e790954c5feebf04870",
       "source": "NotoSansTC.ttf"
     }
   },
@@ -43,16 +43,16 @@
       "wght": "variable 200-900"
     },
     "noto-sub-variable.woff2": {
-      "bytes": 1136536,
+      "bytes": 1136940,
       "characters_in_the_built_face": 3728,
       "charset": "sub",
       "font_weight_declaration": "font-weight: 100 900",
-      "sha256": "7065ef3b2f7489e06938e79c4b78d59f7c38b2a1a7be9a4eb2926b1b9613cf66",
+      "sha256": "a82261bbc70ee34a844447cad115f813b31044cc9e9c601ff514e969889e7e59",
       "source": "NotoSansTC.ttf",
       "wght": "variable 100-900"
     }
   },
-  "generated_at": "2026-08-19T06:03:48+00:00",
+  "generated_at": "2026-08-19T11:27:58+00:00",
   "sources": {
     "NotoSansTC.ttf": {
       "path": "/home/jackson/.fonts/NotoSansTC.ttf",
