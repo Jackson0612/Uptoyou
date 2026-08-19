@@ -33,6 +33,31 @@ exclusions carry that, and both are easy to get wrong:
 **The count is printed, and that is part of the ruling rather than a nicety.** A link that drops one
 call in fifty now succeeds silently and reads as a slow night; `retries_spent()` is what a backfill
 prints so it shows up as a number instead.
+
+---
+
+**Measured 2026-08-19: this policy does not survive a cold model load, and that is a calibration
+question for the owner rather than a bug.** The 信義 pass died in its **first** batch —
+`EmbedUnavailable: snowflake-arctic-embed2 … Remote end closed connection without response`, zero
+rows written — after another workload on the GPU box (SDXL, by agreement) had evicted the models.
+The retry behaved exactly as ruled: attempt 1, wait 0.5 s, attempt 2, wait 2.0 s, attempt 3, raise.
+**Total window 2.5 s.** Hand-measured immediately afterwards, on the same box, cold:
+
+    embed  (snowflake-arctic-embed2)  10.48 s
+    generate (gemma2:2b)             20.98 s
+
+So the policy is short by a factor of four on the embedder and eight on the generator. **It is not
+mis-ruled** — it was ruled for 松山's mid-run blip, which is a sub-second event, and stretching the
+steady-state window to thirty seconds would make a genuinely dead tunnel take thirty seconds *per
+call* to report across every one of ~150 batches, turning a fast clear exit 3 into a slow one. That
+is the trade the ruling already rejected, and widening the backoff re-opens it.
+
+**The shape that does not re-open it** — recommended, not built, because the count and the window are
+owner-ruled: warm both models once **before** the row loop, with a generous one-off timeout, and let
+the steady-state policy stand untouched. A known ~30 s startup cost becomes a startup cost instead of
+a fatal, and nothing about a call in flight changes. Cost: one extra call per run, and a new place the
+CLI can fail. Today's pass was launched against models warmed by hand, so nothing is blocked on the
+answer.
 """
 
 from __future__ import annotations
