@@ -194,3 +194,25 @@
 .rowState.asking { font-weight: 400; color: var(--color-muted); }
 
 .keepInline { margin-top: 0; flex: 0 0 auto; }
+
+
+/* ── A2-G8 · what each stance zeroes, and the combined warning ────────────────
+   **The per-stance figure is a STATEMENT and is styled as one** — note-sized, muted, sitting with
+   the row it belongs to. It is not a warning and must not look like one: nine of the ten categories
+   are small, and dressing a 1.2% figure as a caution would discourage exactly the stances the owner
+   ruled must never be discouraged. */
+.prefs .rowStat {
+  margin-left: auto; font-size: var(--text-note); color: var(--color-muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* The row already puts `avoid` to the right; when both are present the statement follows it. */
+.prefs .rowState + .rowStat { margin-left: 14px; }
+
+/* **The only cautionary treatment on this screen, and it is reserved for the combined case.** A
+   rule in the accent rather than a filled panel: a warning that shouts about a legitimate set of
+   choices is one a person learns to dismiss, and this one fires at most once in a member's life. */
+.prefs .prefsWarn {
+  margin: 14px 0 0; padding: 12px 0 12px 14px;
+  border-left: 3px solid var(--color-hot-ink);
+  font-size: var(--text-body);
+}

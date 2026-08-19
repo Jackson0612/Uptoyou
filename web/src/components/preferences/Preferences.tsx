@@ -126,6 +126,29 @@ export default function Preferences() {
 
   const budget = inForce?.budget ?? null
   const avoidedCategories = new Set((inForce?.avoid_categories ?? []).map((a) => a.value))
+  /**
+   * **A2-G8-always: every stance states what it zeroes, count and share, whatever the size.**
+   *
+   * The owner ruled two mechanisms where the evaluator proposed one, and this is the half that
+   * does the work. A threshold alone would have left **nine of the ten categories silent forever**
+   * — only 其他 clears 10% — so the asymmetry a person is actually creating stayed invisible
+   * everywhere it was small.
+   *
+   * **And the zeroes are the most important thing on this screen.** An ingredient avoidance reports
+   * `0 家` today, because nothing in the data carries ingredient information (D103). A member who
+   * has just tapped 花生 and is shown nothing would reasonably conclude they are now protected from
+   * it. **They are not, and silence is what would tell them they were.**
+   */
+  const stat = (list: { value: string; zeroed: number; share: number }[] | undefined) =>
+    new Map((list ?? []).map((a) => [a.value, a]))
+  const catStat = stat(inForce?.avoid_categories)
+  const ingStat = stat(inForce?.avoid_ingredients)
+  /** The statement itself. **抽不到, never 拿掉／少掉／移除** (`A2-G8-verb`): the place keeps its
+   *  seat, stays proposable and still appears in the round and in the table at `0/36`. What changed
+   *  is that no roll reaches it. `D37` stands beside this — nothing is hidden from the typeahead on
+   *  a preference. */
+  const zeroLine = (a?: { zeroed: number; share: number }) =>
+    a ? `${a.zeroed.toLocaleString('en-US')} 家抽不到（${pct(a.share)}）` : null
   const keptCategories = new Set(
     (inForce?.avoid_categories ?? []).filter((a) => a.persist).map((a) => a.value),
   )
@@ -233,6 +256,11 @@ export default function Preferences() {
                   <span className="mark" aria-hidden="true" />
                   <span className="rowName">{c}</span>
                   {on && <span className="rowState">避開</span>}
+                  {on && (
+                    <span className="rowStat" data-part="pref-stance-stat">
+                      {zeroLine(catStat.get(c))}
+                    </span>
+                  )}
                 </button>
                 {on && (
                   <button
@@ -277,16 +305,48 @@ export default function Preferences() {
             not a second definition. Rendering the payload's English string here would put an
             untranslated sentence on a Chinese screen; restating it as a different set would be
             the unstated denominator the gate refuses. */}
-        {/* **「擲不到」 and never 「排掉」** — backend's phrase, taken because it is right rather
+        {/* **「抽不到」 and never 「排掉」** — backend's phrase, taken because it is right rather
             than because it was offered. 「排掉」 says the places are excluded, and they are not:
             an avoided place keeps its seat in the pool and can still be proposed. What changes is
             that it holds no cells on the dice table, so no roll reaches it. **The old wording
             carried exactly the error the old field name did**, which is why fixing one without the
             other would have left the screen still saying the wrong thing in the reader's language
-            while the payload said the right thing in ours. */}
+            while the payload said the right thing in ours.
+
+            **擲不到 → 抽不到, corrected the same day.** I took backend's phrase before the verb was
+            gated, and A2-G8-verb then named 抽不到／不會中. Both are true and that was the problem:
+            **the per-stance statements said 抽不到 and this line said 擲不到, two vocabularies for
+            one object on one screen** — VB-2's exact shape, introduced by me, four lines apart. */}
+        {/* **A2-G8b — the combined warning, and it is the ONLY thing on this screen that reads as
+            a caution.** The owner's reasoning is why it is combined rather than per-stance: an
+            allergy exclusion must never be discouraged, so a single legitimate stance — even 其他
+            at 17.5% — must not trip anything. What deserves a word is someone who has quietly
+            narrowed themselves to half the city across many stances.
+
+            **`crossed` is read, never computed.** The server decides with `>`, so a member exactly
+            on half is not warned; a surface that computed it could compute it wrong, and this one
+            decides whether a person is told they have narrowed themselves.
+
+            **It cannot fire today and that is expected, not a bug.** `breadth.share` is capped by
+            categorised coverage — an uncategorised place can never be zeroed by a category
+            avoidance — and coverage is 42.62%, so 0.5 is unreachable until the classifier passes
+            half. **Its never-rendering is not evidence that it works**, and no fixture here fakes
+            coverage to make it appear.
+
+            **A2-G8c: this is private and it stays on this screen.** How much someone has excluded
+            is a fact about their taste, and in a circle of five that is one guess from a name
+            (§3.0). It is never written, never streamed, and appears in no shared payload. */}
+        {inForce?.breadth.crossed && (
+          <p className="prefsWarn" data-part="pref-breadth-warning">
+            你目前的選擇，讓這個圈子提得出來的
+            {' '}{inForce.breadth.proposable.toLocaleString('en-US')} 家裡，
+            超過一半抽不到。
+          </p>
+        )}
+
         {inForce && inForce.breadth.zeroed > 0 && (
           <p className="prefsNote" data-part="pref-breadth">
-            這些選擇目前讓 {inForce.breadth.zeroed.toLocaleString('en-US')} 家擲不到，
+            這些選擇目前讓 {inForce.breadth.zeroed.toLocaleString('en-US')} 家抽不到，
             範圍是這個圈子提得出來的 {inForce.breadth.proposable.toLocaleString('en-US')} 家
             （{pct(inForce.breadth.share)}）。
           </p>
@@ -333,6 +393,16 @@ export default function Preferences() {
                   <span className="rowName">不吃 {g}</span>
                   {state === 'on' && <span className="rowState">避開</span>}
                   {state === 'asking' && <span className="rowState asking">點一下沿用</span>}
+                  {/* **The `0 家` this reports today is the point, not an oversight.** No place in
+                      the data carries ingredient information (D103), so an ingredient avoidance
+                      currently zeroes nothing — and a member who taps 不吃花生 and is shown nothing
+                      would reasonably believe otherwise. The number moves on its own the day the
+                      data does; there is no code here that has to remember. */}
+                  {state !== 'off' && (
+                    <span className="rowStat" data-part="pref-stance-stat">
+                      {zeroLine(ingStat.get(g))}
+                    </span>
+                  )}
                 </button>
                 {state !== 'off' && (
                   <button

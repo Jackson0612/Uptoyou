@@ -41,7 +41,24 @@ export const INGREDIENTS = [
 export type Kind = 'budget' | 'avoid_category' | 'avoid_ingredient'
 export type Stance = 'avoid' | 'allow'
 
-export type Avoidance = { value: string; persist: boolean; valid_from: string }
+/**
+ * One stance the member holds. **`zeroed` and `share` are per-stance and always present** — every
+ * kind carries them, so the screen special-cases none: ingredients report `0` and `0.0` today
+ * because nothing carries ingredient data (D103), and the day that changes the number moves on its
+ * own with no code here to remember.
+ *
+ * **Never sum these for a total.** They happen to add up to `breadth.zeroed` today because D38's
+ * categories are disjoint — verified by backend, 14,658 = 14,658 — but `breadth` is the authority
+ * and this list is the breakdown. If a kind ever overlaps, adding them would overstate the truth at
+ * exactly the moment it mattered.
+ */
+export type Avoidance = {
+  value: string
+  persist: boolean
+  valid_from: string
+  zeroed: number
+  share: number
+}
 
 export type Coverage = {
   reference_rows: number
@@ -64,10 +81,13 @@ export type Preferences = {
     /** Stated by the API, never composed here. A share whose denominator the screen invents is
      *  the warning the evaluator refuses at the gate. */
     denominator: string
-    /** **`null` today, and that is a ruling rather than a gap.** D22 says "when that crosses the
-     *  line" and names no number, so the payload will not invent one — and neither may this
-     *  screen. While it is null nothing may render as *crossed*. */
+    /** **`0.5` since D22's amendment; `null` still means *no line exists*.** While it is null
+     *  nothing may render as crossed. */
     threshold: number | null
+    /** **Stated by the server with `>`, never computed here.** A member exactly on half is not
+     *  warned. Same reason as A6's `counts`: a surface that computes a boundary can compute it
+     *  wrong, and this one decides whether a person is told they have narrowed themselves. */
+    crossed?: boolean
   }
   category_coverage: Coverage
   ingredient_coverage: Coverage
