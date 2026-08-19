@@ -279,6 +279,64 @@ never "filled".**
 **Nothing scroll-triggered, no entrance animation on a block, nothing springy.** Disable shadcn's
 default enter/exit animations where they are not one of the three above.
 
+### Reference sources, and what each one is good for — recorded 2026-08-19
+
+**Owner-supplied:** 21st.dev (community templates + components), Magic UI, Aceternity UI,
+react-bits.dev, hover.dev, shadcn/ui examples, and **Dribbble** (search *food app hover*, *dice roll
+ui*, *restaurant picker*).
+
+**They are not interchangeable and the difference is load-bearing.**
+
+- **The moodboard (`idea & img/design-proposals/moodboard/`) is nine SHIPPED commercial products** —
+  the owner's stated bar, 「商業等級的範例」. **It is the fidelity reference and nothing else replaces
+  it**: every screen in it survives real data, real names, real edge cases.
+- **The component libraries are recipes.** Useful for *how* an effect is built. Each one costs a
+  dependency or a second visual language, so a pick from them goes to orchestrator first.
+- **Dribbble is concept art, and that is its use and its limit.** Nothing there has to survive
+  36,499 rows or a 62-character place name; a shot is composed around content chosen to flatter it.
+  **Good for motion ideas and composition. Never a fidelity bar** — measuring this product against
+  an unbuilt concept would repeat the D87 mistake in the opposite direction, where a check convicted
+  a family rather than a defect.
+
+**Every pick is recorded in this file with its source.** Where an effect is derived from this
+surface's own language rather than taken from a source, that is recorded too — it is the cheaper
+answer and usually the better one.
+
+### Hover — the fifth rule, ruled 2026-08-19 by the evaluator under `D101`'s delegation
+
+*Owner: 「找一些網頁讓evaluator可以參考，我不想做太多決定，像是當鼠標移動到首頁圖片時會有浮動效果。」
+Micro-interaction picks are the evaluator's and are recorded here with their reasoning rather than escalated.*
+
+**The `COLLAGE` tile lifts on hover, and the effect is derived from this surface's own shadow rather
+than imported.** Every tile already carries a `2px ink` border and a **hard offset shadow** — no blur.
+The idiomatic hover for a hard-shadow object is the one that reads as it leaving the page:
+
+- **`transform: translate(-3px, -3px)`** and the shadow's offset **grows by the same 3 px**, so the gap
+  between object and shadow widens. **Nothing scales and nothing rotates.**
+- **`120 ms`, matching the `BAR`'s existing state change.** Not a new number — this surface already has
+  a duration for *a control acknowledging you*, and inventing a second one is how a surface acquires
+  two speeds.
+- **The lift is on the CELL, not on the `<img>`.** The collage swaps every 10 s; an effect bound to the
+  image would drop mid-hover when the photograph changes under the cursor.
+- **`transform` and `box-shadow` only — no layout property.** `D91`'s held-box family: the tile moves
+  visually, the flow does not, so nothing reflows.
+- **`prefers-reduced-motion: reduce` keeps the end state and drops the transition** — §5 rule 3's
+  existing pattern. Hover still reads; it arrives instantly.
+
+**Explicitly rejected: scale.** A 2×2 *offset* grid puts neighbours close on the diagonal, so scaling
+pushes them into each other; it also softens a photograph already delivered at 640×360.
+
+**Explicitly rejected: importing an effect.** Magic UI, Aceternity, hover.dev and react-bits were the
+owner's suggested sources and each has a card-hover recipe, but **every one would add a dependency or
+a second visual language to replace four lines of CSS this surface already expresses.** The reference
+set is worth keeping for effects we cannot build — this is not one. **Anything that does add a
+dependency goes to orchestrator first.**
+
+**Gate:** `HV-1` the rest frame is unchanged with and without the cursor — hover must not move
+anything the fidelity gate measures · `HV-2` the cell's `getBoundingClientRect` is identical hovered
+and unhovered (0.00 px) · `HV-3` under `reduced_motion: reduce` hovered and unhovered still differ and
+the transition duration is 0.
+
 ### Ambient loops — the fourth rule, added 2026-08-18
 
 **An infinite animation is allowed only where the thing it animates is itself continuous.** Weather
@@ -379,6 +437,20 @@ is not a product screen** — where one is cited, only its colour energy and typ
 ---
 
 ## 9 · Writing a check against this surface
+
+**A box is not its content — measure the edge you actually mean (added 2026-08-19).** Any element
+carrying `padding-bottom` to reserve the fixed `BAR`'s height has two different bottoms, and they
+differ by exactly the reservation. D110's home line: **text bottom 790, padding-box bottom 975, a
+185 px gap.** Asking `boxBottom > scrollY + barTop` solved to *"needs 153 px of scroll"* on a page
+whose **entire scroll range is 75 px** — i.e. it reported the line as unreachable at every scroll
+position, a defect that does not exist. **The reservation is not the line; it is the empty space
+that exists so the line is not sat on. Measuring it as if it were the line reports the reservation
+as the failure it was added to prevent.**
+
+**Use the text's own `Range` rect, not the element box**, whenever a check asks whether something is
+*visible* rather than whether it is *placed*. This is a distinct failure from a probe pointed at an
+absent subject: **right subject, right edge-question, wrong edge of the subject.**
+
 
 **A probe that asserts a mechanism it did not read is not a check — it is a coincidence.** Four
 measurement errors were made against this page in one day, by two people, every one the same shape.
