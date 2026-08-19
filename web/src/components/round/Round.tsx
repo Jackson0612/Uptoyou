@@ -130,6 +130,25 @@ export default function Round() {
         <h2 className="roundH">這一輪的名單</h2>
         {pool.length === 0 ? (
           <p className="roundNote">還沒有人提。</p>
+        ) : pool.length === 1 ? (
+          // **The reason lives beside the list, not behind a press.** The API refuses a one-place
+          // roll with 「一家店不是決定，是通知。」 and that sentence teaches something; but a
+          // control that is pressable only to be refused teaches it by wasting a tap. So the bar
+          // disables below two and the arithmetic is stated here, where a person reading the list
+          // is already looking. States, never advises (D20) — it says what the round needs, not
+          // what anyone should do about it.
+          <>
+            <ul className="rows">
+              {pool.map((p) => (
+                <li key={p.place_id} className="row" data-part="pool-row">
+                  <span className="rowName">{p.name}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="roundNote" data-part="need-two">
+              一輪至少要兩家店。一家店不是決定，是通知。
+            </p>
+          </>
         ) : (
           <ul className="rows">
             {pool.map((p) => (
@@ -147,7 +166,7 @@ export default function Round() {
         <button
           type="button"
           data-part="roll"
-          disabled={roundId === null || pool.length === 0 || busy}
+          disabled={roundId === null || pool.length < 2 || busy}
           onClick={() => {
             if (!dev || roundId === null) return
             setBusy(true)
