@@ -61,7 +61,20 @@ export default function Evidence({
       {/* ALLOC36 — beside the table as evidence, never above it as decoration. Cells are ≥ 36 px
           square (§3's rescue floor): below that the colour blocks stop being countable and the
           figure reads as a texture rather than as thirty-six things. */}
-      {ev && <div className="alloc36" data-part="alloc36" aria-hidden="true">
+      {/* **Option A, owner-ruled 2026-08-19 (D105 at `d94b54f`): the grid is hidden once the pool
+          exceeds four, and the table is always kept.** `FACES` has four colours and the `CHIP` is
+          keyed to the cycle, so at five places two runs wear the same colour and a reader counting
+          by colour gets a number no table row contains — measured `[7,7,7,15]` against an
+          allocation of `[7,7,7,7,8]`. **A figure that cannot say which place holds a cell is not
+          weaker evidence, it is a false statement**, and the table carries the same allocation
+          correctly at any size. The hairline was built and measured first, per his ruling, and
+          failed: it separates *adjacent* runs, and adjacent seats never share a colour.
+
+          The cost, stated rather than hidden: on five devices — the product's canonical case — the
+          most striking operator figure is absent. Eight faces (option B) is parked, not rejected;
+          it is what restores the figure, because what broke is identity. */}
+      {ev && seats.length <= FACES.length && (
+      <div className="alloc36" data-part="alloc36" aria-hidden="true">
         {grid.map((c, i) => (
           <span
             key={i}
@@ -73,7 +86,8 @@ export default function Evidence({
             data-run-start={c.startsRun ? (c.col === 1 ? 'top' : 'left') : undefined}
           />
         ))}
-      </div>}
+      </div>
+      )}
 
       <table className="evTable" data-part="table">
         <thead>
