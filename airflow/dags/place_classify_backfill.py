@@ -13,10 +13,27 @@ taken for exclusive image windows of 25–40 minutes (announced before and after
 So a pass that starts while the card is busy must **wait**, not fail — `mode="reschedule"` frees the
 worker slot between pokes instead of holding one for up to twelve hours.
 
-**Strict, not best-effort** (gpu-imggen's ask, 2026-08-19): it passes only when **both** ruled models
-are listed. A pass that starts with the generator up and the embedder missing dies in its first batch
-having written nothing, which is worse than waiting — measured on 信義, where an evicted embedder met
-the ruled 2.5 s retry window against a 10.5 s cold load.
+**Strict, not best-effort** (gpu-imggen's ask, 2026-08-19): it passes only when the card will actually
+serve **both** ruled models. A pass that starts with the generator up and the embedder missing dies in
+its first batch having written nothing, which is worse than waiting — measured on 信義, where an evicted
+embedder met the ruled 2.5 s retry window against a 10.5 s cold load.
+
+**The poke asks by calling, and the first version asked by listing, which was wrong.** It read
+`/api/tags` and passed when both models appeared. **`/api/tags` reports models installed on disk, not
+models the card can serve.** Taking the card for an image window **evicts** models from VRAM; it does
+not uninstall them, so the tag list is identical throughout a window and the sensor passed straight
+through the condition it exists to detect. Caught by the evaluator reading this file rather than by
+spending a GPU window on it, and confirmed here: with the card idle and **nothing** resident,
+`/api/tags` returned three models and `/api/ps` returned zero.
+
+**`/api/ps` alone is the tempting swap and it is also wrong**, in the opposite direction: a model is
+resident only *after* a call, so a completely free, idle card lists nothing and a sensor watching `ps`
+would wait for ever — a failure that looks like patience, which is harder to notice than a crash.
+
+So the poke performs **one minimal generate**. It is the only question whose answer is what the
+classifier will actually experience, and it has a useful side effect: a poke that succeeds leaves the
+model **warm**, which is exactly the cold-load protection a pass needs (H43: the ruled 2.5 s retry
+window against an 11.7 s cold load).
 
 **One pass at a time, sequentially, and deliberately not a mapped task.** `upto.classify.run` takes
 one township, so a fan-out would be the obvious shape and the wrong one: parallel passes would each
@@ -70,6 +87,12 @@ MODEL_HOST = os.environ.get("UPTO_MODEL_HOST", "172.17.0.1:11434")
 
 POKE_SECONDS = 90
 TIMEOUT_HOURS = 12
+
+# **Longer than a cold load and shorter than a poke interval.** A cold load measured 11.7 s under load
+# on the GPU box, so a timeout below that would read a *free but cold* card as busy — the sensor would
+# refuse the card at exactly the moment it became available. 30 s leaves margin without letting a
+# blocked call straddle two pokes.
+POKE_TIMEOUT_SECONDS = 30
 
 
 def _database_url() -> str:
@@ -126,44 +149,84 @@ def upto_place_classify_backfill():
         retries=0,
     )
     def model_service_up() -> bool:
-        """True only when the GPU box lists **both** ruled models. Strict, by ask.
+        """True only when the card actually **serves** both ruled models. Strict, by ask.
 
-        **Any failure is *not ready*, never *failed*.** A refused connection, a timeout, a half-written
-        body — all of them mean the same thing operationally (the card is not available yet) and all of
-        them are ordinary during an image window. Failing here would turn a 25-minute window into a
-        red DAG somebody has to clear by hand.
+        **It asks by calling, not by listing.** `/api/tags` reports what is installed on disk and
+        answers the same during an image window as outside one — taking the card evicts models from
+        VRAM without uninstalling them. `/api/ps` reports what is resident, and a model becomes
+        resident only *after* a call, so a completely free idle card lists nothing and a sensor
+        watching it would wait for ever. Neither question is the one that matters. **The question that
+        matters is «will this card answer me», and the only way to ask it is to ask.**
 
-        **The exception is a malformed *success*.** If the service answers 200 with something that is
-        not the shape we expect, that is not a busy card and it is reported as not-ready with the body
-        named, because a silently-wrong tag list is how a pass starts against the wrong model.
+        One minimal generate against the model and one one-token embed against the embedder. If both
+        answer, the pass can start — **and the models are now warm**, which is the cold-load protection
+        the ruled 2.5 s retry window cannot provide for itself (H43).
+
+        **Any failure is *not ready*, never *failed*.** Refused connection, timeout, VRAM error, a body
+        that will not parse — operationally all of them mean *not yet*, and all are ordinary during an
+        image window. Failing here would turn a 25-minute window into a red DAG somebody clears by hand.
+
+        **One case is knowingly unmeasured, and it is recorded rather than assumed away: a generate
+        that succeeds *slowly* under VRAM pressure.** Nobody has measured what Ollama does while SDXL
+        holds ~7 GB of an 8 GB card — error, block, or slow success. Error and block both land in the
+        `except` below and read correctly as *not ready*. **Slow success would pass this sensor and let
+        a pass start into a contended card**, which costs throughput (信義's opening ran 2.19× slow,
+        H40) and costs no correctness — the pass still commits per 25 and still finishes. That is the
+        tolerable one of the three, which is why this ships before the measurement rather than after.
+        The evaluator has the measurement queued for a real window.
         """
-        request = urllib.request.Request("http://{}/api/tags".format(MODEL_HOST))
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                body = json.loads(response.read())
-        except (urllib.error.URLError, OSError, TimeoutError) as unreachable:
-            print("model service not reachable at {} yet: {}".format(MODEL_HOST, unreachable))
-            return False
-        except ValueError as unparseable:
-            print("model service answered with something that is not JSON: {}".format(unparseable))
-            return False
+        def answers(path: str, payload: dict, what: str) -> bool:
+            request = urllib.request.Request(
+                "http://{}{}".format(MODEL_HOST, path),
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=POKE_TIMEOUT_SECONDS) as response:
+                    body = json.loads(response.read())
+            except urllib.error.HTTPError as refused:
+                # **The service answered and said no.** Caught before `URLError` (its parent) so the
+                # two are distinguishable in the log: a 500 from a card that cannot fit the model is
+                # *not ready*, and it is a different fact from nobody being there at all.
+                print("{} not ready — the service answered {}: {}".format(
+                    what, refused.code, refused))
+                return False
+            except (urllib.error.URLError, OSError, TimeoutError) as unavailable:
+                # **Nobody is there, or nobody answered in time.** gpu-imggen's point: *unreachable*
+                # is a third state and should not read the same as *busy*. **The action is the same
+                # — wait — and that is deliberate**: the relay restarting, the GPU box rebooting and
+                # an image window are all things that end on their own, and failing here would turn
+                # any of them into a red DAG somebody clears by hand. So the *record* distinguishes
+                # them and the *behaviour* does not, which is the honest split rather than a guess
+                # about which absences deserve a failure.
+                print("{} not reachable at {} (a different fact from busy): {}".format(
+                    what, MODEL_HOST, unavailable))
+                return False
+            except ValueError as unparseable:
+                print("{} answered with something that is not JSON: {}".format(what, unparseable))
+                return False
+            if not isinstance(body, dict) or body.get("error"):
+                print("{} answered with an error: {}".format(what, str(body)[:300]))
+                return False
+            print("{} answered".format(what))
+            return True
 
-        listed = {model.get("name", "") for model in body.get("models", [])}
-        if not listed:
-            print("model service answered and listed no models at all: {}".format(body)[:400])
-            return False
-        # `startswith`, because Ollama reports `gemma2:2b` and `snowflake-arctic-embed2:latest` — the
-        # tag suffix is the service's business and pinning it here would make a `:latest` rename look
-        # like an absent model.
-        missing = [
-            wanted for wanted in (MODEL, EMBEDDER)
-            if not any(name.startswith(wanted) for name in listed)
-        ]
-        if missing:
-            print("waiting: {} not listed. Present: {}".format(", ".join(missing), sorted(listed)))
-            return False
-        print("both ruled models listed at {}: {}".format(MODEL_HOST, sorted(listed)))
-        return True
+        # `num_predict: 1` and `keep_alive` left at the service default: the point is to make the card
+        # load and answer, not to hold it. One token is enough to prove both.
+        generator = answers(
+            "/api/generate",
+            {"model": MODEL, "prompt": "1", "stream": False, "options": {"num_predict": 1}},
+            "generator {}".format(MODEL),
+        )
+        embedder = answers(
+            "/api/embed",
+            {"model": EMBEDDER, "input": "1"},
+            "embedder {}".format(EMBEDDER),
+        )
+        if generator and embedder:
+            print("both ruled models served by {} — and now warm".format(MODEL_HOST))
+            return True
+        return False
 
     @task(task_id="classify_new_publication")
     def classify_new_publication() -> str:
