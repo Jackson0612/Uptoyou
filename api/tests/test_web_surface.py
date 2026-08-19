@@ -337,6 +337,114 @@ class NothingIsFetchedFromAnotherHost(unittest.TestCase):
         )
 
 
+class TheGlobalClassNamespace(unittest.TestCase):
+    """**There are no CSS modules in this build, so every class name is global.**
+
+    *Added 2026-08-19 at the frontend session's request, after it lost time to the failure below.*
+
+    The reveal's die rendered as a black blob with correct pips floating on top. The CSS was right —
+    the same markup in an isolated file rendered a clean cube. `home.css` already defined a global
+    `.cell` for the collage (ink ground, hard offset shadow, per-child aspect ratios, an nth-child
+    margin) and the die's nine cells inherited all of it. **The second screen to want a generic name
+    silently gets the first screen's styling**, and the diff that causes it looks correct in both
+    files.
+
+    Their words on why this is a check rather than a habit: *"I would rather it be a check than a
+    thing I remember."*
+
+    **What is compared: the class names a stylesheet can match from the document root.** For each
+    selector, only the **first** compound counts — `.reveal .cell` claims `reveal` and not `cell`,
+    because `cell` there is scoped and cannot reach another screen's markup. That is exactly the fix
+    the frontend applied, so the rule rewards it rather than merely describing the bug. A class
+    redefined in the *same* file is normal (responsive overrides) and is not a collision; two
+    different files claiming one root-reachable name is.
+    """
+
+    RULE = re.compile(r"([^{}]+)\{", re.S)
+    CLASS = re.compile(r"\.(-?[A-Za-z_][\w-]*)")
+    COMBINATOR = re.compile(r"\s*[>+~]\s*|\s+")
+
+    def stylesheets(self) -> list:
+        found = []
+        for root, dirs, names in os.walk(SRC):
+            dirs[:] = [d for d in dirs if d not in ("node_modules", "dist")]
+            found += [os.path.join(root, n) for n in names if n.endswith(".css")]
+        return sorted(found)
+
+    def root_classes(self, text: str) -> set:
+        """Class names this stylesheet can match without an ancestor of its own."""
+        found = set()
+        for selector_list in self.RULE.findall(CSS_COMMENT.sub(" ", text)):
+            selectors = selector_list.strip()
+            # An at-rule prelude (`@media (max-width: 899.98px)`) is not a selector; the rules nested
+            # inside it are matched by this same loop, so nothing is skipped by ignoring it.
+            if not selectors or selectors.startswith("@"):
+                continue
+            for selector in selectors.split(","):
+                selector = selector.strip()
+                if selector:
+                    found |= set(self.CLASS.findall(self.COMBINATOR.split(selector)[0]))
+        return found
+
+    def claims(self) -> dict:
+        held = {}
+        for path in self.stylesheets():
+            for name in self.root_classes(read(path)):
+                held.setdefault(name, set()).add(os.path.relpath(path, WEB))
+        return held
+
+    def test_no_two_stylesheets_claim_the_same_root_class(self):
+        collisions = {name: sorted(where) for name, where in self.claims().items()
+                      if len(where) > 1}
+        self.assertEqual(
+            collisions, {},
+            "the same root-reachable class is defined in more than one stylesheet, and there are no "
+            "CSS modules here — whichever loads later wins, on every screen: {}\n"
+            "  Scope one of them under its screen's own class (`.reveal .cell`, not `.cell`), which "
+            "takes it out of the global namespace and out of this check.".format(collisions),
+        )
+
+    def test_the_check_catches_the_collision_it_was_written_for(self):
+        """`.cell` in two stylesheets — the actual defect, since the real tree is clean today.
+
+        H37's rule: this check's subject is *absent* on a healthy tree, so passing proves nothing
+        about the check. Driven against fixture text instead, and the fixture is the real bug.
+        """
+        collage = ".cell { background: var(--color-ink); box-shadow: 6px 6px 0 #000; }"
+        die = ".cell { background: #fff; border-radius: 6px; }"
+        held = {}
+        for label, text in (("home.css", collage), ("reveal.css", die)):
+            for name in self.root_classes(text):
+                held.setdefault(name, set()).add(label)
+        self.assertEqual({n: sorted(w) for n, w in held.items() if len(w) > 1},
+                         {"cell": ["home.css", "reveal.css"]})
+
+    def test_scoping_takes_a_class_out_of_the_namespace(self):
+        """And the fix must actually clear the check, or the rule punishes the remedy."""
+        collage = ".cell { background: #000; }"
+        die = ".reveal .cell { background: #fff; } .reveal .cell:nth-child(2) { margin: 0; }"
+        self.assertEqual(self.root_classes(collage), {"cell"})
+        self.assertEqual(self.root_classes(die), {"reveal"})
+
+    def test_an_ancestor_only_selector_does_not_claim_its_descendant(self):
+        """`.cell img` claims `cell` — it can still reach another screen's cells."""
+        self.assertEqual(self.root_classes(".cell img { inset: 0; }"), {"cell"})
+
+    def test_it_says_how_exposed_each_stylesheet_is(self):
+        """Unscoped count per file, printed rather than asserted.
+
+        A screen stylesheet with twenty bare class names has not collided *yet*; requiring every
+        screen to scope under one root is a stronger rule and a design decision that belongs to the
+        session that owns `app/web/`, not to this file. So the exposure is reported and the collision
+        is enforced.
+        """
+        for path in self.stylesheets():
+            count = len(self.root_classes(read(path)))
+            if count > 1:
+                print("\nweb surface: {} claims {} class names in the global namespace"
+                      .format(os.path.relpath(path, WEB), count), file=sys.stderr)
+
+
 class TheVendoredFaces(unittest.TestCase):
     """Every `@font-face` the build emits, and the two things each must get right."""
 
