@@ -163,6 +163,67 @@ services:
     # against pg_database), so the alpine→debian move leaves the existing volume
     # byte-compatible and nothing needs reindexing.
     image: pgvector/pgvector:pg17
+    # **A11 ⑥ — five planner and memory settings, owner-ruled 2026-08-20, as `command` flags.**
+    #
+    # **Flags rather than a `postgresql.conf`, and that is about the public repository.** A conf file
+    # needs a bind mount, and a mount is a path that does not travel into the extract
+    # `tools/publish_app.sh` produces — so the settings would silently not ship. These do, and they
+    # survive `--force-recreate`. The image's CMD is `["postgres"]` under `docker-entrypoint.sh`, so
+    # this REPLACES the CMD and has to name `postgres` itself; appending flags alone drops the binary.
+    #
+    # **`effective_cache_size=576MB` is a CORRECTION, not a tune.** PostgreSQL's default is 4 GB and
+    # this container's ceiling is 768m, so the planner has been told there is roughly five times more
+    # cache than can ever exist — which biases it toward index scans it cannot keep cached. 576MB is
+    # three quarters of the real ceiling and the first time the number has been true. First ruled at
+    # 384MB against a 512m limit that had already been raised; re-ruled the same day once the live
+    # ceiling was read rather than remembered.
+    #
+    # **`work_mem=16MB` is the one with a cost: it is per sort or hash node PER CONNECTION**, so
+    # 4 MB → 16 MB multiplies by concurrency, not by one. **Measured with `memory.events` (`max`,
+    # `oom_kill`) and `RestartCount`, never with `memory.peak`** — under a `mem_limit`, peak converges
+    # on the limit and reads 768 whatever the demand is, so it cannot answer the question it appears
+    # to answer.
+    #
+    # **The ruling's condition, answered 2026-08-20 over a window containing a full 1,711,583-row tax
+    # parse (14.4 s), on a cgroup freshly zeroed by this restart: `max 0` · `oom_kill 0` ·
+    # `RestartCount 0` · peak 178.8 MiB · current 170.2 MiB. 768m covers it with large room.**
+    #
+    # **And that reading retires the alarming one.** Before this restart db's `memory.peak` read
+    # **768.0 MiB against its own 768 MiB limit** with `max 45`, which looks like a database at its
+    # ceiling. A fresh container doing the single heaviest thing this pipeline asks of it peaks at
+    # **179 MiB** — so those 45 events and that 768 were hours of accumulated reclaimable page cache
+    # pressing the cap, exactly as the cap is for, and not demand. The number that looked like a
+    # warning was the ceiling describing itself.
+    #
+    # **`log_min_duration_statement=500ms` writes to the log**, which A11 ③ caps at 10m × 3 per
+    # service; a slow-query line is a few hundred bytes and the cap holds.
+    #
+    # **The spill measurement, and it does NOT show what the change was hoped to show.** Baseline read
+    # 05:38Z before any of this landed and deliberately not reset, because resetting discards the only
+    # history there is: `pg_stat_database` for `upto` read **23 temp_files / 79 MB** lifetime.
+    # **After the full parse it reads 23 / 79 MB — identical.** So that workload spilled nothing
+    # either way, and `work_mem=16MB` is **unmeasured for the tax parse rather than shown to help it**.
+    # The 23 lifetime spills came from something else — the pgvector neighbour queries and the
+    # integration tests that build their own databases are the candidates, and neither ran in this
+    # window. Saying "spills unchanged, therefore fine" would be the mistake; the honest reading is
+    # that the before/after was taken over a workload that does not exercise the setting.
+    #
+    # **`log_min_duration_statement` was proven working rather than inferred from silence.** The parse
+    # logged nothing, which alone cannot distinguish *nothing was slow* from *logging is broken*; a
+    # deliberate `select pg_sleep(0.7)` logged `duration: 702.780 ms`. So the parse's silence means no
+    # statement in it exceeded 500 ms.
+    command:
+      - postgres
+      - -c
+      - effective_cache_size=576MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - work_mem=16MB
+      - -c
+      - log_min_duration_statement=500ms
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
