@@ -295,6 +295,61 @@
   box-shadow: none;
 }
 
+/* ═══ SINK on an INK ground — the depth vocabulary ⑤, evaluator-ruled 2026-08-20 (`F-1`) ═══════
+   `.act` above is the recipe on a HOT ground: an ink shadow reads because it is not the ground.
+   §4 `PRIMARY` is the same command on an INK ground, and there the same declaration draws nothing
+   — measured on the served `/device`, resting-with-shadow against fully-pressed: 1,170 of 10,184
+   pixels differ and every one of them is the top-left 4px strip, i.e. a stepped silhouette rather
+   than a shadow. At 3× the resting state reads as a broken render and is uglier than the pressed
+   one. **So the offset flips to `--color-hot`** — same shape, one colour exception keyed by the
+   ground (§3), which is riso print's own offset-second-ink and not a web shadow. Decorative, no
+   text on it, so no contrast floor applies.
+
+   **Keyed by the PART, not by the screen.** This is `[data-slot=button][data-variant=default]` —
+   every PRIMARY the surface ever renders, wherever it lands. A `.device`-scoped copy would be the
+   device screen's special case, and the finding that produced this ruling was precisely that one
+   command carried a different recipe from every other one.
+
+   *Rejected:* a hot GROUND (that is D101 Ruling 2's recipe, superseded the same morning — if
+   orange returns it is a stated reversal, not a side door); translate with no shadow (half a
+   recipe: the shadow is the promise the block can be pressed).
+
+   Specificity note (§9's own warning): `round.css` styles this button at `(0,2,1)` and loads
+   first — these rules are `(0,2,0)` and `(0,3,0)`, and they sit AFTER the `@import` block, so the
+   resting ground stays round.css's and the `:active` flip beats it on both count and order. Do
+   not move this above the imports. */
+[data-slot="button"][data-variant="default"] {
+  box-shadow: 4px 4px 0 0 var(--color-hot);
+  transition: transform var(--t-press) ease-out, box-shadow var(--t-press) ease-out,
+              background-color var(--t-press) ease-out, color var(--t-press) ease-out;
+}
+
+@media (hover: hover) {
+  [data-slot="button"][data-variant="default"]:hover:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-hot);
+  }
+}
+
+/* The press still ends ink-filled — but the ground is already ink, so on this ground the flip is
+   to `hot-ink`, which is the darker member of the accent pair and the one ruled for marks that
+   carry text (D101). */
+[data-slot="button"][data-variant="default"]:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 var(--color-hot);
+  background: var(--color-hot-ink);
+  color: var(--color-paper);
+}
+
+/* A disabled command never sits on a shadow — same reason as `.act:disabled` above: the shadow is
+   the promise the block can be pressed, and leaving it under a dead control is the lie the filled
+   ground already was. `round.css` drops the ground; this drops the depth. */
+[data-slot="button"][data-variant="default"]:disabled { box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="button"][data-variant="default"] { transition: none; }
+}
+
 /* The reveal's act is the stamp and does not use `.act` at all, so the on-flood variant this
    file used to carry was deleted rather than kept as a spare — D101 (c)'s rule: an unreferenced
    declaration is not a spare, it is a thing no gate can tell is wrong. */
