@@ -306,6 +306,109 @@ never "filled".**
 **Nothing scroll-triggered, no entrance animation on a block, nothing springy.** Disable shadcn's
 default enter/exit animations where they are not one of the three above.
 
+### 質感 — the perceived-quality rules, ruled 2026-08-20 by the evaluator under `D101`'s delegation
+
+*Why this section exists: the owner has said 廉價 about this surface more than once, and the
+diagnosis is now settled — the cheapness was never the stack, the hardware, or the builder; it was
+**generic web-widget vocabulary drawn onto a print-direction page**. These rules are the fix, stated
+as rules. Grounded in the `ui-ux-pro-max` database (user-scoped, `~/.claude/skills/ui-ux-pro-max` —
+query it with `python3 ~/.claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain <ux|style|gsap|typography>`);
+where a search result and this file disagree, **this file and the rulings win** — the database is
+reference, not authority.*
+
+1. **Print vocabulary.** A control on this surface is drawn as an act from print culture — a stamp,
+   a signature line, a ledger entry, a filled ink block — never as the generic web widget that does
+   the same job. The test before shipping any control: *could this element appear in any SaaS form
+   unchanged?* If yes, redraw it. (The ghost button, the gray disabled pill, the dashed drop-zone
+   box are the named offenders.)
+2. **Press feedback, inside the bounds.** Every clickable element changes visibly on press —
+   the vocabulary here is **ink-fill** (background → ink, text → paper), 120 ms — and the change
+   never shifts layout bounds. No `scale` on press: a stamp inks, it does not shrink.
+3. **Motion tokens, never loose durations.** The tokens are: `--t-press: 120ms` (press and
+   cross-fade, §5 rule 2), `--t-hover: 120ms` (§5 hover rule), `--t-flood: 450ms` (§5 rule 1).
+   New motion picks one of these; needing a fourth number is a ruling, not a tweak. One duration
+   copied onto every transition is the database's own named anti-pattern — the token set is small
+   **and chosen per role**, which is different from small by laziness.
+4. **State correctness never waits for `transitionend`/`animationend`.** Set the semantic state
+   directly; let the animation catch up or be cancelled. This is `RV-19`'s lesson stated as a
+   building rule: the reveal's failsafe raced its own animation for a week because a state change
+   was coupled to an animation's completion contract.
+5. **Stroke hierarchy, fixed:** `3px` = structural rules (section tops, the flood's frame), `2px` =
+   component borders and focus outlines, `1px` = hairlines inside a component. Mixing weights
+   inside one layer reads as sloppy at exactly the viewing distance the demo is judged from.
+6. **Icons are SVG from one family, or absent.** No emoji glyphs as icons anywhere. (Today the
+   surface uses almost none — keep it that way rather than decorating.)
+7. **`cursor: pointer` and a visible `:focus-visible` (2px ink outline) on every interactive
+   element.** Already §7's anti-default entries; repeated here because they are also the two
+   cheapest signals of care a page can carry.
+
+### The depth vocabulary — ruled 2026-08-20 by the evaluator under `D101`'s delegation
+
+*Measured from the `ui-ux-pro-max` demo the owner pointed at (22 elements probed by Playwright,
+computed styles diffed across hover): its entire "feel" is three recipes, each under ten lines of
+CSS, applied everywhere consistently. Adopted here with our tokens. The owner's standing complaint
+(廉價) is answered by COVERAGE — every interactive element carries exactly one of these, chosen by
+role; a bare `hover:bg` on anything interactive is now a defect.*
+
+- **SINK — commands (buttons, the stamp).** At rest the element sits on a hard ink shadow
+  `4px 4px 0 0 var(--color-ink)`; on hover it moves `translate(2px,2px)` while the shadow drops to
+  `2px 2px 0 0`; on `:active` it bottoms out — `translate(4px,4px)`, shadow `0 0 0 0`, **ink-fill**
+  (bg → ink, text → paper). All at `--t-press` (120 ms). The metaphor is a lead type pressed into
+  paper; `scale` stays banned.
+- **INK-FILL — quiet/ghost commands** (secondary actions drawn as bordered text): hover fills
+  bg → ink, text → paper, 120 ms. Same move as the press rule; hover previews it.
+- **SELECTION controls are commands** (③, 2026-08-20): a control whose press changes what the
+  engine does next roll — `.band`, `.keep` — takes **SINK**; a list row (`.rowTap`) is enterable
+  content and takes **LIFT**. `frontend`'s assignments, confirmed.
+- **LIFT — enterable content blocks** (list rows, cards, collage cells): §5's existing hover rule
+  unchanged — `translate(-3px,-3px)` + hard shadow toward the lower right, 120 ms, on the cell
+  never the `<img>`, `@media (hover: hover)` only. Commands sink INTO the page, content lifts OFF
+  it — the two directions are opposites on purpose, and giving one element both is a defect.
+
+### The reveal act — 蓋章, ruled 2026-08-20 by the evaluator under `D101`'s delegation
+
+The reveal's sign act is the **stamp** (`sign-act.html` 乙, hub item b): the staged state asks
+「這一餐，說定了嗎？」 in the display face beside an **empty seal** — `80×80`, `2px dashed` the
+flood's foreground colour. Hover: border turns solid, fills paper, text turns `--color-hot-ink`,
+rotates `-4deg` (a stamp never lands square). Active: adds the SINK bottom-out. Signed state, same
+position: the seal is paper, the member's nickname at 900 weight at the same `-4deg`, with
+「說這一餐去了」 beside it — `D106`'s named trip, same nickname the wire carries.
+**Amended 2026-08-20 after `frontend` built it:** (①) **the nickname is set in the SANS, not the
+display face** — and the reason is a law, not a taste: **the display face carries AUTHORED copy
+only; data off the wire (names, anything typed at key-issue) is always sans**, because D101's
+subset is derived from the stylesheets' own copy and a derivation cannot know a nickname — the
+display face on data is tofu by construction. The stamp's quality rides the 900 weight, the
+setting and the -4deg, none of which needs the face. (②) **orientation forks on content**: a
+nickname containing CJK sets `vertical-rl` upright; an all-Latin nickname sets **horizontal** —
+`vertical-rl` rotates Latin 90° and a rotated word is not a stamped one (RV-17's lesson again:
+CJK and Latin fail differently, so the fork is data-driven, and any fixture for it must include a
+Latin name).
+Cross-fade only (§5 rule 2); the seal's box is reserved from first paint (RV-17's logic).
+
+### The reveal's ground — 網點即骰點, ruled 2026-08-20 by the evaluator under `D101`'s delegation
+
+*The owner's standing complaint was 單調, and the licence given was a static image. The ruling
+spends it on pattern, not photograph: the halftone dot is print's own texture AND the die's pip —
+the one mark this product owns. Riso-print logic: paper, spot colours, halftone. Reference render:
+`idea & img/design-proposals/reveal-ground.html`. Pure CSS (`radial-gradient` tiles), zero image
+assets, §6's dead-wifi rule untouched. **Glow is banned on this surface — print does not glow**;
+the staged state's radial blur dies with this ruling.*
+
+- **Tumble state:** paper ground with a neutral halftone field (`~7%` ink dots on an 18px tile),
+  and a **table band** along the bottom edge — denser dots (`~13%`, 12px tile) with a 1px hairline
+  top — the structural line the dice land on. Neutral means neutral: **no cluster may read as a
+  die face before the result exists** (D91 — the ground must not answer first).
+- **Staged state:** the flood keeps a faint ink halftone for tooth, and **this round's real pair
+  is printed as two poster-scale die faces in a darker step of the flood's own colour** — pip
+  grids ~340px with a 4px tone border so a face reads as a face (cropped dots read as blobs — the
+  rubric's named slop), bleeding off opposite edges, each at a small fixed rotation. The ground
+  repeats the truth, never invents it: the faces are the stored dice, so RV-16 is untouched
+  (nothing appears before landed) and the tone stays below the text layer — copy is always the
+  brightest layer.
+- **One recipe, four colours:** every face colour carries a `-deep` step (cobalt `#1B34B8`, hot's
+  deep is the existing hot-ink family, jade and sun derived the same one step down); no per-colour
+  design.
+
 ### The dependency shelf — owner-ruled 2026-08-19
 
 **The rule first: nothing is adopted because a reference has it.** The owner declined to walk
