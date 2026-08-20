@@ -1,140 +1,136 @@
 #!/usr/bin/env python3
 """Every character the server sends to a member must exist in the shipped font subset.
 
-Run: python3 app/api/tests/test_server_copy_renders.py    (no network, no database, no browser)
+Run:  python3 app/api/tests/test_server_copy_renders.py            (the tests)
+      python3 app/api/tests/test_server_copy_renders.py --gate     (one verdict line, for the hook)
 
-**Why this test exists, and it is not the font's fault.** `tools/font_subset_check.py` asks whether
-the shipped subset covers *the surface's own copy* — and that question it answers correctly. But a
-`detail=` string in `upto/rounds.py` reaches the screen without ever passing through `app/web/`, so
-it is outside the aim of that gate, and **a character outside the aim leaves no gap in the output**:
-the gate prints "472 needed, 3812 committed" and passes, and the sentence arrives on the phone with a
-hole in it. Found on a 1440x900 screenshot by the frontend session, 2026-08-19, on a screen that was
-otherwise correct.
+No network, no database, no browser, and **no `fonttools`** — the last one is load-bearing, because
+this runs in the pre-commit hook and the hook must work on a bare clone. `tools/subset_fonts.py`
+needs `fonttools` and `brotli`; `tools/server_copy.py`, which both it and this file import, does not.
 
-Same shape as `ui_characters()` reading `index.html` after D104 reduced it to a shell, and as the
-footprint probe that listed the services it expected: **an omission with no shape is not something a
-reader can notice.** So this test gives it one.
+**Why this exists, and it was never the font's fault.** `tools/font_subset_check.py` asks whether the
+shipped subset covers *the surface's own copy*, and answers that correctly. A `detail=` in
+`upto/rounds.py` reaches the screen without passing through `app/web/`, so it was outside the aim —
+and a character outside the aim leaves no gap in the output. The gate printed "472 needed, 3812
+committed" and passed while 「池子是空的，␣每一家的權重都是零…」 arrived on the product with a hole in
+it. Found on a 1440x900 screenshot by the frontend session, 2026-08-19; the derivation now reads the
+API's copy too (5f51d8e), and this is the gate that keeps it true.
 
-**It does not fix the font, and it must not be read as trying to.** Widening the derivation is with
-the orchestrator; **the two characters below are known-missing and are the baseline, not an
-exemption**. The baseline is checked in *both* directions, which is what keeps it from rotting:
-
-  * a NEW missing character fails the test — a member-facing sentence written tomorrow cannot ship
-    blank without this saying so;
-  * a baseline character that is now PRESENT also fails the test, saying the derivation widened and
-    this list should shrink. A baseline nobody is forced to revisit becomes a permanent excuse.
-
-**Scope: `detail=` strings in the modules that serve HTTP, and nothing else.** Deliberately not every
-CJK character in the package — `upto/classify/prompt.py` talks to a model, `upto/ingest/*` matches
-publisher values, and `upto/naming.py`'s regex character classes contain `鿿` as a *range bound* and
-`『』＆．` as separators. None of those render, and widening the font to cover pattern internals
-would grow the file for nothing.
+**One definition, two consumers.** The rule for *what a member can read* lives in
+`tools/server_copy.py` and nowhere else: `tools/subset_fonts.py` derives the charset from it and this
+file checks against it. The first version of this test carried its own list of six module names, which
+was narrower — it would have missed a message in any module not on the list — and two definitions of
+"member-facing" in two files is a drift waiting to happen. That was raised before the shared module
+was written and the module is the answer to it.
 """
 
-import ast
 import os
 import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCE = os.path.join(HERE, "..", "src", "upto")
-CHARSET = os.path.join(HERE, "..", "..", "web", "public", "fonts", "charset-sub.txt")
+REPO = os.path.join(HERE, "..", "..", "..")
+CHARSET = os.path.join(REPO, "app", "web", "public", "fonts", "charset-sub.txt")
 
-# The modules that build HTTP responses. A module added here that serves member-facing copy and is
-# not in this tuple is unchecked, which is the one way this test can be silently narrowed.
-SERVING = ("rounds.py", "preferences.py", "live.py", "api_common.py", "auth.py", "main.py")
+sys.path.insert(0, os.path.join(REPO, "tools"))
 
-# **Known missing as of 2026-08-19, and checked in both directions.** Character -> where it is.
-# When the font derivation widens to cover server copy, this dict goes to empty and the test tells
-# you to empty it.
-KNOWN_MISSING = {
-    "或": "rounds.py — 「池子是空的，或每一家的權重都是零，擲不出結果。」",
-    "趟": "rounds.py — 「{}已經在 {} 記下這一趟了。」",
-}
+import server_copy  # noqa: E402
+
+# **Empty, and that is the state to keep it in.** It held 或 and 趟 from 2026-08-19 until the
+# derivation widened on 2026-08-20 — a baseline for characters known to be missing while somebody
+# else's fix was in flight. It is checked in both directions below: a new missing character fails,
+# and an entry here that is no longer missing also fails. An empty dict is the healthy reading.
+KNOWN_MISSING = {}
 
 
-def shipped_characters():
+def shipped():
     with open(CHARSET, encoding="utf-8") as handle:
-        return set(handle.read()) - {"\n", "\r"}
+        return set(handle.read()) - set("\n\r\t")
 
 
-def is_cjk(character):
-    point = ord(character)
-    return (0x3000 <= point <= 0x303F or 0x3400 <= point <= 0x4DBF
-            or 0x4E00 <= point <= 0x9FFF or 0xF900 <= point <= 0xFAFF
-            or 0xFF00 <= point <= 0xFFEF)
-
-
-def member_facing_strings():
-    """Every `detail=` string literal in the serving modules, with its file and line."""
-    found = []
-    for name in SERVING:
-        path = os.path.join(SOURCE, name)
-        if not os.path.exists(path):
-            continue
-        with open(path, encoding="utf-8") as handle:
-            tree = ast.parse(handle.read())
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            for keyword in node.keywords:
-                if keyword.arg != "detail":
-                    continue
-                # Walked rather than matched: a `detail=` is often an f-string or a `.format()`
-                # template, so the literal pieces are nested inside the expression.
-                for piece in ast.walk(keyword.value):
-                    if isinstance(piece, ast.Constant) and isinstance(piece.value, str):
-                        found.append((name, piece.lineno, piece.value))
-    return found
+def missing():
+    """{character: [file:line, …]} for every member-facing character the font cannot draw."""
+    covered = shipped()
+    absent = {}
+    for path, line, text in server_copy.strings():
+        for character in text:
+            if character not in covered:
+                where = "{}:{}".format(os.path.basename(path), line)
+                absent.setdefault(character, set()).add(where)
+    return {c: sorted(w) for c, w in absent.items()}
 
 
 class TheServerNeverSendsACharacterTheFontCannotDraw(unittest.TestCase):
-    def setUp(self):
-        self.shipped = shipped_characters()
-        self.strings = member_facing_strings()
-
-    def test_the_charset_file_is_where_this_test_thinks_it_is(self):
-        """If the path moves, every assertion below passes vacuously — which is the failure mode
-        this whole file is about."""
-        self.assertGreater(len(self.shipped), 1000, CHARSET)
-
-    def test_there_is_something_to_check(self):
-        """A refactor that moved every message out of `detail=` would make this file silently
-        useless, and a silent pass is exactly H34's shape."""
-        self.assertGreater(len(self.strings), 10)
-
-    def test_no_member_facing_character_is_missing_beyond_the_known_baseline(self):
-        missing = {}
-        for name, line, text in self.strings:
-            for character in text:
-                if is_cjk(character) and character not in self.shipped:
-                    missing.setdefault(character, set()).add("{}:{}".format(name, line))
-        surprises = {c: sorted(w) for c, w in missing.items() if c not in KNOWN_MISSING}
+    def test_nothing_is_missing_beyond_the_known_baseline(self):
+        surprises = {c: w for c, w in missing().items() if c not in KNOWN_MISSING}
         self.assertEqual(
             surprises, {},
-            "a member-facing string uses a character the shipped font subset does not contain, so "
-            "it will render as a blank gap on the product and no other gate will say so. Either "
-            "reword, or widen the font derivation (orchestrator) and add it below: " + repr(surprises))
+            "a member-facing string uses a character the shipped font subset cannot draw, so it "
+            "will render as a blank gap on the product and no other gate will say so. Fix by "
+            "rebuilding the subset — `python3 tools/subset_fonts.py --build` — or reword: "
+            + repr(surprises))
 
-    def test_every_baseline_character_is_still_actually_missing(self):
-        """The direction that stops the baseline rotting into a permanent excuse. When the font
-        derivation widens, this fails and tells you to shorten the list."""
-        healed = sorted(c for c in KNOWN_MISSING if c in self.shipped)
+    def test_every_baseline_entry_is_still_actually_missing(self):
+        """The direction that stops a baseline becoming a permanent excuse. It is what emptied this
+        list when the derivation widened."""
+        healed = sorted(c for c in KNOWN_MISSING if c not in missing())
         self.assertEqual(
             healed, [],
-            "these characters are now IN the shipped subset, so the font derivation has widened — "
-            "remove them from KNOWN_MISSING in this file: " + "".join(healed))
+            "these characters are no longer missing, so the derivation has caught up — remove them "
+            "from KNOWN_MISSING in this file: " + "".join(healed))
 
-    def test_every_baseline_character_is_still_actually_used(self):
-        """And the other way the list rots: a string reworded away leaves an entry claiming a
-        problem that no longer exists."""
-        used = {c for _, _, text in self.strings for c in text}
-        stale = sorted(c for c in KNOWN_MISSING if c not in used)
-        self.assertEqual(
-            stale, [],
-            "these characters are no longer in any member-facing string, so their baseline entries "
-            "are stale — remove them: " + "".join(stale))
+    def test_the_charset_file_is_where_this_test_thinks_it_is(self):
+        """If the path moves, every assertion above passes vacuously — which is the failure mode this
+        whole file is about, arriving through the back door."""
+        self.assertGreater(len(shipped()), 1000, CHARSET)
+
+    def test_there_is_something_to_check(self):
+        """A refactor that moved every message out of `detail=` would leave this file passing and
+        checking nothing. `server_copy.strings()` refuses an empty result itself; this asserts the
+        number is a plausible one rather than merely non-zero."""
+        self.assertGreater(len(server_copy.strings()), 20)
+
+    def test_this_file_reads_the_shared_definition_and_not_its_own(self):
+        """The property is that `missing()` gets its strings from `tools/server_copy.py`, so that
+        changing what counts as member-facing changes the derivation and this gate together.
+
+        **Asserted behaviourally, because the first version of this test scanned its own source for
+        the token `HTTPException` — a token its own assertion contained.** It could never pass: the
+        instrument's subject included the instrument. Third one of that family in two days, after a
+        gate that read prose instead of code and a probe that listed the services it expected.
+        """
+        real = server_copy.strings
+        try:
+            server_copy.strings = lambda *a, **k: [("sentinel.py", 1, "\u9f49")]
+            self.assertEqual(sorted(missing()), ["\u9f49"],
+                             "missing() did not follow server_copy.strings, so this file has a "
+                             "second source of member-facing strings")
+        finally:
+            server_copy.strings = real
+
+
+def gate():
+    """One verdict line, for the pre-commit hook. Exit 1 on any character the font cannot draw.
+
+    **It prints even when there is nothing wrong**, because a silent pass is H34's shape and this
+    gate's whole subject is a check that was passing while the product was broken.
+    """
+    absent = {c: w for c, w in missing().items() if c not in KNOWN_MISSING}
+    total = len(server_copy.strings())
+    if absent:
+        print("server copy: REFUSED — {} character(s) a member can read that the shipped font "
+              "cannot draw:".format(len(absent)))
+        for character, where in sorted(absent.items()):
+            print("  {}  U+{:04X}  {}".format(character, ord(character), ", ".join(where)))
+        print("  rebuild the subset (`python3 tools/subset_fonts.py --build`, needs fonttools) or "
+              "reword. A missing glyph is a blank gap on the product, never an error.")
+        return 1
+    note = "" if not KNOWN_MISSING else " ({} known-missing tolerated)".format(len(KNOWN_MISSING))
+    print("server copy: {} member-facing strings, every character drawable{}".format(total, note))
+    return 0
 
 
 if __name__ == "__main__":
+    if "--gate" in sys.argv:
+        raise SystemExit(gate())
     unittest.main(verbosity=2)
