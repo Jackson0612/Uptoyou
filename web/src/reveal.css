@@ -19,7 +19,7 @@
      transition has ink on ink. Both properties, one duration, one easing — §5 rule 1. */
   background: var(--color-paper);
   color: var(--color-ink);
-  transition: background-color .45s ease-out, color .45s ease-out;
+  transition: background-color var(--t-flood) ease-out, color var(--t-flood) ease-out;
 }
 
 .reveal[data-face="hot"]    { background: var(--color-flood-hot);    color: var(--color-on-hot); }
@@ -244,7 +244,7 @@
   text-align: center;
   max-width: min(1200px, 88vw);
   opacity: 0;
-  transition: opacity .45s ease-out;
+  transition: opacity var(--t-flood) ease-out;
 }
 .reveal[data-state="landed"] .answer { opacity: 1; }
 

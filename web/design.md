@@ -332,10 +332,17 @@ reference, not authority.*
 4. **State correctness never waits for `transitionend`/`animationend`.** Set the semantic state
    directly; let the animation catch up or be cancelled. This is `RV-19`'s lesson stated as a
    building rule: the reveal's failsafe raced its own animation for a week because a state change
-   was coupled to an animation's completion contract.
-5. **Stroke hierarchy, fixed:** `3px` = structural rules (section tops, the flood's frame), `2px` =
-   component borders and focus outlines, `1px` = hairlines inside a component. Mixing weights
-   inside one layer reads as sloppy at exactly the viewing distance the demo is judged from.
+   was coupled to an animation's completion contract. **The watched form is the stated exception
+   (amended 2026-08-20, `F-5` — the rule as first written banned `RV-19`'s own fix):** a handler
+   on `animationend` may commit a state **when a watchdog commits the same state if the event never
+   fires** (`Reveal.tsx`'s landing). The ban is on the unwatched wait, not the watched one.
+5. **Stroke hierarchy, fixed — four weights, each owning a layer** (corrected 2026-08-20, `F-4` —
+   this sentence and §3 disagreed while citing one ladder; the build was right and the sentence
+   wrong): `3px` = structural rules (section tops, the flood's frame); `2px` = component borders
+   and focus outlines (§3's field/ghost line); `1.5px` = row rules — list rows, table rows, the
+   chip's border (§3's row line); `1px` = hairlines inside a texture ground (the table band's top
+   rule). Mixing weights inside one layer reads as sloppy at exactly the viewing distance the demo
+   is judged from.
 6. **Icons are SVG from one family, or absent.** No emoji glyphs as icons anywhere. (Today the
    surface uses almost none — keep it that way rather than decorating.)
 7. **`cursor: pointer` and a visible `:focus-visible` (2px ink outline) on every interactive
@@ -360,6 +367,12 @@ role; a bare `hover:bg` on anything interactive is now a defect.*
 - **SELECTION controls are commands** (③, 2026-08-20): a control whose press changes what the
   engine does next roll — `.band`, `.keep` — takes **SINK**; a list row (`.rowTap`) is enterable
   content and takes **LIFT**. `frontend`'s assignments, confirmed.
+- **The district picker takes INK-FILL** (④, 2026-08-20, `F-7`): `[data-part=picker]` was the one
+  interactive element on four screens with no hover recipe and `cursor: default`. By ③ a case
+  existed for SINK; **rejected because SINK changes the RESTING state** (the 4px hard shadow), and
+  home's resting render is pinned by `A0c`'s pixel gate to the owner-approved page — a depth recipe
+  may not silently change a gated resting state. INK-FILL previews the press and changes nothing at
+  rest. It also gains `cursor: pointer` (rule 7).
 - **LIFT — enterable content blocks** (list rows, cards, collage cells): §5's existing hover rule
   unchanged — `translate(-3px,-3px)` + hard shadow toward the lower right, 120 ms, on the cell
   never the `<img>`, `@media (hover: hover)` only. Commands sink INTO the page, content lifts OFF
@@ -391,8 +404,11 @@ Cross-fade only (§5 rule 2); the seal's box is reserved from first paint (RV-17
 spends it on pattern, not photograph: the halftone dot is print's own texture AND the die's pip —
 the one mark this product owns. Riso-print logic: paper, spot colours, halftone. Reference render:
 `idea & img/design-proposals/reveal-ground.html`. Pure CSS (`radial-gradient` tiles), zero image
-assets, §6's dead-wifi rule untouched. **Glow is banned on this surface — print does not glow**;
-the staged state's radial blur dies with this ruling.*
+assets, §6's dead-wifi rule untouched. **Glow is banned on this ground — print does not glow**;
+the staged state's radial blur dies with this ruling. **Scope (2026-08-20, `F-6`): the ban is the
+reveal's print ground, not the whole product** — home's sun halo (`.halo`, the 5 s pulse) is
+weather iconography inside the composition `A0c` gates against the owner-approved page, and it
+stands until that page itself is re-ruled.*
 
 - **Tumble state:** paper ground with a neutral halftone field (`~7%` ink dots on an 18px tile),
   and a **table band** along the bottom edge — denser dots (`~13%`, 12px tile) with a 1px hairline

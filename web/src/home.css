@@ -87,7 +87,11 @@ h1.headline .lit { color: var(--color-hot-ink); }
 
 /* HC-3: the swap touches opacity and nothing else. Both images are absolutely positioned in a
    box whose size is set by the grid, so a cross-fade cannot move a pixel. */
-.cell img { transition: opacity 400ms ease-out; }
+/* `--t-flood`, not a fourth number. 400ms was a loose duration and §5 rule 3 makes a fourth number
+   a ruling rather than a tweak (`F-3`, 2026-08-20). The swap is a ground changing under fixed
+   geometry, which is what the flood token names — the value moves 400 → 450 and the HC-3 gate is
+   about which pixels move, not how long they take. */
+.cell img { transition: opacity var(--t-flood) ease-out; }
 [data-collage-state="static"] .cell img { transition: none; }
 @media (prefers-reduced-motion: reduce) { .cell img { transition: none; } }
 
@@ -251,6 +255,38 @@ h1.headline .lit { color: var(--color-hot-ink); }
   border-top: 6px solid var(--color-ink);
 }
 [data-part="picker"]:focus-visible { outline: 2px solid var(--color-hot-ink); outline-offset: 2px; }
+
+/* ═══ the depth vocabulary · INK-FILL ═══════════════════════════════════════════════════════
+   `F-7`, evaluator-ruled 2026-08-20 as ④: this was the one interactive element on four screens
+   carrying no hover recipe at all, and `cursor: default` besides. **INK-FILL, not SINK** — by ③ a
+   selection control is a command and SINK had a case, but SINK changes the RESTING state (it adds
+   the 4px hard shadow) and this masthead is pinned pixel-for-pixel by `A0c`'s fidelity gate to the
+   owner-approved page. A depth recipe may not silently change a gated resting state. INK-FILL
+   previews the press and changes nothing at rest.
+
+   The caret is drawn from borders, so it does not inherit `color` — it is re-drawn in paper for
+   the filled state, or it stays ink on ink and the control loses its affordance exactly when it
+   gains its ground. */
+[data-part="picker"] {
+  cursor: pointer;
+  transition: background-color var(--t-hover) ease-out, color var(--t-hover) ease-out;
+}
+[data-part="picker"]::after { transition: border-top-color var(--t-hover) ease-out; }
+
+/* `@media (hover: hover)` — a touch device applies `:hover` on tap and keeps it applied until
+   something else is tapped, which would leave the picker inked after every district change. */
+@media (hover: hover) {
+  [data-part="picker"]:hover { background: var(--color-ink); color: var(--color-paper); }
+  [data-part="picker"]:hover::after { border-top-color: var(--color-paper); }
+}
+[data-part="picker"][data-state="open"],
+[data-part="picker"]:active { background: var(--color-ink); color: var(--color-paper); }
+[data-part="picker"][data-state="open"]::after,
+[data-part="picker"]:active::after { border-top-color: var(--color-paper); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-part="picker"], [data-part="picker"]::after { transition: none; }
+}
 [data-slot="select-content"] { border: 2px solid var(--color-ink); box-shadow: none;
                                background: var(--color-paper); }
 [data-slot="select-item"] { font-size: var(--text-body); }
