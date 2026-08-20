@@ -193,12 +193,12 @@ face has a true one and a synthesised italic is a tell.
   are round; squaring them makes the face read as a grid. Nothing else.
 - **No soft shadows and no cards.** Separation is colour or a rule.
 - **One depth effect exists: a hard offset shadow**, `6px 6px 0 var(--color-ink)`, on images and on
-  a raised block. No blur, no alpha. This is the only shadow *shape* in the system. **One colour
-  exception, keyed by ground, never by screen (⑤, 2026-08-20): on an ink ground the offset is drawn
-  in `--color-hot`** — ink-on-ink draws nothing (measured on `/device`: 1,170 of 10,184 pixels, all
-  of them a stepped silhouette that reads as a broken render), and an offset second ink is riso
-  print's own vocabulary, not a web shadow. Decorative block, no text on it, so no contrast floor
-  applies.
+  a raised block. No blur, no alpha. **This is the only shadow in the system — colour included**
+  (restored 2026-08-20 evening: the owner ruled 乙 on the device act, which removed the only
+  ink-ground command, so the hot-shadow exception written that afternoon died the same day —
+  its record lives in ⑤ below). The measured constraint that remains: **an ink shadow on an ink
+  ground draws nothing** (`/device`, 1,170 of 10,184 px, a stepped silhouette) — so a command
+  simply never sits on an ink ground.
 - **Rule weights — three component weights, plus one texture hairline:** `3px ink` between a colour
   block and what pins over it; `1.5px ink` between rows and table rows; `2px ink` around a field or
   a ghost control; **`1px` exists only inside a texture ground** (the reveal table band's top rule)
@@ -374,14 +374,16 @@ role; a bare `hover:bg` on anything interactive is now a defect.*
 - **SELECTION controls are commands** (③, 2026-08-20): a control whose press changes what the
   engine does next roll — `.band`, `.keep` — takes **SINK**; a list row (`.rowTap`) is enterable
   content and takes **LIFT**. `frontend`'s assignments, confirmed.
-- **An ink-ground command SINKs on a `--color-hot` shadow** (⑤, 2026-08-20, `F-1` — ruled from the
-  rendered four-way `device-act-sink.html`, per the review loop): §4 PRIMARY's ink ground stays and
-  the SINK shadow flips to hot, because an ink shadow on an ink ground is invisible at rest and a
-  stepped silhouette at 3× (甲, measured). *Rejected:* 乙 (hot ground — it is Ruling 2's recipe and
-  would reverse the same-day supersession through one button; if orange should return, that is a
-  stated reversal, not a side door); 丁 (translate with no shadow — half a recipe; the shadow is the
-  promise the block can be pressed). Cost paid openly in §3: a second shadow *colour*, same shape,
-  keyed by ground. Press still ends ink-filled → on an ink ground the active flip is to `hot-ink`.
+- **The device act is 乙 — `--hot` ground, ink text, the standard ink SINK shadow** (⑤,
+  **owner-ruled 2026-08-20 evening from the rendered `device-act-sink.html`**, superseding the
+  evaluator's same-day 丙). This is a stated reversal, made in the demanded form: the owner saw
+  all four candidates with 乙 labelled "it is Ruling 2's recipe and choosing it reverses this
+  morning's supersession", and chose 乙. What returns is Ruling 2's **colour** — the size stays
+  the act's (the candidate the owner ruled from was act-sized, not Ruling 2's full-width
+  56/60/64). Consequences: no command sits on an ink ground anywhere (甲 measured illegible —
+  1,170/10,184 px stepped silhouette), so §3 keeps its single shadow colour; the 丙 hot-shadow
+  exception lasted one afternoon and is recorded here so it is not re-invented. *Still rejected:*
+  甲 (invisible), 丁 (half a recipe — the shadow is the promise the block can be pressed).
 - **The district picker takes INK-FILL** (④, 2026-08-20, `F-7`): `[data-part=picker]` was the one
   interactive element on four screens with no hover recipe and `cursor: default`. By ③ a case
   existed for SINK; **rejected because SINK changes the RESTING state** (the 4px hard shadow), and

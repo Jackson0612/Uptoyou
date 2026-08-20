@@ -94,24 +94,66 @@
    and its disabled shape live in `index.css`, shared by all three carriers. */
 .round .act-row { margin-top: 36px; }
 
-/* PRIMARY — ink ground, paper text, radius 0, and it is this screen's ONE filled control. Sized to
-   its label rather than to the column: a full-bleed confirm on a two-field form reads as a banner. */
+/* PRIMARY — **`--hot` ground, ink text, the standard ink SINK. Owner-ruled 乙, 2026-08-20 evening**
+   (`design.md` ⑤, `F-1`), superseding the same afternoon's 丙 and the ink ground before it. It is
+   this screen's ONE filled control. **Sized to its label rather than to the column** — a full-bleed
+   confirm on a two-field form reads as a banner, and the candidate the owner ruled from was this
+   size, so `D101` Ruling 2's full-width 56/60/64 did NOT come back with its colour.
+
+   This is `.act`'s recipe, and the duplication is deliberate rather than an oversight: `.act` in
+   `index.css` carries home's padding (`16px 40px`, ~66 px tall) and this screen's act is 48. One
+   class with a size override would read as two rules disagreeing; the recipe is nine lines and
+   stating it beside its own geometry is clearer than inheriting six of them and cancelling two.
+   **If a third act ever wants a third size, that is the moment to extract, not now.** */
 .device button[type="submit"] {
   align-self: flex-start;
   min-height: 48px;
   padding: 0 32px;
-  border: 0;
+  border: 2px solid var(--color-ink);
+  background: var(--color-hot);
+  color: var(--color-on-hot);
+  font-size: var(--text-body);
+  /* 900, as `.act` sets — the act is the heaviest thing on a screen that has one. */
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 0 var(--color-ink);
+  /* Named properties, never `all`: `all` sweeps the focus outline into the same fade and makes the
+     keyboard ring arrive late — a real a11y regression for a decorative saving (`.act`'s note). */
+  transition: transform var(--t-press) ease-out, box-shadow var(--t-press) ease-out,
+              background-color var(--t-press) ease-out, color var(--t-press) ease-out;
+}
+
+/* SINK. Hover moves it 2px into the page and halves the offset; `:active` bottoms out and the
+   ink-fill lands at the moment of contact rather than on approach. `scale` stays banned — a stamp
+   inks, it does not shrink. */
+@media (hover: hover) {
+  .device button[type="submit"]:hover:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+  }
+}
+.device button[type="submit"]:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 var(--color-ink);
   background: var(--color-ink);
   color: var(--color-paper);
-  font-size: var(--text-body);
-  font-weight: 700;
-  cursor: pointer;
 }
+.device button[type="submit"]:focus-visible {
+  outline: 2px solid var(--color-ink); outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .device button[type="submit"] { transition: none; }
+}
+/* A disabled act is never filled (§4 — fading a fill measured 2.75:1 and failed the floor) **and
+   never sits on a shadow**: the shadow is the promise the block can be pressed, so leaving it under
+   a dead control is the same lie the filled ground was. */
 .device button[type="submit"]:disabled {
   background: transparent;
   color: var(--color-muted);
   border: 2px dashed var(--color-ink);
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 
