@@ -225,6 +225,19 @@ async def search_places(
                         # it. Putting `search_alias.alias` in that coalesce would be the one
                         # edit that breaks the ruling, which is why the two live four lines
                         # apart with this comment between them.
+                        #
+                        # **A known property, measured 2026-08-20, deliberately not "fixed".** The
+                        # alias is matched as a *substring*, like the three rungs above it, so a
+                        # one-character `q=7` does put `7-11` and `7-ELEVEN` in the match set and
+                        # therefore 統一超商's hundreds of rows. It does not *surface*: `order by 2
+                        # limit 10` sorts by the composed name under this database's **C collation**,
+                        # so digits and Latin sort ahead of 統, and `q=7` returns ten real places
+                        # with a 7 in the name and **zero** chain rows (measured; `q=11` and `q=-`
+                        # likewise). **That is ordering doing the work, not design.** If the ordering
+                        # ever becomes relevance-ranked, short queries will start surfacing the
+                        # chain and an alias-specific rule — minimum length, or prefix rather than
+                        # substring — becomes necessary. No threshold is invented here today,
+                        # because none has been measured; this comment is the trigger.
                         "  or rp.name in ("
                         "    select registered_name from search_alias "
                         "    where alias ilike '%' || :q || '%')) "

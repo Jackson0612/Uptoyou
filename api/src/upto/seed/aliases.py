@@ -30,18 +30,22 @@ reaches:
     天仁茶業股份有限公司     → CHAFFEE              42 places   天仁 is in the company name
     長沂國際實業股份有限公司 → COMEBUY              61 places   no standard Chinese name exists
 
-**`統一超商 → 7-ELEVEN`/`小七` is the one that is tempting and is deliberately absent, and it now
-has TWO reasons rather than one.** The pairing reads `統一超商股份有限公司 → 統一超商股份有限公司`;
-nothing published connects it to `7-ELEVEN`, so the bound is not met — common knowledge is exactly
-what D113's iron laws are a fence around.
+**統一超商 split into a row that is in and a row that stays out, and the reason each way is worth
+keeping.** The pairing reads `統一超商股份有限公司 → 統一超商股份有限公司`; nothing published connects
+it to `7-ELEVEN`, so the default verification bound is met by neither spelling.
 
-**And the evaluator measured the cost, 2026-08-20: `小七` already returns two real rows — `小七清粥
-小菜` and `小七食堂`, genuine eateries whose registered names contain 小七.** So the alias would not
-fill an empty result; it would bury two restaurants under a convenience chain's hundreds of branches.
-That is the first measured case of an alias being actively *worse* than its absence, and it is the
-argument to reach for if anyone proposes this row: the everyday-name problem and the collision
-problem point opposite ways here. `7-ELEVEN` returns 0 and `統一超商` returns rows today via the
-registered name. If the owner wants it anyway, that is a ruling and not a judgement call here.
+**`7-11` and `7-ELEVEN` are in, by the owner's per-row exception (D113 as amended 2026-08-20).** He
+accepted that their correctness is his assertion. Their notes cite the ruling, which is the whole
+difference between an exception path and "everyone knows".
+
+**`小七` stays out, and it now has three reasons — the third measured by the evaluator.** No published
+pairing; 統一超商 is typable today and returns rows; and **`小七` already returns two real rows,
+`小七清粥小菜` and `小七食堂`, genuine eateries whose registered names contain 小七.** The alias would
+not fill an empty result — it would bury two restaurants under a convenience chain's hundreds of
+branches. **That is the first measured case of an alias being actively worse than its absence**, and
+it is the argument to reach for if anyone proposes the row again: the everyday-name problem and the
+collision problem point opposite ways here, and an alias that hides real stores harms the members it
+was meant to help.
 
 **Adding a row is not routine.** Each one is data this product asserts on its own authority, so the
 `note` must name the published fact that supports it, and a row whose note would read "everyone
@@ -63,15 +67,52 @@ from datetime import date
 
 AUTHOR = "operator"
 
-# (alias, registered_name, authored_at, note)
+PAIRING = "pairing"          # a published brand_registration row supports it — falsifiable
+OWNER_RULED = "owner-ruled"  # nothing published does; the owner asserted it — ask him to withdraw
+
+# (alias, registered_name, authored_at, basis, note)
 #
-# The note is the verification, not a description: it says which published row makes the mapping
-# checkable, so a later reader can withdraw the alias if that row changes.
-ALIASES: tuple[tuple[str, str, date, str], ...] = (
+# **`basis` is a column and not a sentence, and that is the fix for a false pass.** The first version
+# left it in the prose and the test asserted every note names `brand_registration`; the two
+# owner-ruled rows passed it, because their notes mention `brand_registration` **to say it does not
+# support them**. A true assertion about the wrong subject. The column is what
+# `test_search_alias.py` reads now.
+#
+# The note is still the verification, not a description: for a `pairing` row it says which published
+# row makes the mapping checkable; for an `owner-ruled` row it cites the ruling.
+ALIASES: tuple[tuple[str, str, date, str, str], ...] = (
+    # **The owner-exception rows (D113 as amended 2026-08-20).** These two have no published pairing
+    # — `統一超商股份有限公司 → 統一超商股份有限公司` is all `brand_registration` says — and the owner
+    # ruled them in anyway, accepting that their correctness is his assertion rather than a
+    # publisher's. **The note therefore cites the ruling, and that is the whole of the exception
+    # path: it is not "everyone knows" with better manners.** Both spellings are separate rows
+    # because a member types one or the other and neither contains the other.
+    (
+        "7-11",
+        "統一超商股份有限公司",
+        date(2026, 8, 20),
+        OWNER_RULED,
+        "OWNER-RULED 2026-08-20 (「別名應該是7-11」), D113's amended per-row exception path. "
+        "No published pairing supports this: brand_registration reads 統一超商股份有限公司 → "
+        "統一超商股份有限公司 and nothing connects it to 7-ELEVEN. The owner accepted that this "
+        "row's correctness is his assertion. Withdraw it by asking him, not by checking a source.",
+    ),
+    (
+        "7-ELEVEN",
+        "統一超商股份有限公司",
+        date(2026, 8, 20),
+        OWNER_RULED,
+        "OWNER-RULED 2026-08-20 (「別名應該是7-11」), D113's amended per-row exception path — the "
+        "second spelling a member might type for the same chain. No published pairing supports "
+        "it either: brand_registration reads 統一超商股份有限公司 → 統一超商股份有限公司. This "
+        "row's correctness is the owner's assertion. Withdraw it by asking him, not by checking "
+        "a source.",
+    ),
     (
         "星巴克",
         "悠旅生活事業股份有限公司",
         date(2026, 8, 20),
+        PAIRING,
         "brand_registration pairs 悠旅生活事業股份有限公司 with STARBUCKS COFFEE; 星巴克 is the "
         "standard Chinese rendering of that brand and appears in no place, brand or company name "
         "in any publication. D113's ruled example.",
@@ -85,31 +126,32 @@ async def apply(list_only: bool = False) -> int:
     from ..db import dispose_all, session_factory
 
     if list_only:
-        for alias, registered, authored, note in ALIASES:
-            print("{} -> {}\n  authored {} by {}\n  {}\n".format(
-                alias, registered, authored.isoformat(), AUTHOR, note))
+        for alias, registered, authored, basis, note in ALIASES:
+            print("{} -> {}\n  basis {} · authored {} by {}\n  {}\n".format(
+                alias, registered, basis, authored.isoformat(), AUTHOR, note))
         print("{} alias(es); nothing written".format(len(ALIASES)))
         return 0
 
     Session = session_factory()
     try:
         async with Session() as session:
-            for alias, registered, authored, note in ALIASES:
+            for alias, registered, authored, basis, note in ALIASES:
                 # **Idempotent by the unique pair**, so re-running after adding a row applies only
                 # the new one. `note` and the date are refreshed on conflict: the authoring is the
                 # thing under review, and a stale note is worse than no note.
                 await session.execute(
                     text(
                         "insert into search_alias "
-                        "  (alias, registered_name, authored_by, authored_at, note) "
-                        "values (:a, :r, :who, :when, :note) "
+                        "  (alias, registered_name, authored_by, authored_at, basis, note) "
+                        "values (:a, :r, :who, :when, :basis, :note) "
                         "on conflict (alias, registered_name) do update set "
                         "  authored_by = excluded.authored_by, "
                         "  authored_at = excluded.authored_at, "
+                        "  basis = excluded.basis, "
                         "  note = excluded.note"
                     ),
                     {"a": alias, "r": registered, "who": AUTHOR,
-                     "when": authored, "note": note},
+                     "when": authored, "basis": basis, "note": note},
                 )
             await session.commit()
             held = (

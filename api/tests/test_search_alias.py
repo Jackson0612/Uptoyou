@@ -27,10 +27,11 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "..", "src", "upto")
 MIGRATION = os.path.join(HERE, "..", "migrations", "versions", "0028_search_alias.py")
+BASIS_MIGRATION = os.path.join(HERE, "..", "migrations", "versions", "0029_alias_basis.py")
 
 sys.path.insert(0, os.path.join(HERE, "..", "src"))
 
-from upto.seed.aliases import ALIASES, AUTHOR  # noqa: E402
+from upto.seed.aliases import ALIASES, AUTHOR, OWNER_RULED, PAIRING  # noqa: E402
 
 # The only two modules allowed to name the table: the search that reads it, and the seed that
 # writes it. **A module added here is a bound being widened and belongs in a ruling, not a diff.**
@@ -101,25 +102,51 @@ class EveryRowSaysWhoWroteItAndWhy(unittest.TestCase):
             "D113 bounds this table to common foreign-branded chains; growing past the ceiling is "
             "a ruling, not a diff")
 
-    def test_every_row_carries_an_author_a_date_and_a_note(self):
-        for alias, registered, authored, note in ALIASES:
+    def test_every_row_carries_an_author_a_date_a_basis_and_a_note(self):
+        for alias, registered, authored, basis, note in ALIASES:
             self.assertTrue(alias.strip(), alias)
             self.assertTrue(registered.strip(), alias)
             self.assertIsNotNone(authored, alias)
+            self.assertIn(basis, (PAIRING, OWNER_RULED), alias)
             self.assertTrue(note.strip(), alias)
 
-    def test_the_note_names_published_evidence_rather_than_common_knowledge(self):
-        """**The rule the seed's docstring states and this enforces:** a note reading "everyone
-        knows" is exactly what D113's fence is around. Each note must point at a published row —
-        in practice `brand_registration` — so the alias can be withdrawn if that row changes."""
-        for alias, _registered, _authored, note in ALIASES:
-            self.assertIn("brand_registration", note, alias)
+    def test_each_row_is_justified_the_way_its_basis_claims(self):
+        """**Reads the basis column, and the first version of this read the prose — which passed
+        falsely.** It asserted every note names `brand_registration`; the two owner-ruled rows
+        satisfied that because their notes mention `brand_registration` *to say it does not support
+        them*. A true assertion about the wrong subject, the sixth of that shape this week. The basis
+        is structural now and this checks each path against its own standard.
+        """
+        for alias, _registered, _authored, basis, note in ALIASES:
+            if basis == PAIRING:
+                self.assertIn("brand_registration", note, alias)
+            else:
+                # D113's amendment: the note cites the ruling, which is the whole of the exception
+                # path. A date makes it findable in the decision log; the word makes it unmistakable.
+                self.assertIn("OWNER-RULED", note, alias)
+                self.assertIn("2026-", note, alias)
+
+    def test_no_note_rests_on_common_knowledge(self):
+        """D113's fence, stated as a refusal rather than left implicit. An owner-ruled row is an
+        *assertion somebody is accountable for*; "everyone knows" is an assertion nobody is."""
+        for alias, _registered, _authored, _basis, note in ALIASES:
+            lowered = note.lower()
+            for banned in ("everyone knows", "common knowledge", "obviously", "well known"):
+                self.assertNotIn(banned, lowered, alias)
+
+    def test_an_owner_ruled_row_says_how_to_withdraw_it(self):
+        """A pairing row is withdrawn by checking a source. An owner-ruled row can only be withdrawn
+        by asking the owner, and a reader who does not know that will go looking for a source that
+        does not exist."""
+        for alias, _registered, _authored, basis, note in ALIASES:
+            if basis == OWNER_RULED:
+                self.assertIn("assertion", note.lower(), alias)
 
     def test_the_author_is_named_and_is_not_a_publisher(self):
         self.assertEqual(AUTHOR, "operator")
 
     def test_no_alias_duplicates_another(self):
-        pairs = [(a, r) for a, r, _d, _n in ALIASES]
+        pairs = [(a, r) for a, r, _d, _b, _n in ALIASES]
         self.assertEqual(len(pairs), len(set(pairs)))
 
 
@@ -185,6 +212,12 @@ class TheTableJoinsNothing(unittest.TestCase):
         for column in ("authored_by", "authored_at", "note"):
             index = source.index('"{}"'.format(column))
             self.assertIn("nullable=False", source[index:index + 200], column)
+
+    def test_the_basis_column_is_constrained_to_the_two_paths(self):
+        """0029. A basis that can be any string is a basis nobody has to justify."""
+        source = open(BASIS_MIGRATION, encoding="utf-8").read()
+        self.assertIn("basis in ('pairing', 'owner-ruled')", source)
+        self.assertIn('alter_column("search_alias", "basis", nullable=False)', source)
 
 
 if __name__ == "__main__":
