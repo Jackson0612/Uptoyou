@@ -1,48 +1,67 @@
 import { m, useReducedMotion } from '@/lib/motion'
+import { PIPS } from './Die'
 
 /**
- * The ground the dice are thrown onto — halftone, light, and drift.
+ * The ground the dice are thrown onto — 網點即骰點, evaluator-ruled 2026-08-20 under D101's
+ * delegation.
  *
- * **This exists because the motion was never the problem.** Six animations were rejected as 廉價
- * and the seventh would have been too: the field they played on was a flat cream rectangle with two
- * white cubes on it and nothing else, and no amount of easing fixes an empty room. The evaluator
- * read 120 frames of the reference the owner pointed at and found its quality came from three small
- * things happening at once rather than from one big animation. All three are here; none of them is
- * an animation of the dice.
+ * **The owner's complaint was 單調 and the licence was a static image; the ruling spends it on
+ * pattern instead.** The halftone dot is print's own texture AND the die's pip — the one mark this
+ * product owns — so the ground can be busy without importing a second visual language. Riso-print
+ * logic: paper, spot colours, halftone. Pure CSS tiles, **zero image assets**, so §6's dead-wifi
+ * rule is untouched by a decision about decoration.
  *
- * **1 · Halftone, bleeding from two corners.** Texture that reads while nothing is moving, which is
- * the state this screen is in for most of the time anyone looks at it. Two fields at different dot
- * pitches so the corners have depth rather than a pattern. Drawn in `currentColor`, so it is ink on
- * the paper ground and the on-flood pair after the flood — one declaration, both states, and it can
- * never end up as ink on ink.
+ * **The glow is gone. Print does not glow.** It survived two tunings on the argument that a light
+ * source is not a shadow, and the ruling retires the whole idea rather than the sizing: a page that
+ * behaves like paper cannot have a lamp behind it.
  *
- * **2 · A light source, not a shadow.** The object is *lit*; it is not *raised*. The distinction is
- * load-bearing and the evaluator learned it the expensive way: they put the glow **behind the dice**
- * and it washed them into pale grey-green plastic with muted pips. **The light belongs on the
- * ground around the object and never on the object's own face** — so this sits under `.dice` in the
- * stack and the die faces keep their solid paper fill and hard ink pips, untouched.
+ * **Tumble — neutral, and neutral is a D91 requirement rather than a taste.** A field of even dots
+ * plus a denser table band at the bottom edge for the dice to land on. **No cluster may read as a
+ * die face before the result exists**, because a ground that answers first is the animation
+ * asserting something it does not yet have.
  *
- * **3 · Ambient drift, phase-offset per layer.** The reference's cards never stop moving and never
- * move together — between two frames 45 apart they had each shifted differently. **Slow, small, and
- * out of phase is the whole trick**: sync it and it reads as the page wobbling.
+ * **Staged — the ground repeats the truth, it never invents it.** This round's real pair prints as
+ * two poster-scale faces in a darker step of the flood's own colour. They are the *stored* dice, so
+ * `RV-16` is untouched — nothing appears before landed, and nothing on screen mid-tumble
+ * distinguishes the winner. The tone sits under the text layer: **copy is always the brightest
+ * layer.**
  *
- * **What deliberately does NOT drift: the dice.** They were thrown and they landed. A resting die
- * that floats is the animation asserting something that did not happen, which is the same argument
- * `D91` makes about everything else on this screen. The room breathes; the objects sit still.
+ * **A face needs its border to read as a face.** Cropped bare dots read as blobs, which is the
+ * rubric's own named slop; the 4px tone rule is what makes the shape legible while it bleeds off
+ * the edge.
  */
 
-/** Slow enough to be felt rather than watched. Each layer carries its own duration AND its own
- *  delay, because two layers on one duration drift apart only until the browser catches up. */
+/** Slow enough to be felt rather than watched, and out of phase so the two layers never move
+ *  together — synchronised drift reads as the page wobbling rather than as paper breathing. */
 const DRIFT = [
   { d: 6.5, delay: 0, x: [0, 7, 0], y: [0, -9, 0] },
   { d: 7.4, delay: -2.6, x: [0, -6, 0], y: [0, 8, 0] },
-  { d: 6.9, delay: -4.1, x: [0, 4, 0], y: [0, 6, 0] },
 ]
 
-export default function Field() {
+/** The two printed faces: which corner each bleeds off, and its fixed angle. **Fixed, never
+ *  random** — a ground that lands differently on every load reads as a glitch, and this one is a
+ *  record of a result rather than an effect. */
+const POSTER = [
+  { className: 'posterA', rotate: -5 },
+  { className: 'posterB', rotate: 4 },
+]
+
+function PosterFace({ value, className, rotate }: { value: number; className: string; rotate: number }) {
+  return (
+    <span className={`poster ${className}`} style={{ transform: `rotate(${rotate}deg)` }}>
+      {Array.from({ length: 9 }, (_, i) => i + 1).map((cell) => (
+        <span key={cell} className="posterCell">
+          {PIPS[value]?.includes(cell) && <i className="posterPip" />}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+export default function Field({ dice, staged }: { dice?: readonly number[]; staged: boolean }) {
   const reduce = useReducedMotion()
   /** Reduced motion stops the drift **on a legible frame** rather than removing the layers — the
-   *  halftone and the light are texture, not motion, and they are what the screen looks like. */
+   *  halftone is texture, not motion, and it is what the screen looks like. */
   const drift = (i: number) =>
     reduce
       ? {}
@@ -60,7 +79,19 @@ export default function Field() {
     <div className="field" data-part="field" aria-hidden="true">
       <m.span className="halftone halftoneA" {...drift(0)} />
       <m.span className="halftone halftoneB" {...drift(1)} />
-      <m.span className="glow" {...drift(2)} />
+      {/* The table the dice land on — present only while they are in the air, because once they
+          have landed the composition is a printed page and not a table. */}
+      {!staged && <span className="tableBand" />}
+      {/* **Gated on `staged` AND on the values existing.** Two conditions rather than one: `staged`
+          is the screen's own state and `dice` is what the server stored, and a ground drawn from a
+          state without a value is exactly the ground that could answer first. */}
+      {staged && dice && dice.length >= 2 && (
+        <span className="posters">
+          {POSTER.map((p, i) => (
+            <PosterFace key={p.className} value={dice[i]} className={p.className} rotate={p.rotate} />
+          ))}
+        </span>
+      )}
     </div>
   )
 }

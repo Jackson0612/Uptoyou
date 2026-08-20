@@ -86,46 +86,72 @@
 .reveal .field { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 .reveal > *:not(.field) { position: relative; z-index: 1; }
 
-/* Halftone. `currentColor` and not a token: the reveal crosses from ink-on-paper to an on-flood
-   pair, and a fixed colour would be right in one state and wrong in the other. Two pitches, two
-   corners, two opacities — the corners get depth rather than a repeat. */
+/* ═══ the reveal's ground — 網點即骰點 ═══════════════════════════════════════════════════════
+   Evaluator-ruled 2026-08-20. Pure CSS tiles, zero image assets, so §6's dead-wifi rule is not
+   touched by a decision about decoration.
+
+   `currentColor` and not a token: the reveal crosses from ink-on-paper to an on-flood pair, and a
+   fixed colour would be right in one state and wrong in the other. */
 .reveal .halftone {
   position: absolute; inset: -6%;
   background-image: radial-gradient(circle at center, currentColor 1.1px, transparent 1.3px);
   will-change: transform;
 }
-.reveal .halftoneA {
-  background-size: 13px 13px; opacity: .11;
-  -webkit-mask-image: radial-gradient(ellipse 62% 58% at 2% 2%, #000 0%, transparent 72%);
-  mask-image: radial-gradient(ellipse 62% 58% at 2% 2%, #000 0%, transparent 72%);
-}
-.reveal .halftoneB {
-  background-size: 21px 21px; opacity: .085;
-  -webkit-mask-image: radial-gradient(ellipse 58% 54% at 99% 99%, #000 0%, transparent 70%);
-  mask-image: radial-gradient(ellipse 58% 54% at 99% 99%, #000 0%, transparent 70%);
+/* **~7% on an 18px tile: a neutral field.** Even, all over, no corner heavier than another —
+   because `D91` forbids a ground that answers before the result exists, and an uneven field is
+   read for meaning the moment a person is waiting for one. */
+.reveal .halftoneA { background-size: 18px 18px; opacity: .07; }
+/* A second pitch for tooth. Slightly finer and fainter, so the two together read as paper grain
+   rather than as a pattern with a period. */
+.reveal .halftoneB { background-size: 11px 11px; opacity: .045; }
+
+/* **The table the dice land on.** Denser dots and a hairline top — the structural line the throw
+   has to have somewhere, drawn as tone rather than as a border on a box. It exists only while the
+   dice are in the air; once they have landed the composition is a printed page, and a page has no
+   table. 1px is the hairline weight in §5's stroke hierarchy, and this is the one thing on the
+   ground that is a rule rather than tone. */
+.reveal .tableBand {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 22vh;
+  background-image: radial-gradient(circle at center, currentColor 1.2px, transparent 1.4px);
+  background-size: 12px 12px;
+  opacity: .13;
+  border-top: 1px solid currentColor;
 }
 
-/* The light. Sized in `vmin` so it is the same light at every width, sat over the dice region, and
-   blurred rather than hard-edged because a hard-edged glow is a shape and not a light. */
-/* **Tuned down twice, both times from a screenshot rather than from taste.** At `62vmin` and
-   `.58` alpha it stopped being a light and became a wash: it reached the winner's name and took the
-   contrast out of the largest type on the screen, which is the opposite of what a light source is
-   for. It now sits tight around the dice and falls off before the headline starts.
+/* ── the printed pair, staged state ────────────────────────────────────────────────────────
+   This round's REAL dice, poster-scale, in a darker step of the flood's own colour. The ground
+   repeats the truth and never invents it: these are the stored values, so nothing appears before
+   landed and `RV-16` is untouched.
 
-   The evaluator's warning holds in the other direction too — the light must not touch the object's
-   own face. The die faces are opaque and this sits under them in the stack, so it lights the ground
-   they are on and nothing else. */
-.reveal .glow {
-  position: absolute; left: 50%; top: 11%;
-  width: 44vmin; height: 44vmin; margin: -22vmin 0 0 -22vmin;
-  border-radius: 50%;
-  background: radial-gradient(circle,
-    rgb(255 255 255 / .34) 0%,
-    rgb(255 255 255 / .14) 40%,
-    transparent 70%);
-  filter: blur(16px);
-  will-change: transform;
+   **Under the text layer, always.** `.field` is `z-index: 0` and every sibling is 1, so copy is the
+   brightest thing on the screen by construction rather than by tuning an opacity. */
+.reveal .posters { position: absolute; inset: 0; }
+.reveal .poster {
+  position: absolute;
+  inline-size: 340px; block-size: 340px;
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 26px;
+  box-sizing: border-box;
+  /* **4px so a face reads as a face.** Cropped bare dots read as blobs — the rubric's named slop —
+     and the border is what carries the shape while the tile bleeds off the edge. */
+  border: 4px solid var(--flood-deep, currentColor);
+  color: var(--flood-deep, currentColor);
 }
+/* Bleeding off OPPOSITE edges, so the two read as one printed sheet rather than as a pair of
+   stickers placed on it. */
+.reveal .posterA { left: -84px; bottom: -96px; }
+.reveal .posterB { right: -104px; top: -86px; }
+.reveal .posterCell { display: grid; place-items: center; }
+.reveal .posterPip {
+  inline-size: 54px; block-size: 54px; border-radius: 50%;
+  background: currentColor;
+}
+
+/* Every flood face names its own deep step; one recipe, four colours, no per-colour design. */
+.reveal[data-face="hot"]    { --flood-deep: var(--color-flood-hot-deep); }
+.reveal[data-face="cobalt"] { --flood-deep: var(--color-flood-cobalt-deep); }
+.reveal[data-face="jade"]   { --flood-deep: var(--color-flood-jade-deep); }
+.reveal[data-face="sun"]    { --flood-deep: var(--color-flood-sun-deep); }
 
 /* ── A7 · the die's own space ────────────────────────────────────────────────
    **D109's camera was retracted by the owner on 2026-08-19 (「這些動畫沒有達到我的標準」) and this
@@ -384,10 +410,19 @@
   font-weight: 900;
   font-size: 22px;
   line-height: 1.05;
-  writing-mode: vertical-rl;
   /* The seal is 80 px and a nickname is not length-checked anywhere, so a long one is clipped
      rather than allowed to burst the box the other state reserved. */
-  max-block-size: 64px; overflow: hidden;
+  max-block-size: 64px; max-inline-size: 64px; overflow: hidden;
+}
+/* **The fork is data-driven and the reason is legibility, not preference.** `vertical-rl` sets CJK
+   top-to-bottom — what a seal does — and rotates Latin 90 degrees, where a rotated word reads as a
+   label on its side rather than as a stamped mark. */
+.reveal .sealName[data-set="vertical"] { writing-mode: vertical-rl; }
+.reveal .sealName[data-set="horizontal"] {
+  writing-mode: horizontal-tb;
+  /* Smaller, because a Latin name is wider per character than the CJK the 80px seal was sized for
+     and the box may not grow — the other state reserved it. */
+  font-size: 17px; letter-spacing: -.01em; text-align: center; overflow-wrap: anywhere;
 }
 /* The question IS in the display face — it is static copy, so `subset_fonts.display_characters()`
    reads it out of this stylesheet and the `.tsx` together and cuts the face to fit. That is the

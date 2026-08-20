@@ -45,7 +45,7 @@ const SHOW: Record<number, { x: number; y: number }> = {
 }
 
 /** The pip positions on a 3×3 grid, by value. Index 1–9, reading left to right, top to bottom. */
-const PIPS: Record<number, number[]> = {
+export const PIPS: Record<number, number[]> = {
   1: [5],
   2: [1, 9],
   3: [1, 5, 9],

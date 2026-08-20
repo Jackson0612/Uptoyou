@@ -349,7 +349,7 @@ export default function Reveal({ roundId }: { roundId: number }) {
       // content is that nothing has reacted yet. The screen reacts once, after it.
       data-face={staged && face ? face : undefined}
     >
-      <Field />
+      <Field dice={data?.dice} staged={staged} />
 
       <div className="stage">
 
@@ -481,7 +481,21 @@ export default function Reveal({ roundId }: { roundId: number }) {
                one the wire carries, and it is the only member identity this screen keeps. */
             <p className="sealRow" data-part="trip">
               <span className="seal sealSigned">
-                <span className="sealName">{trip.nickname}</span>
+                {/* **Vertical for a name with CJK in it, horizontal for an all-Latin one**
+                    (evaluator-ruled 2026-08-20). `vertical-rl` sets CJK top-to-bottom, which is
+                    what a seal does; it rotates Latin 90 degrees, and **a rotated word is not a
+                    stamped one** — it reads as a label lying on its side. The fork is on the data
+                    rather than on a setting, because the nickname is whatever someone typed.
+
+                    The test is *does it contain CJK*, not *is it all Latin*: a mixed name like
+                    `Amy美` is set vertically, which is right — the CJK half is the half the
+                    vertical setting exists for. */}
+                <span
+                  className="sealName"
+                  data-set={/[\u3400-\u9FFF\uF900-\uFAFF]/.test(trip.nickname) ? 'vertical' : 'horizontal'}
+                >
+                  {trip.nickname}
+                </span>
               </span>
               <span className="sealSaid">說這一餐去了</span>
             </p>

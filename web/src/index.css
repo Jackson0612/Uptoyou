@@ -158,6 +158,18 @@
   --color-flood-jade: #00A870;
   --color-flood-sun: #FFC300;
 
+  /* **The `-deep` step — one recipe, four colours** (the reveal's ground, evaluator-ruled
+     2026-08-20). The staged flood prints this round's real pair as poster-scale die faces in a
+     darker step of the flood's OWN colour, so the ground is the same ink as the page rather than a
+     second palette. `hot` reuses the `hot-ink` family it already has; the other three are one step
+     down the same hue. **They are tokens rather than `color-mix()` in place** because the ground is
+     tone under type and its contrast was checked per face — a computed step would move silently
+     the day a flood colour is retuned. */
+  --color-flood-hot-deep: #D95204;
+  --color-flood-cobalt-deep: #1B34B8;
+  --color-flood-jade-deep: #007A51;
+  --color-flood-sun-deep: #D19E00;
+
   /* the die is an OBJECT, not a surface — identical in both schemes. `pipred` is its
      own token and never follows an accent that flips (reusing the accent measured
      2.74:1 on a bone face in dark, under the 3:1 floor for a graphical object). */
