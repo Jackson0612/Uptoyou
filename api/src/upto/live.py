@@ -212,7 +212,22 @@ async def search_places(
                         "where rp.publication_id = :pub "
                         "and (rp.name ilike '%' || :q || '%' "
                         "  or brand.brand_name ilike '%' || :q || '%' "
-                        "  or storefront.name ilike '%' || :q || '%') "
+                        "  or storefront.name ilike '%' || :q || '%' "
+                        # **D113's authored alias, and it is in the `where` and nowhere else.**
+                        # A member typing 星巴克 must reach 悠旅生活事業股份有限公司 — no
+                        # publisher has ever written those three characters, so no rung of the
+                        # ladder can match them. This clause is the whole of that fix.
+                        #
+                        # **It widens the match and touches no name.** The `select` above is
+                        # `coalesce(storefront.name, brand.brand_name, rp.name)` and stays that
+                        # way: D113's first iron law is match-only, never displayed, so a row
+                        # found through an alias is *shown* under whatever the publisher calls
+                        # it. Putting `search_alias.alias` in that coalesce would be the one
+                        # edit that breaks the ruling, which is why the two live four lines
+                        # apart with this comment between them.
+                        "  or rp.name in ("
+                        "    select registered_name from search_alias "
+                        "    where alias ilike '%' || :q || '%')) "
                         # D81: a 統編 the registry records as dead — an explicitly dead row
                         # and no 核准設立 row anywhere under the number — is hidden from
                         # this search and only this search. Proposals by hand (circle-local)
