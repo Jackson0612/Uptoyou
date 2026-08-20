@@ -184,3 +184,12 @@
   color: var(--color-muted);
   overflow-wrap: anywhere;
 }
+
+/* The failure statement. Same size and place as the zero-result line, different register — the
+   accent as text on paper, which is the pair `hot-ink` exists for (hot itself measures 2.33 on
+   paper and is a ground colour, not a text colour). */
+.round .roundFail {
+  margin: 14px 0 0;
+  font-size: var(--text-body);
+  color: var(--color-hot-ink);
+}

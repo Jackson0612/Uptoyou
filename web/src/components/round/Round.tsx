@@ -37,6 +37,11 @@ export default function Round() {
    *  the box right now. **Not a boolean**: it holds the string, so a stale answer for an older
    *  query can never be read as an answer for this one. */
   const [answered, setAnswered] = useState<string | null>(null)
+  /** The query whose request came back with no answer at all. Same shape and same guard as
+   *  `answered` for the same reason — **a late-arriving failure for an old query must not smear the
+   *  current one**, which is the stale-response hazard the sequence number already handles on the
+   *  success path, met on the third path. */
+  const [failed, setFailed] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const seq = useRef(0)
@@ -71,18 +76,30 @@ export default function Round() {
   // and the list silently reverts to the broader search.
   useEffect(() => {
     const query = q.trim()
-    if (!dev || query.length === 0) { setHits([]); setAnswered(null); return }
+    if (!dev || query.length === 0) { setHits([]); setAnswered(null); setFailed(null); return }
     const mine = ++seq.current
     // **Cleared on every keystroke, so "answered" can never describe an older query.** This is the
     // whole mechanism behind the zero-result line: `hits.length === 0` is true while a request is
     // in flight AND when it came back with nothing, and those are different facts to a person.
     setAnswered(null)
+    setFailed(null)
     const t = window.setTimeout(() => {
-      void searchPlaces(dev, query).then((r) => {
-        if (mine !== seq.current) return
-        setHits(r)
-        setAnswered(query)
-      })
+      void searchPlaces(dev, query)
+        .then((r) => {
+          if (mine !== seq.current) return
+          setHits(r)
+          setAnswered(query)
+        })
+        // **A request that got no answer is its own state, not an empty result.** Before this it
+        // was an unhandled rejection and the screen simply stayed blank — the same ambiguity the
+        // zero-result line was built to close, surviving on the branch nobody drove. `hits` is
+        // emptied too, so a failure cannot leave the previous query's rows on screen under a
+        // sentence saying the search did not answer.
+        .catch(() => {
+          if (mine !== seq.current) return
+          setHits([])
+          setFailed(query)
+        })
     }, 180)
     return () => window.clearTimeout(t)
   }, [dev, q])
@@ -172,6 +189,21 @@ export default function Round() {
           `data-shape` so the gate keys on structure rather than on the sentence, the same reasoning
           as `A2-G8-zero`: copy is ruled and re-ruled, and a test that greps for wording fails on a
           rewording that changed nothing about the shape. */}
+      {/* **A search that got no answer is a fault, and is drawn as one.** Evaluator-ruled
+          2026-08-20. `hot-ink` rather than muted, because a zero result is a normal outcome and a
+          request that never came back is not — drawing the second in the calm register would
+          misreport it exactly the way the silence did. Three facts, three shapes:
+          zero-measured, zero-because-unanswered, zero-because-no-data.
+
+          **One sentence, and no retry advice.** The typeahead retries on the next keystroke, so
+          the recovery path is the member's very next natural act; writing it down would be the
+          screen telling them what to do, which D20 forbids. */}
+      {failed !== null && (
+        <p className="roundFail" data-part="search-error" data-shape="error">
+          搜尋沒有回應。
+        </p>
+      )}
+
       {answered !== null && answered.length > 0 && hits.length === 0 && (
         <p className="roundEmpty" data-part="search-empty" data-shape="empty">
           沒有店家對上「{answered}」。
