@@ -37,6 +37,24 @@ from sqlalchemy.exc import IntegrityError
 
 from upto.db import dispose_all, session_factory
 
+# **D110 as amended 2026-08-20 (owner-ruled): the supported shape is 10 people.** Ten seats, three
+# proposals each, so 30 candidate places against D72's 36 dice outcomes — the apportionment has room
+# and D108's decider draw is nowhere near the byte boundary that H48 records.
+#
+# **Enforced here because this command is the only door.** D74's invite flow does not exist yet, and
+# this file's own docstring says so; when it lands, the member-facing refusal belongs there and must
+# read from this constant rather than restating the number.
+#
+# **The cap refuses the next join and deletes nothing — D110's no-migration rule.** A circle that is
+# already over it stays exactly as it is: the fixture circle held 291 seats when this landed, every
+# one of them written before the rule existed, and removing them is a separate decision nobody has
+# made. So this reads "the eleventh seat is refused", not "a circle has at most ten seats".
+#
+# **Deliberately not a database trigger.** A trigger would hold the rule for every writer including
+# a future one, which is the stronger guarantee — and it would need a migration, and D110's ruling
+# named the join path. Left as a possible follow-up rather than smuggled in.
+SEAT_CAP = 10
+
 
 async def issue(circle_id: int, nickname: str, principal_id: int | None,
                 operator: bool = False) -> int:
@@ -53,6 +71,24 @@ async def issue(circle_id: int, nickname: str, principal_id: int | None,
             ).scalar_one_or_none()
             if circle_name is None:
                 print(f"no circle with id {circle_id} — nothing was written", file=sys.stderr)
+                return 1
+
+            # **Counted before anything is minted**, so a refusal writes nothing at all — no
+            # principal, no device_secret, no token printed. The `IntegrityError` path below rolls
+            # back for the same reason; this one never starts.
+            seats = (
+                await session.execute(
+                    text("select count(*) from member where circle_id = :c"), {"c": circle_id}
+                )
+            ).scalar_one()
+            if seats >= SEAT_CAP:
+                print(
+                    f"circle {circle_id} ({circle_name}) already holds {seats} seats and the "
+                    f"supported shape is {SEAT_CAP} — nothing was written. D110: ten people, three "
+                    "proposals each. A circle already over the cap keeps its seats; this refuses "
+                    "the next one.",
+                    file=sys.stderr,
+                )
                 return 1
 
             if principal_id is None:

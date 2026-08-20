@@ -119,10 +119,75 @@ async def scenario(test_url: str) -> None:
     assert "no principal" in refused.stderr
     assert await counts(Session) == (1, 2, 2)
 
+    # ---- D110's cap, amended 2026-08-20: the supported shape is ten people -------------------
+    #
+    # **Filling a circle to the cap and asking for one more, through the real CLI.** The number is
+    # read from the module rather than written here: a test that restates a constant is a test that
+    # passes after somebody changes the constant and forgets the rule.
+    sys.path.insert(0, "/srv/src")
+    from upto.issue import SEAT_CAP  # noqa: PLC0415 — read the shipped value, never a copy
+
+    before = await counts(Session)
+    for index in range(SEAT_CAP - 1):  # circle_a already holds Kevin
+        filled = run_issue(test_url, str(circle_a), "seat{}".format(index))
+        assert filled.returncode == 0, filled.stderr
+    async with Session() as session:
+        seats = (
+            await session.execute(
+                text("select count(*) from member where circle_id = :c"), {"c": circle_a}
+            )
+        ).scalar_one()
+    assert seats == SEAT_CAP, "filling to the cap should have been allowed, got {}".format(seats)
+
+    at_cap = await counts(Session)
+    over = run_issue(test_url, str(circle_a), "eleventh")
+    assert over.returncode == 1, over.stdout
+    assert "supported shape is {}".format(SEAT_CAP) in over.stderr, over.stderr
+    # **The refusal writes NOTHING — not a principal, not a device_secret, not a member.** The count
+    # is taken before anything is minted for exactly this reason; the `IntegrityError` path rolls
+    # back, and this one never starts. An orphan `device_secret` would be a credential belonging to
+    # nobody, which is worse than a refused join.
+    assert await counts(Session) == at_cap, (
+        "a refused eleventh seat left rows behind: {} -> {}".format(at_cap, await counts(Session))
+    )
+    # And no token was printed, so nothing was handed out that could later be presented.
+    assert "token:" not in over.stdout, over.stdout
+
+    # **The other circle is unaffected** — the cap is per circle, not per principal or per install.
+    still_fine = run_issue(test_url, str(circle_b), "又一位")
+    assert still_fine.returncode == 0, still_fine.stderr
+
+    # **A circle already over the cap keeps its seats and refuses the next one** — D110's
+    # no-migration rule, which is the whole reason this reads as a refusal at join rather than as an
+    # invariant on the table. Simulated by capping-then-inserting directly, because the CLI cannot
+    # create the state the rule has to tolerate.
+    async with Session() as session:
+        oversized = (
+            await session.execute(
+                text("insert into circle (name) values ('over') returning id")
+            )
+        ).scalar_one()
+        for index in range(SEAT_CAP + 5):
+            principal = (
+                await session.execute(text("insert into principal default values returning id"))
+            ).scalar_one()
+            await session.execute(
+                text("insert into member (principal_id, circle_id, nickname) "
+                     "values (:p, :c, :n)"),
+                {"p": principal, "c": oversized, "n": "legacy{}".format(index)},
+            )
+        await session.commit()
+    packed = await counts(Session)
+    refused_over = run_issue(test_url, str(oversized), "one more")
+    assert refused_over.returncode == 1, refused_over.stdout
+    assert "already holds {} seats".format(SEAT_CAP + 5) in refused_over.stderr, refused_over.stderr
+    assert await counts(Session) == packed, "the over-cap refusal wrote something"
+
     await engine.dispose()
     print(
         "ticket 18: the printed token is a working credential, --principal seats without a "
-        "second identity, and every refusal leaves no rows"
+        "second identity, every refusal leaves no rows, and D110's ten-seat cap refuses the "
+        "eleventh join while leaving an already-oversized circle exactly as it is"
     )
 
 
