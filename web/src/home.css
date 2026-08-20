@@ -32,7 +32,7 @@
      480px is swept, not chosen: at 620 the page measures 0.222 mean saturation / 22.1% high-sat
      against ceilings of 0.20 and 20%. The break is between 510 and 540; 510 passes at exactly
      0.200, which is the "holds only at the ceiling" shape the type ladder exists to forbid. */
-  .col   { min-height: calc(100vh - var(--bar-h) - 20px); display: flex; flex-direction: column; }
+  .col   { min-height: calc(100vh - 180px); display: flex; flex-direction: column; }
   .hero  { grid-template-columns: 46fr 54fr; gap: 44px; margin-top: 52px;
            flex: 1 1 auto; max-height: 480px; margin-block: auto; align-items: stretch; }
   /* the weather settles to the collage's foot rather than trailing the body copy */
@@ -147,29 +147,34 @@ h1.headline .lit { color: var(--color-hot-ink); }
 
    **The cost is stated rather than hidden.** At 1440×900 the line is invisible at rest — its text
    sits wholly inside the fixed bar's band — and the page's whole 75 px of scroll is what brings it
-   out, landing it 32 px clear (driven and measured, not derived). The approved frame ends at 804
-   and the bar owns 822 upward, so the clear band is 18 px and no margin fits a line of copy into
-   it; the only placement needing no scroll is inside the approved frame, which the ruling forbids.
+   out, landing it 32 px clear of the pinned bar (driven and measured, not derived).
 
-   **Measure the TEXT against the bar, never this box.** The box is 131 px tall and 111 of that is
-   the reservation below the text — a probe that asks whether the *box* clears the bar answers
-   `scrollY > 153`, which exceeds the page's 75 px range and reports the line as unreachable. It is
-   reachable. A box is not its content, and here the two answers differ by exactly the padding that
-   exists to keep the content safe. (The evaluator's probe made this call on 2026-08-19; the
-   correction is recorded here so the next reading of these numbers starts from the right edge.) */
+   **All of that is history since 2026-08-20: the bar is retired (option 乙) and this line has
+   nothing to clear.** The 56 px reservation under it went with the bar, and the column above gave
+   back 160 px so this line and the act below it are both inside 1440x900 without a scroll — which
+   is the ruling's own requirement for the act, and pointless to meet for the act alone while the
+   sentence that qualifies it sits under the fold.
+
+   **The measurement lesson stays, because it was not about the bar.** The box is not its content:
+   a probe that asked whether this *box* cleared the bar answered `scrollY > 153` against a page
+   whose whole scroll range was 75, and reported a reachable line as unreachable. The 111 px it was
+   measuring was padding that existed to protect the text. Any future question of the form *does X
+   clear Y* is asked of the glyphs — `Range.selectNodeContents(el).getBoundingClientRect()` — never
+   of the border box. (The evaluator's probe made this call on 2026-08-19; the correction is kept
+   here because the next reading of a clearance starts from the right edge or repeats it.) */
 .shape { width: min(1200px, 88vw); margin: 40px auto 0;
-         padding-bottom: calc(var(--bar-h) + 32px);
          font-size: var(--text-note); color: var(--color-muted); }
 
 /* ── the pinned bar ───────────────────────────────────────────────────────── */
-.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-       background: var(--color-hot); border-top: 2px solid var(--color-ink); }
-.bar button {
-  font: inherit; display: block; width: min(1200px, 88vw); margin: 0 auto;
-  height: var(--bar-h); border: 0; background: transparent; color: var(--color-on-hot);
-  font-size: var(--text-lead); font-weight: 900; letter-spacing: .04em; cursor: pointer;
-}
-.bar button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
+/* The act sits in the column, under the supported-shape line. The BAR that used to carry it was
+   retired 2026-08-20 (option 乙); `.act` itself is in `index.css` because three screens share it. */
+/* `homeAct`, not `.home .act-row` — **the home renders a fragment and there is no `.home`
+   element to descend from**, so the scoped selector matched nothing and the button sat at the
+   page's left edge instead of the text column's. Caught by measuring `left`, which read 0 against
+   the copy's 120. Every class in `app/web/src` is global (no CSS modules), so a screen-specific
+   name has to be distinctive on its own — the same reason this file has `dieCell` and not `cell`.
+   The width is the copy's own, so the act starts exactly where the sentence above it starts. */
+.homeAct { width: min(1200px, 88vw); margin: 28px auto 0; }
 
 /* ── the weather (W-2, owner-ruled) ───────────────────────────────────────────
    The rejected treatment ran six facts together with dots at one weight — a data dump wearing a

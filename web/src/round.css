@@ -7,7 +7,7 @@
   margin: 0 auto;
   padding-block: 20px 32px;
 }
-.round { padding-bottom: calc(var(--bar-h) + 24px); }
+.round { padding-bottom: 56px; }
 
 .deviceTitle, .roundTitle {
   font-size: var(--text-display);
@@ -90,30 +90,9 @@
 .round .rows .row:last-child { border-bottom: 0; }
 
 /* BAR — the screen's own action, pinned, one per screen. */
-.round .bar {
-  position: fixed; inset-inline: 0; bottom: 0; height: var(--bar-h);
-  display: flex; align-items: center; justify-content: center;
-  border-top: 3px solid var(--color-ink);
-  background: var(--color-hot); color: var(--color-on-hot);
-}
-.round .bar button {
-  height: 56px; padding: 0 32px; border: 0; background: transparent; color: inherit;
-  font-size: var(--text-body); font-weight: 900; cursor: pointer;
-}
-/* **A disabled control is never "filled" — §4 says it in those words, and the bar is a control.**
-   Fading the label while keeping the hot ground left a screen resting with a filled control that
-   cannot be pressed, which is both the fill grammar broken and the thing §4's PRIMARY rule refuses
-   for contrast reasons: a faded fill measured 2.75:1 against the floor. So the whole bar drops its
-   ground and takes the disabled shape — paper, muted label, dashed rule — and fills only when
-   there is something to roll. Caught by sweeping every screen after the day's changes rather than
-   by a gate. */
-.round .bar:has(button:disabled) {
-  background: var(--color-paper);
-  color: var(--color-muted);
-  border-top: 3px dashed var(--color-ink);
-}
-.round .bar button:disabled { cursor: not-allowed; }
-.round .bar button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
+/* The act closes the pool it acts on. The pinned BAR was retired 2026-08-20 (option 乙); `.act`
+   and its disabled shape live in `index.css`, shared by all three carriers. */
+.round .act-row { margin-top: 36px; }
 
 /* PRIMARY — ink ground, paper text, radius 0, and it is this screen's ONE filled control. Sized to
    its label rather than to the column: a full-bleed confirm on a two-field form reads as a banner. */

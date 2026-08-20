@@ -253,9 +253,19 @@ export default function Round() {
         </p>
       )}
 
-      <div className="bar" data-part="bar">
+      {/* **The act, inline — owner-ruled 2026-08-20, option 乙.** The pinned BAR is retired. It sits
+          at the end of the pool it acts on, so the reading order is *these are the places · this
+          is the commitment · roll it*, which is the order a person actually needs them in.
+
+          **The disabled state survives here and only here.** §4's rule that a disabled control is
+          never filled still applies pre-pool: with fewer than two places there is nothing to roll,
+          and a filled control would invite a press that does nothing. The old bar expressed this
+          as a dashed top rule; with no bar there is no rule to dash, and §5 rule 1 now names the
+          dashed box as an offender, so it is a bordered paper block instead. */}
+      <div className="act-row">
         <button
           type="button"
+          className="act"
           data-part="roll"
           disabled={roundId === null || pool.length < 2 || busy}
           onClick={() => {

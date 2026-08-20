@@ -444,6 +444,40 @@ export default function Reveal({ roundId }: { roundId: number }) {
             press. It claims that the allocation happened and that weight drove it. It does not
             claim the reader can check that, and it must not be dressed to imply so. */}
         <p className="sentence" data-part="sentence">三十六格已按權重分配</p>
+
+        {/* **The act, inline and inside `.answer` — owner-ruled 2026-08-20, option 乙.** The pinned
+            BAR is retired; the act belongs to the composition it acts on. It sits under the winner
+            block and starts at the same left edge as the headline, so the column reads as one
+            column rather than a page with a control bolted to its foot.
+
+            **Inside `.answer` on purpose, and that is what "renders only in the staged state"
+            buys.** The block already carries `aria-hidden` and `inert` while the dice tumble and
+            fades in with the name, so there is no moment where a control invites a press that
+            would do nothing — which deletes the disabled state from this screen entirely rather
+            than restyling it. `D91`'s zero-shift clause is kept for free: the act arrives with the
+            block it lives in, so nothing above it moves.
+
+            **`.on-flood` draws it in the flood's own foreground colour, never in hot.** The old bar
+            was hot-on-cobalt and that clash is what died with it; `currentColor` means one
+            declaration serves all four winning faces and no frame can render ink on ink. */}
+        <div className="act-row on-flood" data-part="act">
+          {trip ? (
+            /* D106 — the trip is named; the proposal it came from never is. Same position, same
+               box as the button: §5 rule 2's cross-fade carried over from the bar, so the block
+               does not resize when the state changes. */
+            <p className="signed" data-part="trip">{trip.nickname} 說這一餐去了</p>
+          ) : (
+            <button
+              type="button"
+              className="act"
+              data-part="sign"
+              onClick={() => void sign()}
+              disabled={signing}
+            >
+              我們去了
+            </button>
+          )}
+        </div>
       </m.div>
 
       {/* **§0b, owner-amended: the member sees the LIST, never the numbers.** 「使用者畫面我認為可
@@ -503,18 +537,6 @@ export default function Reveal({ roundId }: { roundId: number }) {
 
       </div>
 
-      {/* D106 — the trip is named, the proposal never is. Signing is the one place a member's
-          identity is recorded and kept; the proposal's author was erased by D14's trigger when the
-          round closed, so there is no name here to leak and none to suppress. */}
-      <div className="bar" data-part="bar">
-        {trip ? (
-          <p className="signed" data-part="trip">{trip.nickname} 說這一餐去了</p>
-        ) : (
-          <button type="button" onClick={() => void sign()} disabled={!landed || signing}>
-            我們去了
-          </button>
-        )}
-      </div>
     </main>
   )
 }

@@ -186,10 +186,104 @@
                "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK TC",
                system-ui, -apple-system, sans-serif;
 
-  /* §4 · BAR reserves its own height in ONE declaration, so a screen carrying one sets
-     `padding-bottom: calc(var(--bar-h) + 16px)` and nothing else. */
-  --bar-h: calc(76px + env(safe-area-inset-bottom, 0px));
+  /* §5 · the motion tokens, and there are exactly three. Chosen PER ROLE rather than one
+     duration copied onto everything — a single number on every transition is the database's own
+     named anti-pattern, and a fourth number here is a ruling rather than a tweak (§5 質感 rule 3).
+
+     `--t-press` is also §5 rule 2's cross-fade: a control's state change and a control's press are
+     the same event at two ends, so they are the same length by construction rather than by two
+     numbers that happen to match today. */
+  --t-press: 120ms;
+  --t-hover: 120ms;
+  --t-flood: 450ms;
+
+  /* **`--bar-h` is retired (owner-ruled 2026-08-20, option 乙).** The pinned BAR is gone from all
+     three carriers and the act moved inline into each composition, so there is no reserved band and
+     nothing reserves space for one. Kept as a note rather than deleted silently: three stylesheets
+     used to set `padding-bottom: calc(var(--bar-h) + …)` and one screen's `min-height` subtracted
+     it, and a reader finding those in history should know they were removed together rather than
+     wonder which screen still needs it. Nothing may reintroduce a fixed bottom element without a
+     ruling — the band's whole cost was that it covered content that had no way to scroll clear of
+     it (`BF-1`). */
 }
+
+/* ═══ §5 質感 · the ACT — this surface's one primary control ═══════════════════════════════════
+   Owner-ruled 2026-08-20 (option 乙): the pinned BAR is retired and the act moves inline into each
+   composition. One class, three carriers — home, round, reveal — so the three cannot drift into
+   three dialects of the same button.
+
+   **Drawn as a filled ink block, which is §5 rule 1's vocabulary and not a web widget.** Zero
+   radius, a 2px ink border (rule 5's component weight), the accent as ground. The test the rule
+   states is *could this appear in any SaaS form unchanged?* — a square, hard-edged, ink-bordered
+   block of accent with 900-weight CJK on it could not.
+
+   **Press is an INK-FILL and never a scale (§5 rule 2).** Ground goes to ink, label goes to paper,
+   over `--t-press`, and the box does not move: a stamp inks, it does not shrink. Worth recording
+   because the `ui-ux-pro-max` database — which the owner ruled we consult — offers `active:scale-95`
+   as its own *good* example for this exact question. The precedence is fixed and it is why the rule
+   is written down: rulings > design.md > the database.
+
+   **A disabled act is never filled — §4, in those words.** It drops the ground entirely and becomes
+   paper with a muted label, because a filled control that cannot be pressed both breaks the fill
+   grammar and fails contrast (a faded fill measured 2.75:1). The old bar carried a dashed top rule
+   in this state; with no bar there is no rule to dash, and §5 rule 1 now names the dashed box as an
+   offender, so the disabled state is a solid-bordered paper block. Translation of an existing
+   ruling into a composition that no longer has the element it described — flagged to the evaluator
+   rather than decided quietly. */
+.act {
+  display: inline-block;
+  border: 2px solid var(--color-ink);
+  border-radius: 0;
+  background: var(--color-hot);
+  color: var(--color-on-hot);
+  font: inherit;
+  font-size: var(--text-body);
+  font-weight: 900;
+  padding: 16px 40px;
+  cursor: pointer;
+  /* Named properties, not `all`: `all` would sweep the focus outline into the same fade and make
+     the keyboard ring arrive late, which is a real a11y regression for a decorative saving. */
+  transition: background-color var(--t-press) ease-out, color var(--t-press) ease-out;
+}
+
+@media (hover: hover) {
+  .act:hover:not(:disabled) { background: var(--color-hot-ink); color: var(--color-paper); }
+}
+
+/* `:active` and not a JS pressed-state: the browser's own is exact, survives a drag off the
+   control, and cannot desynchronise from React state — §5 rule 4's spirit at the smallest scale. */
+.act:active:not(:disabled) { background: var(--color-ink); color: var(--color-paper); }
+
+.act:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 3px; }
+
+.act:disabled {
+  background: transparent;
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+/* **On the flood, the act is drawn in the flood's own foreground colour, never in hot.** The old
+   bar was hot-on-cobalt, which is the clash that died with it. `currentColor` rather than a token
+   so one declaration serves all four winning faces and no frame can render ink-on-ink. */
+.on-flood .act {
+  background: transparent;
+  border-color: currentColor;
+  color: inherit;
+}
+@media (hover: hover) {
+  .on-flood .act:hover:not(:disabled) { background: currentColor; color: var(--color-ink); }
+}
+.on-flood .act:active:not(:disabled) { background: currentColor; color: var(--color-ink); }
+.on-flood .act:focus-visible { outline: 2px solid currentColor; }
+
+@media (prefers-reduced-motion: reduce) {
+  .act { transition: none; }
+}
+
+/* The act's own line. A block rather than an inline element so the control cannot end up sharing a
+   baseline with body copy, and left-aligned by inheritance — every carrier puts it at the same left
+   edge as the text above it, which is the whole reason the bar could go. */
+.act-row { margin-top: 40px; }
 
 /* §2 · the ladder, tier 2. `html[lang]` and not `html`: Tailwind emits the theme on
    `:root`, which is (0,1,0), and a bare `html` is (0,0,1) — it loses at every width and

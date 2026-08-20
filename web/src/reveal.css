@@ -14,7 +14,7 @@
   align-items: center;
   justify-content: center;
   gap: 24px;
-  padding: 24px 6vw calc(var(--bar-h) + 24px);
+  padding: 24px 6vw 64px;
   /* The flood. Ground and text cross to the winning face's pair together, so no frame of the
      transition has ink on ink. Both properties, one duration, one easing — §5 rule 1. */
   background: var(--color-paper);
@@ -294,38 +294,17 @@
    `BAR`: pinned, `3px ink` top rule, at most one per screen. Its box does not move, resize or
    slide when its content changes — §5 rule 2 allows an opacity and label cross-fade and nothing
    else, which is why the signed line and the button share one height. */
-.reveal .bar {
-  position: fixed;
-  inset-inline: 0;
-  bottom: 0;
-  height: var(--bar-h);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-top: 3px solid var(--color-ink);
-  background: var(--color-hot);
-  color: var(--color-on-hot);
-}
-.reveal .bar button {
-  height: 56px;
-  padding: 0 32px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: var(--text-body);
-  font-weight: 900;
-  cursor: pointer;
-}
-/* Same rule as the round screen's bar: a disabled control is never filled (§4). The reveal's bar
-   is disabled only for the moment the dice are still tumbling, which is exactly when a filled
-   control would invite a press that does nothing. */
-.reveal .bar:has(button:disabled) {
-  background: var(--color-paper);
-  color: var(--color-muted);
-  border-top: 3px dashed var(--color-ink);
-}
-.reveal .bar button:disabled { cursor: not-allowed; }
-.reveal .bar button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
+/* The act, inline under the winner block (owner-ruled 2026-08-20, option 乙). It lives inside
+   `.answer`, so it fades in with the name and is `inert` while the dice tumble — which is why this
+   screen has no disabled act at all any more.
+
+   **The signed line occupies the same box as the button**, so §5 rule 2's cross-fade carries over
+   from the retired bar: the state change is a swap of content in a box that does not resize. The
+   min-height is the button's own painted height — 2px border + 16px padding + the body line-box +
+   16px — rather than a round number, because a box sized by taste is a box that drifts the moment
+   the type scale moves. */
+.reveal .act-row { margin-top: 40px; min-height: calc(var(--text-body) * 1.5 + 36px);
+                   display: flex; align-items: center; }
 .reveal .signed { font-size: var(--text-body); font-weight: 700; margin: 0; }
 
 /* §5 rule 3 — reduced motion removes the tumble and both transitions, and **the end states still
@@ -583,7 +562,7 @@
   .reveal .stage {
     position: relative;
     width: 100%; min-height: 100vh; box-sizing: border-box;
-    padding: 238px var(--stage-pad) calc(var(--bar-h) + 32px);
+    padding: 238px var(--stage-pad) 72px;
   }
 
   /* ── the dice group ───────────────────────────────────────────────────────

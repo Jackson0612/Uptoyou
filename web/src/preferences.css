@@ -17,9 +17,11 @@
      readable at desktop and changes nothing at 430, where 88vw already wins. */
   width: min(720px, 88vw);
   margin: 0 auto;
-  /* No `--bar-h` reservation: this screen carries no pinned BAR, because whether it has one is
-     part of `[OPEN-2]`'s frame. Reserving space for a bar that may never exist would leave a band
-     of dead paper at the foot of a settings screen. */
+  /* No act and no reserved band. The pinned BAR was retired from all three carriers on
+     2026-08-20 (option 乙), so there is nothing left to reserve for anywhere — this screen was
+     simply the first that never had one. It is a screen a person leaves by the switcher rather
+     than by an act, and D25 requires the values arrive already filled in, so there is nothing here
+     to commit. */
   padding-block: 20px 32px;
 }
 

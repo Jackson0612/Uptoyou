@@ -118,17 +118,24 @@ export default function App() {
           owner already ruled off this screen. D20's register holds: it says what a circle holds,
           never what anyone should do about it.
 
-          Both limits are enforced, and this line is why neither refusal is a surprise — the 13th
+          Both limits are enforced, and this line is why neither refusal is a surprise — the 11th
           seat is refused at join and the 4th place at propose, and a person who read this knows
           before they hit either. */}
       <p className="shape" data-part="shape">
-        一個圈子最多 12 人，每人最多提 3 家店。
+        一個圈子最多 10 人，每人最多提 3 家店。
       </p>
 
-      {/* One filled control, and its label follows device state: a person with no key would
-          otherwise land on a home whose only primary action points where they cannot go. */}
-      <div className="bar" data-part="bar">
-        <button type="button">{hasDevice ? '這一餐' : '貼上鑰匙'}</button>
+      {/* **The act, inline — owner-ruled 2026-08-20, option 乙.** The pinned BAR is retired. One
+          filled control, and its label follows device state: a person with no key would otherwise
+          land on a home whose only primary action points where they cannot go.
+
+          It sits directly under the supported-shape line, which is the last thing the home says
+          before it asks for something — the sentence answers *can I use this?* and the act is
+          *then start*. */}
+      <div className="act-row homeAct">
+        <button type="button" className="act" data-part="enter">
+          {hasDevice ? '這一餐' : '貼上鑰匙'}
+        </button>
       </div>
     </>
   )
