@@ -317,7 +317,7 @@ export default function Die(
         {SIDES.map((side) => {
           const v = VALUE_ON[side]
           return (
-            <div key={side} className={`face ${side}`} data-face={v}>
+            <div key={side} className="face" data-die-side={side} data-face={v}>
               {Array.from({ length: 9 }, (_, i) => i + 1).map((cell) => (
                 <span key={cell} className="dieCell">
                   {PIPS[v].includes(cell) && (

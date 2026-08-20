@@ -203,12 +203,35 @@
   backface-visibility: hidden;
 }
 
-.reveal .face.front  { transform: translateZ(calc(var(--die) / 2)); }
-.reveal .face.back   { transform: rotateY(180deg) translateZ(calc(var(--die) / 2)); }
-.reveal .face.right  { transform: rotateY(90deg)  translateZ(calc(var(--die) / 2)); }
-.reveal .face.left   { transform: rotateY(-90deg) translateZ(calc(var(--die) / 2)); }
-.reveal .face.top    { transform: rotateX(90deg)  translateZ(calc(var(--die) / 2)); }
-.reveal .face.bottom { transform: rotateX(-90deg) translateZ(calc(var(--die) / 2)); }
+/* **`data-side`, not a class, and that rename IS the fix for `F-8`** (2026-08-20). The six sides
+   were `class="face right"`, `class="face top"` and so on — six of the most generic words in
+   English, sitting in a global namespace with no CSS modules. `.reveal .right` is this file's own
+   **right column** at ≥1100px (`position: absolute; top: 96px; width: 400px`), and it matched the
+   die's right face: same specificity as `.reveal .face`, declared 540 lines later, so it won
+   `top`/`right`/`width` outright while `inset: 0` lost them. Result: **die value 2 — and only
+   value 2, and only at ≥1100px — rendered as a 2:1 landscape domino at rest**, its own face box
+   514×69 against every other value's clean square. RV-14 broken on the built page while every
+   gate stayed green, because five values in six are fine and the eye reads them as a bad angle.
+
+   Renaming the COLUMN would have fixed one collision and left five loaded: `.left`, `.top`,
+   `.bottom`, `.front` and `.back` are just as claimable by the next layout class anyone writes.
+   Moving the side names out of the class namespace entirely closes the whole family. It is the
+   same disease and the same cure as `dieCell` below — that one was found by a black ground, this
+   one by a fixture sweep of all six values, which is the check that did not exist.
+
+   **`data-die-side` and not `data-side`, which was the first attempt and was wrong.** `data-side`
+   is Radix's own attribute on floating parts, and `shadcn/tailwind.css` already ships rules keyed
+   on it (`.data-\[side\=right\]\:translate-x-1[data-side=right]` and seven siblings). Those are
+   compound — class AND attribute — so they cannot reach a bare `.face`, and it would have worked.
+   But the whole argument for this change is *stop living in a namespace somebody else writes to*,
+   and landing in one that ships populated would have made this comment false while the render
+   stayed green. Checked before choosing: `data-die-side` appears nowhere else in the tree. */
+.reveal .face[data-die-side="front"]  { transform: translateZ(calc(var(--die) / 2)); }
+.reveal .face[data-die-side="back"]   { transform: rotateY(180deg) translateZ(calc(var(--die) / 2)); }
+.reveal .face[data-die-side="right"]  { transform: rotateY(90deg)  translateZ(calc(var(--die) / 2)); }
+.reveal .face[data-die-side="left"]   { transform: rotateY(-90deg) translateZ(calc(var(--die) / 2)); }
+.reveal .face[data-die-side="top"]    { transform: rotateX(90deg)  translateZ(calc(var(--die) / 2)); }
+.reveal .face[data-die-side="bottom"] { transform: rotateX(-90deg) translateZ(calc(var(--die) / 2)); }
 
 /* **`dieCell`, not `cell`, and the rename is the whole bug.** `home.css` already defines a global
    `.cell` for the collage — `background: var(--color-ink)`, a hard offset shadow, per-child
