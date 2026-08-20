@@ -155,7 +155,9 @@ function stillness(el: Element, frames = 3, capMs = 1200): Promise<void> {
 }
 
 export default function Die(
-  { value, seat, onLanded }: { value: number; seat: number; onLanded?: () => void },
+  { value, seat, onLanded, onProgress }: {
+    value: number; seat: number; onLanded?: () => void; onProgress?: () => void
+  },
 ) {
   const { x, y } = SHOW[value] ?? SHOW[1]
   const t = THROW[seat % THROW.length]
@@ -170,6 +172,18 @@ export default function Die(
     // which IS the landed frame — §5 rule 3's "the end states still apply, instantly".
     if (reduce || !scope.current) return
     let alive = true
+    // **A heartbeat, so the failsafe can be a watchdog instead of a race (`RV-19`).** The old
+    // failsafe was `--tumble + 250`, a constant tuned near the sequence's length; the springs made
+    // the real sequence ~2190 ms against a 1400 ms `--tumble`, so the timer won **every** run and
+    // `land('animation')` never spoke. The screen was landing on a clock while the dice were still
+    // moving, and `HOLD_MS` was accidentally compensating for it.
+    //
+    // This pings once per animation frame for as long as the sequence is alive. What the watchdog
+    // then measures is **frames not arriving** — a dead tab, a chain that threw — which is what a
+    // failsafe is actually for, and which no change to a spring or a duration can ever outgrow.
+    let beating = true
+    const beat = () => { if (beating && alive) { onProgress?.(); requestAnimationFrame(beat) } }
+    requestAnimationFrame(beat)
     void (async () => {
       // **Rotation only — the die spins where it stands.** Since the in-place ruling the tween
       // carries no `x`, `y` or `scale`: the cube is already lifted, already held apart and already
@@ -227,9 +241,10 @@ export default function Die(
       // is then a hold after a real stop rather than after a promise about one** — and the same
       // frames a person sees are the ones the rule is measured on.
       await stillness(scope.current)
+      beating = false
       if (alive) onLanded?.()
     })()
-    return () => { alive = false }
+    return () => { alive = false; beating = false }
     // Mount-only: the round's dice are fixed before this component exists, so a re-run would be a
     // second throw of the same result.
     // eslint-disable-next-line react-hooks/exhaustive-deps

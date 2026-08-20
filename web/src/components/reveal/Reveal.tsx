@@ -57,6 +57,13 @@ import {
  */
 const HOLD_MS = 700
 
+/** **How long a total absence of animation frames means the sequence is not coming.** Not a guess
+ *  at how long the dice take — that number is what `RV-19` forbids. Two seconds of *silence* is far
+ *  past any frame gap a running browser produces (a 60 Hz tab pings every ~16 ms; even a heavily
+ *  throttled one is well inside it), so reaching it means frames have stopped, which is the only
+ *  condition this failsafe exists for. */
+const WATCHDOG_MS = 2000
+
 /**
  * The dice group's two places, as transforms from its resting CSS position.
  *
@@ -193,7 +200,15 @@ export default function Reveal({ roundId }: { roundId: number }) {
    *  that agrees until something makes it not — a throttled tab, a slower device, an edited
    *  duration — and when it disagrees the answer appears over a die still moving. Both dice fire
    *  it and the first one wins, because they run the same animation for the same length. */
+  /** Restart the watchdog. Called by every `Die` on every animation frame it is alive for; the
+   *  screen lands on `fallback` only if this stops being called entirely. */
+  const beat = useCallback(() => {
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => land('fallback'), WATCHDOG_MS)
+  }, [])
+
   const land = useCallback((by: 'animation' | 'fallback' | 'reduced') => {
+    window.clearTimeout(timer.current)
     setLanded((was) => {
       if (!was) setLandedBy(by)
       return true
@@ -217,15 +232,24 @@ export default function Reveal({ roundId }: { roundId: number }) {
         // **Reduced motion lands instantly and still lands** (§5 rule 3: the end states apply, the
         // transitions do not). Not "no animation and no reveal" — the person still gets the answer.
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) land('reduced')
-        // **The failsafe, and it is deliberately late and deliberately labelled.** If the tumble
-        // never runs — a background tab, an animation that never started — `animationend` never
-        // fires and the reveal hangs on a screen whose whole purpose is to show an answer it is
-        // already holding. A quarter-second past the tumble is long enough that it cannot beat a
-        // healthy animation, and `data-landed-by` says which path won so a slow reading is never
-        // mistaken for a slow animation.
-        else timer.current = window.setTimeout(
-          () => land('fallback'), tumbleMs(root.current) + 250,
-        )
+        // **The failsafe is a watchdog on the dice's own heartbeat, not a race against them
+        // (`RV-19`, ruled 2026-08-20).** If the sequence never runs — a background tab, an
+        // animation that never started, a chain that threw — the reveal would hang on a screen
+        // whose whole purpose is to show an answer it is already holding. So it still exists.
+        //
+        // **What it must never do is beat a healthy sequence, and the old one did on every run.**
+        // It fired at `--tumble + 250` = 1650 ms; since the springs the real sequence ends at
+        // ~2190 ms, so `land('animation')` never once spoke and the hold began 637 ms before the
+        // dice stopped. Measured from the DOM, twice. The comment above it asserted the opposite
+        // — true when `--tumble` described a CSS keyframe that really was the whole animation, and
+        // silently false from the moment the springs replaced it.
+        //
+        // **A bigger constant would be the same bug waiting for the next spring change.** This
+        // measures *silence* instead: each `Die` pings once per animation frame while its sequence
+        // is alive, every ping restarts the clock, and only `WATCHDOG_MS` with no ping at all can
+        // land the screen. That is derived from frames arriving, so no duration, spring or stage
+        // added later can outgrow it.
+        else beat()
       })
       .catch((e: Error) => { if (live) setError(e.message || '讀取失敗') })
     return () => { live = false; window.clearTimeout(timer.current) }
@@ -361,8 +385,8 @@ export default function Reveal({ roundId }: { roundId: number }) {
         <div className="dice" data-part="dice" data-dice-state={landed ? 'landed' : 'tumbling'}>
           {data && (
             <>
-              <Die value={data.dice[0]} seat={0} onLanded={() => land('animation')} />
-              <Die value={data.dice[1]} seat={1} onLanded={() => land('animation')} />
+              <Die value={data.dice[0]} seat={0} onLanded={() => land('animation')} onProgress={beat} />
+              <Die value={data.dice[1]} seat={1} onLanded={() => land('animation')} onProgress={beat} />
             </>
           )}
         </div>
