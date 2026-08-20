@@ -136,6 +136,24 @@ services:
     #     Still in no measured window at all: the integration tests that build and drop their own
     #     databases, and pgvector's kNN over the crib. An OOM-killed backend is the worst failure on
     #     this list, which is why the room stays.
+    #
+    #     **This ceiling IS being pressed, and it is staying at 768m. Measured 2026-08-20:
+    #     `memory.events` reads `max 45, oom_kill 0`** — the cgroup hit its ceiling forty-five times
+    #     and the kernel reclaimed every time; nothing has been killed and `RestartCount` is 0. One
+    #     five-agent walkthrough run accounts for about **six** of those hits (39 → 45 across a
+    #     single run), which is the number the walkthrough-growth arrangement exists to surface.
+    #
+    #     **Raising it would chase a number that will always be filled.** PostgreSQL grows into
+    #     whatever it is given with page cache, most of it reclaimable, so `memory.peak` converges on
+    #     `memory.max` under any finite limit and `max` climbing is what a cap *doing its job* looks
+    #     like. **The signals to act on are `oom_kill > 0` and a rising `RestartCount`** — both zero.
+    #     Backend's call as a tuning number inside the ruled rule; overrule it if a query ever gets
+    #     slow in a way this explains.
+    #
+    #     **And it retired the instrument that set it.** `probes/a11_container_footprint.py` reads
+    #     `memory.peak`, which now reports the ceiling rather than the demand — re-running it to check
+    #     these limits is circular, and the circularity is invisible in its own output. The probe says
+    #     so at the top and prints `memory.events` beside every peak.
     mem_limit: 768m
     cpus: 2.0
     networks:

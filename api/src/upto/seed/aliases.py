@@ -30,10 +30,18 @@ reaches:
     天仁茶業股份有限公司     → CHAFFEE              42 places   天仁 is in the company name
     長沂國際實業股份有限公司 → COMEBUY              61 places   no standard Chinese name exists
 
-**`統一超商 → 7-ELEVEN`/`小七` is the one that is tempting and is deliberately absent.** The pairing
-reads `統一超商股份有限公司 → 統一超商股份有限公司`; nothing published connects it to `7-ELEVEN`, so
-the bound is not met. It is common knowledge, and common knowledge is exactly what D113's iron laws
-are a fence around. If the owner wants it, that is a ruling and not a judgement call here.
+**`統一超商 → 7-ELEVEN`/`小七` is the one that is tempting and is deliberately absent, and it now
+has TWO reasons rather than one.** The pairing reads `統一超商股份有限公司 → 統一超商股份有限公司`;
+nothing published connects it to `7-ELEVEN`, so the bound is not met — common knowledge is exactly
+what D113's iron laws are a fence around.
+
+**And the evaluator measured the cost, 2026-08-20: `小七` already returns two real rows — `小七清粥
+小菜` and `小七食堂`, genuine eateries whose registered names contain 小七.** So the alias would not
+fill an empty result; it would bury two restaurants under a convenience chain's hundreds of branches.
+That is the first measured case of an alias being actively *worse* than its absence, and it is the
+argument to reach for if anyone proposes this row: the everyday-name problem and the collision
+problem point opposite ways here. `7-ELEVEN` returns 0 and `統一超商` returns rows today via the
+registered name. If the owner wants it anyway, that is a ruling and not a judgement call here.
 
 **Adding a row is not routine.** Each one is data this product asserts on its own authority, so the
 `note` must name the published fact that supports it, and a row whose note would read "everyone
