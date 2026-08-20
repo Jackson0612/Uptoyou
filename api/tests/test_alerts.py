@@ -10,6 +10,7 @@ driver puts that string in its exception, so an unredacted forward would post `P
 into a chat. Everything else here is formatting.
 """
 
+import ast
 import os
 import sys
 import unittest
@@ -147,6 +148,63 @@ class TheCallbackNeverRaises(unittest.TestCase):
         alerts.send_failure_alert(None)
 
 
+class TheSelfTestIsTheOneDagAllowedToFail(unittest.TestCase):
+    """A10's self-test (owner-ruled 2026-08-19) proves the one thing the rest of A10's verification
+    could not: that Airflow *calls* the callback on a real failure. Three properties of it are
+    load-bearing and each would be easy to lose in a tidy-up."""
+
+    def source(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(here, "..", "..", "airflow", "dags", "alert_selftest.py")
+        return open(path, encoding="utf-8").read()
+
+    def test_it_has_no_schedule(self):
+        """A DAG that fails on a timer is a channel that cries wolf nightly, and a channel that cries
+        wolf nightly stops being read — which would cost more than the gap it closes."""
+        self.assertIn("schedule=None", self.source())
+
+    def test_it_arrives_paused(self):
+        """Everywhere else in this repository paused-on-arrival is the standing hazard; here it is the
+        intent, so it is stated rather than inherited."""
+        self.assertIn("is_paused_upon_creation=True", self.source())
+
+    def test_it_does_not_retry(self):
+        """`on_failure_callback` fires only once the retries are spent, so this repository's usual
+        `retries: 2` with a ten-minute delay would make a self-test take twenty minutes to send one
+        message. The number is the difference between a usable test and an abandoned one."""
+        self.assertIn('"retries": 0', self.source())
+
+    def test_the_message_says_nothing_is_wrong(self):
+        """It is what arrives on the phone and what stands in the log. The reader of an alert at 03:20
+        has not opened the file and must not need to."""
+        self.assertIn("nothing is wrong", self.source())
+
+    def test_it_writes_nothing_and_fetches_nothing(self):
+        """The reason this DAG exists rather than a broken Connection: no source, no ledger row, no
+        side effect. A false `failed` row in `ingest_run` would be a lie in the one table whose job is
+        telling a broken source from a quiet one.
+
+        **This reads the AST, and the first version read the text — which failed on its own docstring.**
+        Forbidding the substring `ingest` matched the sentence *explaining why* no ingest happens. That
+        is H44's shape exactly: a guard over source has to read the code, not the prose around it.
+        """
+        tree = ast.parse(self.source())
+        names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                names.add(node.attr)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                names.update(alias.name.split(".")[0] for alias in node.names)
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    names.add(node.module.split(".")[0])
+        for forbidden in ("PostgresHook", "subprocess", "urllib", "socket", "requests"):
+            self.assertNotIn(forbidden, names)
+        # And nothing from the ingest package, by any spelling the code could reach it with.
+        self.assertFalse([n for n in names if "ingest" in n.lower()], sorted(names))
+
+
 class TheConnectionShapeIsFixed(unittest.TestCase):
     def test_the_connection_id_matches_what_init_sh_creates(self):
         """Two files have to agree on one string, so the test reads the shell rather than trusting
@@ -175,15 +233,27 @@ class EveryDagIsWired(unittest.TestCase):
     """A callback on four of five DAGs is worse than none: the one that is silent is the one you
     learn to trust."""
 
-    def test_all_five_dag_files_set_the_callback(self):
+    def test_every_dag_file_sets_the_callback(self):
+        """**The count is asserted so that adding a DAG has to come here**, which is the whole
+        anti-rot value: it went 5 -> 6 when `alert_selftest.py` landed and this test is what said so.
+        A new DAG file with no callback would otherwise be silently unalerted, and the DAG that is
+        silent is the one you learn to trust."""
         here = os.path.dirname(os.path.abspath(__file__))
         dags = os.path.join(here, "..", "..", "airflow", "dags")
         files = [name for name in sorted(os.listdir(dags))
                  if name.endswith(".py") and not name.startswith("_")]
-        self.assertEqual(len(files), 5, files)
+        self.assertEqual(len(files), 6, files)
         for name in files:
             source = open(os.path.join(dags, name), encoding="utf-8").read()
-            self.assertIn("from _alerts import send_failure_alert", source, name)
+            # **The import is read from the AST, not matched as a string.** The first version of this
+            # asserted the exact line `from _alerts import send_failure_alert` and went red on
+            # `alert_selftest.py`, which imports `CONNECTION_ID` alongside it — a true file failing a
+            # test about a spelling. What matters is that the name arrives from that module.
+            imported = set()
+            for node in ast.walk(ast.parse(source)):
+                if isinstance(node, ast.ImportFrom) and node.module == "_alerts":
+                    imported.update(alias.name for alias in node.names)
+            self.assertIn("send_failure_alert", imported, name)
             self.assertIn('"on_failure_callback": send_failure_alert', source, name)
 
     def test_every_dag_file_that_imports_a_sibling_inserts_the_path_first(self):
