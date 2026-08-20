@@ -39,6 +39,13 @@ import {
  * this screen: it does not measure a thing that is happening, it *is* the thing that is happening,
  * and its whole content is that nothing else is.
  *
+ * **500 since `RV-20` (2026-08-20), and the history is the point.** 700 was tuned against a signal
+ * that fired 637 ms early, and then measured against an instrument that watched one cube inside a
+ * group that could still be moving. **A number tuned twice against instruments that missed a mover
+ * has no claim left**, so it was re-ruled from a corrected measurement rather than nudged. The
+ * paragraphs below are the 700 argument, kept because the reasoning about the tail is still true
+ * and only the number moved.
+ *
  * **700 and not the prototype's 380, and the number came from frames rather than from taste.** The
  * die reports itself landed when `motion`'s animation resolves, and that resolution runs
  * **290–350 ms ahead of the element actually coming to rest** — measured four ways across four
@@ -55,7 +62,7 @@ import {
  * prohibition half of D111's rule held at 380 and holds now. What was missing was the positive
  * half, the visible pause, and that is what this buys.
  */
-const HOLD_MS = 700
+const HOLD_MS = 500
 
 /** **How long a total absence of animation frames means the sequence is not coming.** Not a guess
  *  at how long the dice take — that number is what `RV-19` forbids. Two seconds of *silence* is far
@@ -207,7 +214,14 @@ export default function Reveal({ roundId }: { roundId: number }) {
     timer.current = window.setTimeout(() => land('fallback'), WATCHDOG_MS)
   }, [])
 
-  const land = useCallback((by: 'animation' | 'fallback' | 'reduced') => {
+  /** When the composed image actually went still, in `performance.now()` terms. The beat is
+   *  measured from THIS, not from the moment the observation finished — confirming stillness costs
+   *  three frames, and a hold started at the confirmation is systematically ~120 ms long, which put
+   *  the measured beat at the top of its own tolerance by construction. */
+  const stillAt = useRef<number | null>(null)
+
+  const land = useCallback((by: 'animation' | 'fallback' | 'reduced', at?: number) => {
+    if (at != null && stillAt.current === null) stillAt.current = at
     window.clearTimeout(timer.current)
     setLanded((was) => {
       if (!was) setLandedBy(by)
@@ -291,7 +305,11 @@ export default function Reveal({ roundId }: { roundId: number }) {
   useEffect(() => {
     if (!landed) return
     if (landedBy === 'reduced') { setStaged(true); return }
-    const h = window.setTimeout(() => setStaged(true), HOLD_MS)
+    // **The beat runs from composed stillness, so it is `HOLD_MS` on the screen and not
+    // `HOLD_MS` plus whatever the instrument cost.** Clamped at zero: if confirming took longer
+    // than the whole beat the answer is *stage now*, never *stage in the past*.
+    const spent = stillAt.current === null ? 0 : performance.now() - stillAt.current
+    const h = window.setTimeout(() => setStaged(true), Math.max(0, HOLD_MS - spent))
     return () => window.clearTimeout(h)
   }, [landed, landedBy])
 
@@ -385,8 +403,8 @@ export default function Reveal({ roundId }: { roundId: number }) {
         <div className="dice" data-part="dice" data-dice-state={landed ? 'landed' : 'tumbling'}>
           {data && (
             <>
-              <Die value={data.dice[0]} seat={0} onLanded={() => land('animation')} onProgress={beat} />
-              <Die value={data.dice[1]} seat={1} onLanded={() => land('animation')} onProgress={beat} />
+              <Die value={data.dice[0]} seat={0} onLanded={(at) => land('animation', at)} onProgress={beat} />
+              <Die value={data.dice[1]} seat={1} onLanded={(at) => land('animation', at)} onProgress={beat} />
             </>
           )}
         </div>

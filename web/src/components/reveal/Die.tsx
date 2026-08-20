@@ -135,19 +135,65 @@ const ROCK_Y = 26
 const FLY_Y = 40
 const FLY_SCALE = 0.74
 
-/** Resolve once `el`'s computed transform has held identical for three consecutive frames.
- *  Bounded, so a browser that never settles cannot hang the reveal — the cap is generous enough
- *  that reaching it means something is wrong rather than merely slow. */
-function stillness(el: Element, frames = 3, capMs = 1200): Promise<void> {
+/**
+ * Resolve once the **composed image** has held identical for three consecutive frames.
+ *
+ * **`RV-20`, ruled 2026-08-20: the subject is the composed image, never `.cube` alone.** This
+ * function used to read one cube's computed transform, which certifies a still child inside a
+ * moving parent — the dice group carries its own spring, and a cube that has stopped rotating
+ * inside a group that is still translating is a die still moving on the screen. The rule the
+ * failure keeps teaching: **an instrument aimed at part of its subject reports the part.**
+ *
+ * So it watches the die's whole field: the group's box, every `[data-part]` inside it, and every
+ * cube's own transform. Any of them changing is motion, and stillness is all of them holding.
+ *
+ * Bounded, so a browser that never settles cannot hang the reveal — the cap is generous enough
+ * that reaching it means something is wrong rather than merely slow.
+ */
+function stillness(el: Element, frames = 3, capMs = 1600): Promise<number> {
+  /** The composed subject: the whole dice field if this die is inside one, else this element.
+   *  Resolved once — the group does not appear or vanish mid-sequence, and re-querying every frame
+   *  would make the instrument's own cost part of what it measures. */
+  const field = el.closest('[data-part="dice-group"]') ?? el
+
+  const snapshot = () => {
+    const parts: string[] = []
+    const box = (n: Element) => {
+      const r = n.getBoundingClientRect()
+      // Two decimals: a sub-pixel tail is still movement, and rounding it away is how a settling
+      // spring gets certified as stopped.
+      parts.push(`${r.left.toFixed(2)},${r.top.toFixed(2)},${r.width.toFixed(2)},${r.height.toFixed(2)}`)
+    }
+    box(field)
+    field.querySelectorAll('[data-part]').forEach(box)
+    // The cubes' rotation does not move their boxes — a rotating cube inside a still group has a
+    // constant rect — so the transform is read as well. Rect alone would call a spinning die still.
+    field.querySelectorAll('.cube').forEach((c) => parts.push(getComputedStyle(c).transform))
+    return parts.join('|')
+  }
+
   return new Promise((resolve) => {
     const start = performance.now()
     let prev = ''
     let same = 0
+    /** **When the image first went still, not when we became sure of it.** Confirming stillness
+     *  costs three frames, and a hold started at the confirmation is systematically ~120 ms late —
+     *  which put the measured beat at the top of its own tolerance by construction rather than by
+     *  chance. Reporting the first identical frame lets the caller subtract its instrument's cost,
+     *  so the beat a person experiences is the number that was ruled. */
+    let firstStill = 0
     const tick = () => {
-      const now = getComputedStyle(el).transform
-      same = now === prev ? same + 1 : 0
+      const t = performance.now()
+      const now = snapshot()
+      if (now === prev) {
+        if (same === 0) firstStill = t
+        same += 1
+      } else {
+        same = 0
+      }
       prev = now
-      if (same >= frames || performance.now() - start > capMs) resolve()
+      if (same >= frames) resolve(firstStill)
+      else if (t - start > capMs) resolve(t)
       else requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
@@ -156,7 +202,7 @@ function stillness(el: Element, frames = 3, capMs = 1200): Promise<void> {
 
 export default function Die(
   { value, seat, onLanded, onProgress }: {
-    value: number; seat: number; onLanded?: () => void; onProgress?: () => void
+    value: number; seat: number; onLanded?: (stillAt: number) => void; onProgress?: () => void
   },
 ) {
   const { x, y } = SHOW[value] ?? SHOW[1]
@@ -240,9 +286,9 @@ export default function Die(
       // been identical for three consecutive frames, and only then reports. **The hold that follows
       // is then a hold after a real stop rather than after a promise about one** — and the same
       // frames a person sees are the ones the rule is measured on.
-      await stillness(scope.current)
+      const stillAt = await stillness(scope.current)
       beating = false
-      if (alive) onLanded?.()
+      if (alive) onLanded?.(stillAt)
     })()
     return () => { alive = false; beating = false }
     // Mount-only: the round's dice are fixed before this component exists, so a re-run would be a
