@@ -86,13 +86,37 @@ def _below(seed: bytes, message: bytes, bound: int, skip: int = 0) -> int:
     """
     if bound < 1:
         raise ValueError("bound must be at least 1")
-    limit = (256 // bound) * bound  # the largest multiple of `bound` that fits in a byte
+
+    # **`width` is how many bytes one draw consumes, and it exists because this function hung.**
+    # It read one byte and computed `limit = (256 // bound) * bound`. For any bound above 256 that
+    # is **zero**, so `byte >= limit` was true of every byte, every byte was rejected, and the loop
+    # ran forever at 100% of a core — returning nothing, logging nothing, and holding the request
+    # open. Measured 2026-08-20 on a fixture circle that had accumulated 290 members: one
+    # `GET /circles/{id}/stream` pegged `upto-api-1` and the snapshot never yielded its first byte.
+    # D110's supported shape is twelve, so no bound above 256 had ever been asked for.
+    #
+    # **`width == 1` for every bound up to and including 256, so nothing about an existing round
+    # changes.** The dice are drawn with bound 6 and a circle of twelve with bound 12; both take
+    # this same path with the same arithmetic and the same bytes as before. That matters more than
+    # the fix: a stored round's dice are re-derived from its seed by `explain_round`, and a
+    # derivation that moved would turn every past round into a mismatch.
+    width = 1
+    while 256 ** width < bound:
+        width += 1
+    limit = (256 ** width // bound) * bound  # the largest multiple of `bound` that fits in `width`
+
     seen = 0
+    chunk = bytearray()
     for byte in _stream(seed, message):
-        if byte >= limit:
+        chunk.append(byte)
+        if len(chunk) < width:
+            continue
+        value = int.from_bytes(bytes(chunk), "big")
+        chunk.clear()
+        if value >= limit:
             continue  # would skew the low end of the range; walk on rather than fold it in
         if seen == skip:
-            return byte % bound
+            return value % bound
         seen += 1
     raise AssertionError("unreachable: the stream is unbounded")  # pragma: no cover
 

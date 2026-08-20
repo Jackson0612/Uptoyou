@@ -247,5 +247,79 @@ class DomainSeparation(unittest.TestCase):
         self.assertNotEqual(draw.pair_for_member(seed, 1), draw.pair_for_member(seed, 11))
 
 
+class ABoundLargerThanAByteTerminates(unittest.TestCase):
+    """**The hang, in the shape it actually happened.** `_below` read one byte and rejected anything
+    at or above `(256 // bound) * bound`. Above 256 that expression is **zero**, so every byte was
+    rejected and the loop ran forever — 100% of a core, no return, the request held open. Found
+    2026-08-20 on a fixture circle that had grown to 290 members: one `GET /circles/{id}/stream`
+    pegged `upto-api-1` and the snapshot never produced a byte. D110's supported shape is twelve, so
+    no bound above 256 had ever been asked for and no test had ever asked for one either.
+    """
+
+    def test_the_first_bound_that_hung_now_returns(self):
+        self.assertIn(draw._below(draw.new_seed(), b"x", 257), range(257))
+
+    def test_a_circle_larger_than_a_byte_picks_a_decider(self):
+        members = list(range(1, 291))
+        chosen = draw.deciding_member(draw.new_seed(), members)
+        self.assertIn(chosen, members)
+
+    def test_much_larger_bounds_terminate_too(self):
+        """Not only the boundary: 65,537 crosses the two-byte width the same way 257 crosses one."""
+        seed = draw.new_seed()
+        for bound in (512, 1000, 65536, 65537, 100000):
+            self.assertIn(draw._below(seed, b"x", bound), range(bound), bound)
+
+    def test_every_bound_around_each_byte_boundary_terminates(self):
+        """The arithmetic that failed was a floor division, so the values worth testing are the ones
+        either side of where the floor changes."""
+        seed = draw.new_seed()
+        for bound in (254, 255, 256, 257, 258, 65535, 65536, 65537):
+            self.assertIn(draw._below(seed, b"x", bound), range(bound), bound)
+
+    def test_a_wide_bound_is_still_uniform(self):
+        """A wider draw must not skew, or the decider stops being fair the moment a circle grows.
+
+        **One seed, 6,000 distinct messages — which is how the real code varies.** `pair_for_member`
+        holds the round's seed still and changes the label per member, so that is what is measured.
+        The first version of this test used `bytes([index % 256]) * 32` as the seed and scored
+        chi2 56.6: only 256 distinct seeds, every one of them 32 identical bytes. **That was a
+        degenerate instrument reporting skew in the subject** — the mirror of the earlier draw test
+        that could not detect the bias it claimed to measure, and the same lesson from the other
+        side. Ten buckets of 600; chi-square against 16.92 (df 9, p=0.05).
+        """
+        bound, buckets, draws = 300, 10, 6000
+        seed = draw.new_seed()
+        counts = [0] * buckets
+        for index in range(draws):
+            value = draw._below(seed, b"member:" + str(index).encode(), bound)
+            counts[value * buckets // bound] += 1
+        expected = draws / buckets
+        chi2 = sum((c - expected) ** 2 / expected for c in counts)
+        self.assertLess(chi2, 16.92, "{} -> chi2 {:.2f}".format(counts, chi2))
+
+    def test_skip_still_works_across_a_wide_draw(self):
+        """`skip` counts accepted values, and an accepted value is now `width` bytes rather than one.
+        Miscounting it would make die 2 a copy of die 1."""
+        seed = draw.new_seed()
+        first = draw._below(seed, b"pair", 300, skip=0)
+        second = draw._below(seed, b"pair", 300, skip=1)
+        self.assertIn(first, range(300))
+        self.assertIn(second, range(300))
+
+    def test_the_derivation_below_257_is_byte_for_byte_what_it_was(self):
+        """**The assertion that protects every round already stored.** A stored round's dice are
+        re-derived from its seed by `explain_round`; a derivation that moved would turn every past
+        round into a mismatch and every verification into a false alarm. `width` is 1 for every
+        bound up to 256, so the arithmetic below that line is the arithmetic that was there.
+        """
+        for bound in (2, 6, 12, 36, 100, 255, 256):
+            width = 1
+            while 256 ** width < bound:
+                width += 1
+            self.assertEqual(width, 1, bound)
+            self.assertEqual((256 ** width // bound) * bound, (256 // bound) * bound, bound)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
