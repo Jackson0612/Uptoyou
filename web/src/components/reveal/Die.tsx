@@ -69,10 +69,24 @@ const RED = new Set([1, 4])
  * it spins. **All three differ per die on purpose**: two cubes given one motion read as one object
  * cut in half, which is the failure the ruling's 「一擲定案」 depends on not having.
  *
- * **`ex`/`ey` are inside the viewport at 1440, and `RV-15` is why.** The evaluator's prototype threw
- * from above the frame; this screen's dice sit 24 px from the top, so *above* is off-screen and the
- * throw would read as the dice appearing rather than being thrown. They come up from the empty
- * space below instead — which during the tumble is exactly where the answer is not yet.
+ * **THE DICE TUMBLE IN PLACE. There is no fly-in, and `ex`/`ey` are gone** (owner-ruled
+ * 2026-08-20). The argument is `D108`'s and it is about honesty rather than taste: **the roll
+ * already exists before anyone taps.** The seed is committed at open, every pair is derived from
+ * it, and the tap reveals rather than throws. Dice flying in from off-frame say *being thrown
+ * now* — an entrance animating an event that happened earlier, which is `D91`'s prohibition
+ * pointed at the entry instead of at the exit.
+ *
+ * **What was dropped is the travel, not the clearance.** The tween no longer carries `x`/`y`, and
+ * the cube starts at the tumbling posture rather than arriving at it: held apart by `hold`, lifted
+ * by `FLY_Y`, and small at `FLY_SCALE`. All three are still spent and still given back by the
+ * settle, so the landed frame is `design.md`'s gap exactly and the body diagonal still clears the
+ * top of the window. `turnz`, the camera-free landing angles and every measured clearance are
+ * untouched — the change is the entry alone.
+ *
+ * **`RV-15` is unaffected and is now easier to satisfy.** The question it asks is what the *first
+ * painted frame* contains: it must hold both dice and must not hold the answer's own position.
+ * The first frame is the tumbling posture — lifted, small, unrotated — which is neither off-screen
+ * nor the landed hull.
  *
  * **`turnz` is what actually breaks the lockstep, and the two attempts before it did not — for a
  * reason worth writing down, because it is a property of the keyframes and not of the numbers.**
@@ -101,8 +115,8 @@ const RED = new Set([1, 4])
  * given back before the landing.
  */
 const THROW = [
-  { ex: -430, ey: 300, turnx: 1080, turny: 720,  turnz: -360, hold: -62 },
-  { ex: -330, ey: 392, turnx: 720,  turny: 1440, turnz: 360,  hold: 62 },
+  { turnx: 1080, turny: 720,  turnz: -360, hold: -62 },
+  { turnx: 720,  turny: 1440, turnz: 360,  hold: 62 },
 ] as const
 
 /** How far short of the landing angle the tumble stops, so the spring has something to rock over.
@@ -112,10 +126,12 @@ const THROW = [
 const ROCK_X = 34
 const ROCK_Y = 26
 
-/** How far below its resting place, and how much smaller, the die flies. **This is the clearance
- *  D109's camera used to provide** — a cube presents its body diagonal while it tumbles, about 1.7×
- *  its face, and at full size that runs off the top of this screen. It arrives at its real size on
- *  the settle, which also reads as the die coming toward the viewer rather than merely stopping. */
+/** How far below its resting place, and how much smaller, the die **sits while it spins**. **This
+ *  is the clearance D109's camera used to provide** — a cube presents its body diagonal while it
+ *  tumbles, about 1.7× its face, and at full size that runs off the top of this screen. Since the
+ *  in-place ruling these are the starting posture rather than a waypoint travelled to: the die is
+ *  already lifted and already small on the first painted frame. It arrives at its real size on the
+ *  settle, which reads as the die coming toward the viewer rather than merely stopping. */
 const FLY_Y = 40
 const FLY_SCALE = 0.74
 
@@ -155,21 +171,23 @@ export default function Die(
     if (reduce || !scope.current) return
     let alive = true
     void (async () => {
-      // **The tumble carries the whole path, and it flies SMALL and LOW on purpose.** D109's
-      // camera used to provide this clearance with a dolly and a downward offset; retracting the
-      // camera took the clearance with it, and the first spring build ran the dice straight off the
-      // top of the window — measured, not guessed.  The headroom now belongs to the object's own
-      // path, which is one fewer element that has to arrive on time.
+      // **Rotation only — the die spins where it stands.** Since the in-place ruling the tween
+      // carries no `x`, `y` or `scale`: the cube is already lifted, already held apart and already
+      // small, placed there by `initial` before the first paint. It spins about its own centre and
+      // nothing translates until the settle gives the three offsets back.
+      //
+      // **The clearance did not go with the travel.** D109's camera used to provide the headroom
+      // with a dolly; retracting the camera took it, and the first spring build ran the dice
+      // straight off the top of the window — measured, not guessed. `FLY_Y` and `FLY_SCALE` are
+      // still what keeps the body diagonal on screen; they are simply held for the whole spin now
+      // instead of being arrived at.
       //
       // A tween and not a spring: a spring's settling time does not depend on how far it travels,
       // so three whole turns on a spring stiff enough to feel crisp is a blur, and one loose enough
       // to read overshoots by a quarter-turn.
       await animate(
         scope.current,
-        {
-          x: [t.ex, t.hold], y: [t.ey, FLY_Y], scale: [0.68, FLY_SCALE],
-          rotateX: [0, TX - ROCK_X], rotateY: [0, TY - ROCK_Y], rotateZ: [0, t.turnz],
-        },
+        { rotateX: [0, TX - ROCK_X], rotateY: [0, TY - ROCK_Y], rotateZ: [0, t.turnz] },
         { duration: 1.05, ease: [0.16, 0.62, 0.3, 1] },
       )
       if (!alive) return
@@ -223,13 +241,16 @@ export default function Die(
         ref={scope}
         className="cube"
         // **`initial` and not the effect, and the difference is one painted frame.** `useAnimate`
-        // runs in an effect, which is after the browser has painted — so the die was drawn once at
-        // its RESTING place and then jumped off-screen to start the throw. Measured: the first
-        // sampled frame reported the landed hull exactly. A frame is 16 ms and nobody would name
-        // it, but it is the answer's own position shown before the throw, and `RV-15` asks what the
-        // first painted frame contains. `initial` is applied before paint, so the first frame is
-        // the entry.
-        initial={reduce ? false : { x: t.ex, y: t.ey, scale: 0.68 }}
+        // runs in an effect, which is after the browser has painted — so without this the die is
+        // drawn once at its RESTING place and only then jumps into its spinning posture. Measured
+        // on the fly-in build: the first sampled frame reported the landed hull exactly. A frame is
+        // 16 ms and nobody would name it, but it is the answer's own position shown before the
+        // roll, and `RV-15` asks what the first painted frame contains.
+        //
+        // **Since the in-place ruling this carries the whole starting posture** — held apart,
+        // lifted and small — because there is no longer a travel keyframe to establish it. The
+        // three values are the same ones the settle gives back, written once here and once there.
+        initial={reduce ? false : { x: t.hold, y: FLY_Y, scale: FLY_SCALE }}
         style={{ ['--tx' as string]: `${x}deg`, ['--ty' as string]: `${y}deg` }}
       >
         {SIDES.map((side) => {
