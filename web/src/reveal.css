@@ -303,9 +303,108 @@
    min-height is the button's own painted height — 2px border + 16px padding + the body line-box +
    16px — rather than a round number, because a box sized by taste is a box that drifts the moment
    the type scale moves. */
-.reveal .act-row { margin-top: 40px; min-height: calc(var(--text-body) * 1.5 + 36px);
-                   display: flex; align-items: center; }
-.reveal .signed { font-size: var(--text-body); font-weight: 700; margin: 0; }
+/* ═══ 蓋章 · the reveal's act ══════════════════════════════════════════════════════════════
+   Evaluator-ruled 2026-08-20 under D101's delegation. An 80x80 seal that is empty until someone
+   presses it, with the question beside it; signed, the same seal carries the nickname.
+
+   **One box across both states.** `min-height` is the seal's own 80 px, so the row cannot resize
+   when asking becomes signed — §5 rule 2 allows a cross-fade and nothing else, and RV-17's rule
+   about reserving the bold box applies to the nickname arriving in display weight. */
+.reveal .act-row { margin-top: 44px; min-height: 80px; display: flex; align-items: center; }
+
+.reveal .sealRow {
+  display: flex; align-items: center; gap: 22px; margin: 0;
+  font-size: var(--text-body);
+}
+/* The button is stripped to its contents — the seal IS the control's drawing, so a second border
+   or ground around it would be two frames for one act. */
+.reveal .sealBtn {
+  background: none; border: 0; padding: 0; font: inherit; color: inherit;
+  cursor: pointer; text-align: left;
+}
+.reveal .sealBtn:disabled { cursor: progress; }
+
+.reveal .seal {
+  inline-size: 80px; block-size: 80px; flex: none;
+  display: grid; place-items: center;
+  /* Named properties, never `all`: `all` sweeps the focus ring into the same fade and the keyboard
+     outline then arrives late — a real a11y regression traded for nothing. */
+  transition: transform var(--t-press) ease-out, background-color var(--t-press) ease-out,
+              color var(--t-press) ease-out, box-shadow var(--t-press) ease-out,
+              border-color var(--t-press) ease-out;
+}
+
+/* **Empty and dashed: a seal that has not been pressed.** `currentColor` so it is drawn in the
+   flood's own foreground on all four winning faces — the dashed box §5 rule 1 names as an offender
+   is the drop-zone widget, not a seal outline, and the distinction is that this one is the act's
+   own iconography rather than a generic affordance borrowed from a form. */
+.reveal .sealEmpty { border: 2px dashed currentColor; box-shadow: 4px 4px 0 0 currentColor; }
+
+/* SINK, the command recipe (design.md, the depth vocabulary): hover moves the seal 2 px into the
+   page and halves its shadow; `:active` bottoms out with the shadow gone. **A stamp never lands
+   square**, so the rotation is part of the press rather than decoration — and it is a fixed -4deg,
+   not a random one, because a control that lands differently each time reads as a glitch. */
+@media (hover: hover) {
+  .reveal .sealBtn:hover:not(:disabled) .sealEmpty {
+    border-style: solid;
+    background: var(--color-paper);
+    color: var(--color-hot-ink);
+    transform: rotate(-4deg) translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 currentColor;
+  }
+}
+.reveal .sealBtn:active:not(:disabled) .sealEmpty {
+  border-style: solid;
+  background: var(--color-paper);
+  color: var(--color-hot-ink);
+  transform: rotate(-4deg) translate(4px, 4px);
+  box-shadow: 0 0 0 0 currentColor;
+}
+.reveal .sealBtn:focus-visible { outline: 2px solid currentColor; outline-offset: 6px; }
+
+/* Signed: the seal is inked. Paper ground, the nickname set vertically in the display face at the
+   same angle the press used — the mark a stamp leaves, not a label. */
+.reveal .sealSigned {
+  border: 2px solid var(--color-paper);
+  background: var(--color-paper);
+  color: var(--color-hot-ink);
+  transform: rotate(-4deg);
+}
+/* **The nickname is NOT set in the display face, and the spec asked for it — flagged, with the
+   measurement.** `UpTo Serif` ships **ten glyphs** (`什今吃天子定決讓骰麼`), because D101 derives
+   that face from the copy the stylesheets set in it, and a derivation cannot know a nickname: it is
+   arbitrary data typed by whoever issued the key. Set in the display face, every name that is not
+   spelled from those ten characters renders as tofu — which is the defect I spent this morning
+   fixing, chosen deliberately. The alternative is shipping the full serif for one word: ~1.1 MB
+   against the 5,932 bytes the face costs today.
+   **The stamp quality is carried by weight, vertical setting and the -4deg instead** — none of
+   which depends on the face. The sans covers it, and the nickname was already set in the sans on
+   the pairs list, so this changes no risk that was not already taken. */
+.reveal .sealName {
+  font-weight: 900;
+  font-size: 22px;
+  line-height: 1.05;
+  writing-mode: vertical-rl;
+  /* The seal is 80 px and a nickname is not length-checked anywhere, so a long one is clipped
+     rather than allowed to burst the box the other state reserved. */
+  max-block-size: 64px; overflow: hidden;
+}
+/* The question IS in the display face — it is static copy, so `subset_fonts.display_characters()`
+   reads it out of this stylesheet and the `.tsx` together and cuts the face to fit. That is the
+   whole difference from the nickname above: one is authored, the other is data. */
+/* **A BARE class selector, and this is load-bearing rather than style.** D101's derivation finds
+   the display face by scanning the stylesheets for the family and collecting the class names in
+   the selector — so `.reveal .sealAsk` would make `.reveal` a display class, and the derivation
+   would then read the whole screen's text as display copy. Measured: it asked for **93 glyphs**
+   instead of nine, which is a serif subset ten times the size for text nothing sets in it. One
+   class per display rule. */
+.sealAsk { font-family: "UpTo Serif", "Noto Serif TC", serif; font-weight: 900;
+           font-size: var(--text-lead, 20px); }
+.reveal .sealSaid { font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal .seal { transition: none; }
+}
 
 /* §5 rule 3 — reduced motion removes the tumble and both transitions, and **the end states still
    apply, instantly**. Not "no animation and no answer": the landed state is the state. */
@@ -374,6 +473,18 @@
    against that ground. */
 .reveal ~ .backLink,
 .reveal ~ .switcher { background: transparent; color: inherit; }
+
+/* INK-FILL for the chrome, in the flood's own colours. The base pair is in `switcher.css`; this
+   screen floods to one of four saturated grounds, so ink-on-ink is reachable there and
+   `currentColor` is the only pair that cannot be. Kept in this file because a `.reveal ~ …` rule
+   in `switcher.css` would claim `.reveal` as a root class in a second stylesheet — no CSS modules
+   here, so the later load would win on every screen. */
+.reveal ~ .switcher a:active,
+.reveal ~ .backLink:active { background: currentColor; color: var(--color-ink); }
+@media (hover: hover) {
+  .reveal ~ .switcher a:hover,
+  .reveal ~ .backLink:hover { background: currentColor; color: var(--color-ink); }
+}
 
 /* ── the operator's evidence (D105, §4b) ────────────────────────────────────
    Appends below the answer region. Nothing above it moves when it is present. */

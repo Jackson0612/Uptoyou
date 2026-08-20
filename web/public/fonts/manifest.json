@@ -1,23 +1,23 @@
 {
   "charsets": {
     "display": {
-      "covered_by_source_face": 10,
+      "covered_by_source_face": 18,
       "dropped": "",
       "dropped_absent_from_source_face": 0,
       "dropped_means": "the source face has no glyph for these characters, so no subset of it can carry them — not characters the subsetter lost",
       "file": "charset-display.txt",
-      "requested": 10,
-      "sha256": "bf9f187f9ab727a078b999c16b1a72eb695dbf2b74e4e9ad6abf0d8097d53ec3",
+      "requested": 18,
+      "sha256": "22de7f379475788fabd01f87c37c7269a10c66a2ae2e3d35781b3c17d809399e",
       "source": "NotoSerifTC.ttf"
     },
     "sub": {
-      "covered_by_source_face": 3729,
+      "covered_by_source_face": 3730,
       "dropped": "̛̃̈กขดทนมยลวัาแไ่้์㵘䋚䴺乐仧侧内処凪刹勲叄噽夿嬷専崊廰徳忈曟楼楽汢汣湾灇焿畐秓粋糆舗莲蔵蘫蛳貮逹鄕鐡镹霳靓顺鱿鳯麺건그𥺧𦹔",
       "dropped_absent_from_source_face": 84,
       "dropped_means": "the source face has no glyph for these characters, so no subset of it can carry them — not characters the subsetter lost",
       "file": "charset-sub.txt",
-      "requested": 3813,
-      "sha256": "c59397ee37b24096063d46d52a644e7963b4ec4e9673cce35dc6af43e8e28850",
+      "requested": 3814,
+      "sha256": "9a29ec2f5e5ea8e92583328b43ee117f791884b49c26e0d55cfcb9170310ea5b",
       "source": "NotoSansTC.ttf"
     }
   },
@@ -34,25 +34,25 @@
       "why": "OFL 1.1 — a subset is a derivative work and the notice travels with it (D66, amended 2026-08-18)"
     },
     "noto-display-var.woff2": {
-      "bytes": 5932,
-      "characters_in_the_built_face": 10,
+      "bytes": 9728,
+      "characters_in_the_built_face": 18,
       "charset": "display",
       "font_weight_declaration": "font-weight: 200 900",
-      "sha256": "40e3ba9754a5d3f39c7d0de8e201ffca7540b9c0e4dab862a8a7c13e516a892c",
+      "sha256": "b8c4fbc659f54ed08160042e42f4148d68b8f9045171179b31e2e35dad91f1f0",
       "source": "NotoSerifTC.ttf",
       "wght": "variable 200-900"
     },
     "noto-sub-variable.woff2": {
-      "bytes": 1136788,
-      "characters_in_the_built_face": 3729,
+      "bytes": 1136628,
+      "characters_in_the_built_face": 3730,
       "charset": "sub",
       "font_weight_declaration": "font-weight: 100 900",
-      "sha256": "66cc4d020eb6c19377fa8c818bc18d26ff18e82be57c0d8ae8bb161bc32e21ce",
+      "sha256": "ba3a6a07f307cac718cc0083dd972a28ceb7d9ed74e5d43019f25528eb4e36f6",
       "source": "NotoSansTC.ttf",
       "wght": "variable 100-900"
     }
   },
-  "generated_at": "2026-08-20T01:15:54+00:00",
+  "generated_at": "2026-08-20T02:20:36+00:00",
   "sources": {
     "NotoSansTC.ttf": {
       "path": "/home/jackson/.fonts/NotoSansTC.ttf",

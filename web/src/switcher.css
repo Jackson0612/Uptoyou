@@ -70,3 +70,32 @@
    here** — a selector leading with `.reveal` would claim that class from a second stylesheet, and
    the surface test now refuses exactly that. It caught this file within minutes of the check
    landing, which is the check working rather than an inconvenience. */
+
+
+/* ═══ the depth vocabulary · INK-FILL ═══════════════════════════════════════════════════════
+   Evaluator-ruled 2026-08-20: every interactive element carries exactly one recipe chosen by role,
+   and a bare hover is now a defect. These are **secondary bordered commands** — navigation chrome
+   drawn as text in a box — so they take INK-FILL rather than SINK: hover fills the ground with ink
+   and turns the label to paper, which is the press rule previewed. They do not sink, because they
+   are not the act of the screen; only the act sinks.
+
+   `@media (hover: hover)` because a touch device applies `:hover` on tap and keeps it applied
+   until something else is tapped, which would leave the last-tapped stop inked. */
+@media (hover: hover) {
+  .switcher a:hover { background: var(--color-ink); color: var(--color-paper); }
+  .backLink:hover { background: var(--color-ink); color: var(--color-paper); }
+}
+.switcher a:active { background: var(--color-ink); color: var(--color-paper); }
+.backLink:active { background: var(--color-ink); color: var(--color-paper); }
+.switcher a, .backLink {
+  transition: background-color var(--t-hover) ease-out, color var(--t-hover) ease-out;
+}
+
+/* **The reveal's own on-flood pair lives in `reveal.css`, not here.** A `.reveal ~ …` rule in this
+   file would define `.reveal` as a root class in a second stylesheet, and with no CSS modules the
+   later load wins on every screen — `test_web_surface` fails the commit for exactly that, and did.
+   The screen that floods owns the rules about its flood. */
+
+@media (prefers-reduced-motion: reduce) {
+  .switcher a, .backLink { transition: none; }
+}

@@ -241,40 +241,51 @@
   font-weight: 900;
   padding: 16px 40px;
   cursor: pointer;
+  box-shadow: 4px 4px 0 0 var(--color-ink);
   /* Named properties, not `all`: `all` would sweep the focus outline into the same fade and make
      the keyboard ring arrive late, which is a real a11y regression for a decorative saving. */
-  transition: background-color var(--t-press) ease-out, color var(--t-press) ease-out;
+  transition: background-color var(--t-press) ease-out, color var(--t-press) ease-out,
+              transform var(--t-press) ease-out, box-shadow var(--t-press) ease-out;
 }
 
+/* **SINK — the command recipe** (design.md, the depth vocabulary, evaluator-ruled 2026-08-20).
+   The metaphor is lead type pressed into paper: at rest the block sits on a hard ink shadow, hover
+   moves it 2 px into the page and halves the shadow, and `:active` bottoms out — shadow gone, and
+   the ink-fill lands at the moment of contact rather than on approach. **Commands sink INTO the
+   page; content lifts OFF it** (§5's hover rule), the two directions are opposites on purpose, and
+   one element never gets both.
+
+   `scale` stays banned. The database offers `active:scale-95` for this exact question and the
+   precedence is fixed: rulings > design.md > the database. */
 @media (hover: hover) {
-  .act:hover:not(:disabled) { background: var(--color-hot-ink); color: var(--color-paper); }
+  .act:hover:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+  }
 }
 
-/* `:active` and not a JS pressed-state: the browser's own is exact, survives a drag off the
-   control, and cannot desynchronise from React state — §5 rule 4's spirit at the smallest scale. */
-.act:active:not(:disabled) { background: var(--color-ink); color: var(--color-paper); }
+.act:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
 
 .act:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 3px; }
 
+/* A disabled act is never filled (§4) **and never sits on a shadow**: the shadow is the promise
+   that the block can be pressed into the page, so leaving it under a dead control is the same lie
+   the filled ground was. */
 .act:disabled {
   background: transparent;
   color: var(--color-muted);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-/* **On the flood, the act is drawn in the flood's own foreground colour, never in hot.** The old
-   bar was hot-on-cobalt, which is the clash that died with it. `currentColor` rather than a token
-   so one declaration serves all four winning faces and no frame can render ink-on-ink. */
-.on-flood .act {
-  background: transparent;
-  border-color: currentColor;
-  color: inherit;
-}
-@media (hover: hover) {
-  .on-flood .act:hover:not(:disabled) { background: currentColor; color: var(--color-ink); }
-}
-.on-flood .act:active:not(:disabled) { background: currentColor; color: var(--color-ink); }
-.on-flood .act:focus-visible { outline: 2px solid currentColor; }
+/* The reveal's act is the stamp and does not use `.act` at all, so the on-flood variant this
+   file used to carry was deleted rather than kept as a spare — D101 (c)'s rule: an unreferenced
+   declaration is not a spare, it is a thing no gate can tell is wrong. */
 
 @media (prefers-reduced-motion: reduce) {
   .act { transition: none; }

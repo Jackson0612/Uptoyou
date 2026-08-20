@@ -221,3 +221,50 @@
   border-left: 3px solid var(--color-hot-ink);
   font-size: var(--text-body);
 }
+
+
+/* ═══ the depth vocabulary, on this screen's three controls ═════════════════════════════════
+   Evaluator-ruled 2026-08-20: exactly one recipe per interactive element, chosen by role, and a
+   bare hover is a defect. **These three are the ambiguous ones and the assignment below is mine,
+   flagged to the evaluator rather than decided quietly** — they are *selection* controls, which the
+   ruling's two categories (commands / enterable content) do not name.
+
+   - `.band` and `.keep` take **SINK**: they are commands. Pressing one changes what the engine will
+     do on the next roll, and the recipe for "this does something" is the sink.
+   - `.rowTap` takes **LIFT**: it is a list row and the ruling names list rows as content. It also
+     toggles, which is the reason this is a judgement rather than a lookup — but the row is the
+     shape a person sees, and giving one element both directions is the defect the rule forbids.
+
+   If either reading is wrong the fix is a few lines here; nothing else depends on which way it
+   went. */
+@media (hover: hover) {
+  .band:hover:not(:disabled), .keep:hover:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+  }
+  .rowTap:hover:not(:disabled) {
+    transform: translate(-3px, -3px);
+    box-shadow: 6px 6px 0 var(--color-ink);
+  }
+}
+.band:active:not(:disabled), .keep:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+.band, .keep {
+  box-shadow: 4px 4px 0 0 var(--color-ink);
+  transition: transform var(--t-press) ease-out, box-shadow var(--t-press) ease-out,
+              background-color var(--t-press) ease-out, color var(--t-press) ease-out;
+}
+.band:disabled, .keep:disabled { box-shadow: none; }
+.rowTap {
+  transition: transform var(--t-hover) ease-out, box-shadow var(--t-hover) ease-out;
+}
+.band, .keep, .rowTap { cursor: pointer; }
+.band:disabled, .keep:disabled, .rowTap:disabled { cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  .band, .keep, .rowTap { transition: none; }
+}

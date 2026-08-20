@@ -457,24 +457,47 @@ export default function Reveal({ roundId }: { roundId: number }) {
             than restyling it. `D91`'s zero-shift clause is kept for free: the act arrives with the
             block it lives in, so nothing above it moves.
 
-            **`.on-flood` draws it in the flood's own foreground colour, never in hot.** The old bar
-            was hot-on-cobalt and that clash is what died with it; `currentColor` means one
-            declaration serves all four winning faces and no frame can render ink on ink. */}
-        <div className="act-row on-flood" data-part="act">
+            **The seal is drawn in `currentColor`, never in hot.** The old bar was hot-on-cobalt and
+            that clash is what died with it; `currentColor` means one declaration serves all four
+            winning faces and no frame can render ink on ink. */}
+        {/* **蓋章 — the reveal's act is a stamp** (evaluator-ruled 2026-08-20 under D101's
+            delegation; `sign-act.html` 乙). Not a button that says 我們去了: an empty seal waiting
+            for a mark, and the act of pressing it is the act of agreeing. That is §5 質感 rule 1's
+            whole argument — the control is drawn as the thing it means from print culture, and a
+            seal is what a Taiwanese page uses to mean *settled*.
+
+            **The seal keeps its box across both states**, so the change from asking to signed is a
+            cross-fade in a box that never resizes (§5 rule 2) and `RV-17`'s reserve-the-box logic
+            applies to the nickname: the name is 900-weight display type and arrives where its
+            space already was.
+
+            **The seal is FIRST in both states, and that is what "same position" costs.** Reading
+            order would rather the name came before 說這一餐去了 — and it does, because the name is
+            *inside* the seal. Putting the question first instead would move the seal 200 px
+            sideways the moment someone signed. */}
+        <div className="act-row" data-part="act">
           {trip ? (
-            /* D106 — the trip is named; the proposal it came from never is. Same position, same
-               box as the button: §5 rule 2's cross-fade carried over from the bar, so the block
-               does not resize when the state changes. */
-            <p className="signed" data-part="trip">{trip.nickname} 說這一餐去了</p>
+            /* D106 — the trip is named; the proposal it came from never is. The nickname is the
+               one the wire carries, and it is the only member identity this screen keeps. */
+            <p className="sealRow" data-part="trip">
+              <span className="seal sealSigned">
+                <span className="sealName">{trip.nickname}</span>
+              </span>
+              <span className="sealSaid">說這一餐去了</span>
+            </p>
           ) : (
             <button
               type="button"
-              className="act"
+              className="sealRow sealBtn"
               data-part="sign"
               onClick={() => void sign()}
               disabled={signing}
             >
-              我們去了
+              {/* `aria-hidden` on the seal itself: it is the drawing, and the button's accessible
+                  name is the question. A screen reader announcing an empty box before the question
+                  would be describing the ink rather than the act. */}
+              <span className="seal sealEmpty" aria-hidden="true" />
+              <span className="sealAsk">這一餐，說定了嗎？</span>
             </button>
           )}
         </div>

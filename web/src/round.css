@@ -152,3 +152,22 @@
   margin-top: 24px; font-size: var(--text-note); color: var(--color-muted);
   font-variant-numeric: tabular-nums; word-break: break-all;
 }
+
+
+/* ═══ the depth vocabulary · LIFT ═══════════════════════════════════════════════════════════
+   A typeahead result is an **enterable content row**, not a command, so it lifts off the page
+   rather than sinking into it — §5's existing hover rule, the same one the collage cells use.
+   Commands sink, content lifts; one element never gets both (evaluator-ruled 2026-08-20).
+
+   On the row rather than on the `<button>` inside it, so the whole row is the target and the
+   shadow is drawn around the thing a person is actually pointing at. */
+@media (hover: hover) {
+  .hit { transition: transform var(--t-hover) ease-out, box-shadow var(--t-hover) ease-out; }
+  .hit:has(button:not(:disabled)):hover {
+    transform: translate(-3px, -3px);
+    box-shadow: 6px 6px 0 var(--color-ink);
+  }
+  @media (prefers-reduced-motion: reduce) { .hit { transition: none; } }
+}
+.hit button { cursor: pointer; }
+.hit button:disabled { cursor: not-allowed; }
