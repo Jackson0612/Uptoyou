@@ -33,6 +33,10 @@ export default function Round() {
   const [commit, setCommit] = useState('')
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Candidate[]>([])
+  /** The query the server has actually answered, or `null` if nothing has come back for what is in
+   *  the box right now. **Not a boolean**: it holds the string, so a stale answer for an older
+   *  query can never be read as an answer for this one. */
+  const [answered, setAnswered] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const seq = useRef(0)
@@ -66,10 +70,19 @@ export default function Round() {
   // query is dropped — without it, a slow request for 「牛」 lands after a fast one for 「牛肉麵」
   // and the list silently reverts to the broader search.
   useEffect(() => {
-    if (!dev || q.trim().length === 0) { setHits([]); return }
+    const query = q.trim()
+    if (!dev || query.length === 0) { setHits([]); setAnswered(null); return }
     const mine = ++seq.current
+    // **Cleared on every keystroke, so "answered" can never describe an older query.** This is the
+    // whole mechanism behind the zero-result line: `hits.length === 0` is true while a request is
+    // in flight AND when it came back with nothing, and those are different facts to a person.
+    setAnswered(null)
     const t = window.setTimeout(() => {
-      void searchPlaces(dev, q.trim()).then((r) => { if (mine === seq.current) setHits(r) })
+      void searchPlaces(dev, query).then((r) => {
+        if (mine !== seq.current) return
+        setHits(r)
+        setAnswered(query)
+      })
     }, 180)
     return () => window.clearTimeout(t)
   }, [dev, q])
@@ -142,6 +155,28 @@ export default function Round() {
           that vanishes the moment they touch the keyboard is one they will meet again by trying
           the same thing. It clears when a proposal succeeds. */}
       {error && <p className="roundErr" data-part="round-error">{error}</p>}
+
+      {/* **A zero result says so; silence is only allowed while the question is still open.**
+          Evaluator-ruled 2026-08-20 from the data-experience remit: typing 星巴克 rendered nothing
+          at all, and a member could not tell *no match* from *broken* from *still loading*.
+
+          **The three states are separated by `answered`, not by `hits.length`.** An empty box says
+          nothing; a query whose request is in flight says nothing, which is correct — silence while
+          the question is open is honest, and silence after it has been answered is the defect. Only
+          a query the server has come back on, with nothing, gets the line.
+
+          **D20: it states and never advises.** No 「試試別的關鍵字」, no suggested spelling, no
+          next step — those are the screen telling a person what to do, which is the one thing this
+          surface may not do. It reports what happened and stops.
+
+          `data-shape` so the gate keys on structure rather than on the sentence, the same reasoning
+          as `A2-G8-zero`: copy is ruled and re-ruled, and a test that greps for wording fails on a
+          rewording that changed nothing about the shape. */}
+      {answered !== null && answered.length > 0 && hits.length === 0 && (
+        <p className="roundEmpty" data-part="search-empty" data-shape="empty">
+          沒有店家對上「{answered}」。
+        </p>
+      )}
 
       {hits.length > 0 && (
         <ul className="hits" data-part="typeahead">

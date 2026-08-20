@@ -171,3 +171,16 @@
 }
 .hit button { cursor: pointer; }
 .hit button:disabled { cursor: not-allowed; }
+
+
+/* The zero-result statement. Muted and body-sized as ruled — it is a fact about the search, not a
+   warning and not an error, and drawing it in the error's register would make a normal outcome
+   look like a fault. It sits where the results would have been, because that is where the person
+   is already looking. `overflow-wrap` because the query is whatever somebody typed and nothing
+   caps its length. */
+.round .roundEmpty {
+  margin: 14px 0 0;
+  font-size: var(--text-body);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
